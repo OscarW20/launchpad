@@ -993,3 +993,26 @@ and install folder: fresh install, install over a running copy (it quit and was 
 dirty checkout, the wrong branch, diverged, offline, a second update at once, a build that fails (installed app
 untouched) and a full update with no terminal attached. Not run: a real update of /Applications/Launchpad.app, and
 an update started by the app itself.
+
+## Update check (2026-11-17)
+
+The first piece of the in-app Update button: `UpdateCheck` in `Sources/LaunchpadCore/UpdateCheck.swift` says whether
+GitHub's `main` has moved past the build that's running.
+
+- `UpdateCheck().check(stamp:)` takes the `BuildStamp` from Info.plist, fetches `origin main` in the checkout the
+  build came from and returns `.upToDate`, `.available(count:subjects:)` (how many commits behind and their subject
+  lines, newest first, at most 30) or `.cantCheck(reason)`.
+- `check(stamp:fetch: false)` compares with what the checkout last saw, without going online.
+- `UpdateStatus.summary` is the one line for the banner and Settings.
+
+### Decisions
+- It never throws. Offline, an unstamped build, a moved checkout, a diverged build and git not starting are all
+  `.cantCheck` with a plain reason, so the app can show it quietly or not at all.
+- A build made from commits GitHub doesn't have yet (but which include GitHub's `main`) counts as up to date.
+- The check only fetches: it never touches the checkout's branch or files. `scripts/update.sh` does the pulling.
+- git runs with `GIT_TERMINAL_PROMPT=0` and is stopped after 30 seconds, so a dead connection or a password prompt
+  can't hang the app. It blocks while it runs, so the app should call it off the main thread.
+- git is injected (`UpdateCheck(git:)`), so the logic is tested without a network.
+
+Tests: 14 new in `UpdateCheckTests`: 13 with a scripted git (each outcome above) and one against real temporary
+repositories (up to date, two commits behind, the checkout left untouched, remote gone).

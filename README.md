@@ -46,6 +46,15 @@ your keychain (hardened runtime, ready to notarise), name the certificate:
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/make-app.sh
 ```
 
+To publish a release (tag, build, sign, notarise and upload the zip to GitHub releases) from your Mac:
+
+```bash
+./scripts/release.sh 0.2.0 --check   # is this Mac ready? Changes nothing
+./scripts/release.sh 0.2.0
+```
+
+The one-off setup (certificate and notarisation login) is described at the top of `scripts/release.sh`.
+
 Run the tests:
 
 ```bash

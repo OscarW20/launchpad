@@ -868,3 +868,24 @@ Keychain and privacy permissions after each update), and `codesign ... || true` 
 Tests: no Swift changes. Built three ways: ad-hoc (as before); `SIGN_IDENTITY=-` (hardened runtime with an ad-hoc
 identity: the app started on an empty home folder and the guard helper ran); and a missing identity (build stops,
 exit 1). Not yet tried with a real Developer ID certificate.
+
+## One-command release from the Mac (2026-11-17)
+
+Release plan step 3, changed: releases are built on Oscar's Mac rather than on GitHub's runners, which were
+queueing for 15 minutes and sometimes never starting.
+
+- **`scripts/release.sh 0.2.0`**: checks first (on `main`, nothing uncommitted, level with GitHub, tag unused, `gh`
+  signed in, a Developer ID Application certificate, a working `notarytool` keychain profile), then tags, builds
+  with `SIGN_IDENTITY`, zips, notarises, staples, checks with Gatekeeper, pushes the tag and publishes the zip as a
+  GitHub release. `--check` runs the checks only.
+- Each missing piece stops the script with what to do about it, before anything is changed.
+
+### Decisions
+- The tag is created locally first (the build takes its version from it) and pushed only after Apple accepts the
+  app; a failure before that removes the local tag, so a failed release can simply be run again.
+- The certificate is found by its hash, not its name. `SIGN_IDENTITY` and `NOTARY_PROFILE` override the defaults.
+- The script doesn't run `swift test`: one test fails on a Mac set to a 12-hour clock, which would block every
+  release until that test is fixed.
+
+Tests: every check's failure message was triggered in a throwaway clone. The release itself (signing with a real
+Developer ID, notarisation, stapling, publishing) has not been run: there is no certificate on this Mac yet.

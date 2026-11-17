@@ -61,15 +61,24 @@ iconutil -c icns "Sources/Launchpad/Resources/Brand/AppIcon.iconset" -o "$APP/Co
 # the helpers and then the app are signed with the hardened runtime and a timestamp, ready to notarise. Without it
 # the app gets an ad-hoc signature, which runs on this Mac only. A signing failure stops the build.
 SIGN_IDENTITY="${SIGN_IDENTITY:-}"
+LOCAL_IDENTITY="Launchpad Local Signing"
 if [[ -n "$SIGN_IDENTITY" ]]; then
   SIGN=(--force --options runtime --timestamp --sign "$SIGN_IDENTITY")
   codesign "${SIGN[@]}" --identifier app.launchpad.personal.guard "$APP/Contents/MacOS/launchpad-guard"
   codesign "${SIGN[@]}" --identifier app.launchpad.personal.chat "$APP/Contents/MacOS/launchpad-chat"
   codesign "${SIGN[@]}" --entitlements scripts/Launchpad.entitlements "$APP"
   SIGNED="signed as $SIGN_IDENTITY"
+elif security find-identity -v -p codesigning 2>/dev/null | grep -q "\"$LOCAL_IDENTITY\""; then
+  # Your own local certificate (scripts/setup-signing.sh). The signature stays the same from build to build,
+  # so the Keychain and Privacy settings keep trusting Launchpad after each update.
+  LSIGN=(--force --sign "$LOCAL_IDENTITY")
+  codesign "${LSIGN[@]}" --identifier app.launchpad.personal.guard "$APP/Contents/MacOS/launchpad-guard"
+  codesign "${LSIGN[@]}" --identifier app.launchpad.personal.chat "$APP/Contents/MacOS/launchpad-chat"
+  codesign "${LSIGN[@]}" "$APP"
+  SIGNED="signed with your local certificate"
 else
   codesign --force --sign - "$APP"
-  SIGNED="ad-hoc signed"
+  SIGNED="ad-hoc signed (run scripts/setup-signing.sh once so macOS stops asking for your Keychain password after updates)"
 fi
 codesign --verify --strict "$APP"
 echo "Built $APP $VERSION ($BUILD), $SIGNED"

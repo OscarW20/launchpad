@@ -8,6 +8,7 @@ jobs:
   macos:
     name: Build app and run tests (macOS)
     runs-on: macos-15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
@@ -15,6 +16,10 @@ jobs:
       - name: Build
         run: swift build
       - name: Test
-        run: swift test
+        timeout-minutes: 8
+        run: swift test 2>&1 | tee test-output.txt
+      - name: Show where tests got to
+        if: failure() || cancelled()
+        run: grep -E "Test Case|error" test-output.txt | tail -40 || true
       - name: Bundle Launchpad.app
         run: ./scripts/make-app.sh

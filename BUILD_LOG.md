@@ -105,3 +105,90 @@ Actions tab).
 - Groups, Skills and Connectors pages are placeholders until their phases.
 - No app icon yet.
 - Codex's success path hasn't been run live (no sign-in in the build container).
+
+---
+
+## Phases 2–6 (2026-11-17)
+
+You said to carry on through all the remaining phases, so they were built in one go.
+
+### More CLI facts checked live (Claude Code 2.1.326, codex-cli 0.169)
+
+- **Skills:** Claude Code finds skills in `./.claude/skills/<name>/SKILL.md` in the bot's folder, **including symlinks**
+  (checked: a symlinked skill was found and followed). Codex looks in `.agents/skills` / `.codex/skills`
+  (seen in the binary; `codex features list` shows skills on). Launchpad links each skill into all three.
+- **Approvals can be enforced:** a `PreToolUse` hook passed with `--settings '{"hooks":…}'` runs **even in
+  bypassPermissions mode**. Exit code 2 blocks the tool and the bot sees why. Live test with the real guard binary:
+  the bot tried `rm`, was blocked, replied with `[[approve: …]]`; after recording the approval it ran and the file was gone.
+- **MCP secrets stay out of files:** `--mcp-config '{"mcpServers":{…"env":{"TOK":"${LP_SECRET}"}}}'` expands
+  `${VAR}` from the process environment (checked with a tiny MCP server: it received the secret). Codex: `-c mcp_servers.<id>.…`
+  with `env_vars` / `bearer_token_env_var`, also environment-only.
+- `--append-system-prompt`, `--add-dir`, `--strict-mcp-config`, `--no-session-persistence` (Claude);
+  `--ephemeral`, `-c sandbox_workspace_write.writable_roots=[…]` (Codex).
+- The `rate_limit_event` gives Claude plan usage (`unifiedWindows.five_hour/seven_day.utilization`). Codex's
+  `turn.completed` gives token counts only.
+
+### Phase 2: Skills
+- Skills page: list, editor with Edit / Preview / Side by side, Duplicate, Delete, Show in Finder.
+- Starter skills seeded once: new-project, deploy, code-review, write-spec (deleting one sticks).
+- Give a skill to a bot (bot editor) or a group (group editor, or the "Give to" chips on a skill). Group skills reach every
+  member. Skills are symlinked into each bot's `.claude/skills`, `.agents/skills` and `.codex/skills`; real folders a
+  bot made itself are never touched.
+- Teach a skill from a chat (header button or right-click a chat): the chat's engine writes a SKILL.md draft from the
+  transcript in a no-session run, then you edit and save it.
+
+### Phase 3: Groups
+- Create/edit groups: members, lead, rules, hand-off limit (default 3), group skills and connectors.
+  Each group has `SUMMARY.md` (lead keeps it) and `workspace/` (shared project folder, added to every member's run).
+- Flow (`GroupOrchestrator`, fully tested with a scripted fake team):
+  lead first → members in @mention order, one at a time, each seeing new group messages → `[parallel]` line from the lead
+  runs them at once → members can @mention each other → lead reviews and either hands off again or wraps up with no
+  mentions. Each hand-off counts. Over the limit, the group pauses with a "Keep going" button.
+- Ask everyone: members answer in parallel with a short view, then the lead sums up.
+- Each bot keeps its own engine session per group chat and is sent only what's new since its last turn.
+
+### Phase 4: Hire
+- Templates: Lead, Planner, Designer, Frontend, Backend (Supabase, RLS always on), Tester (Playwright),
+  Reviewer (Codex, read-only, second opinion), Shipper (Vercel, deploy skill).
+- Dev team: all eight plus `#build-and-ship` with Lead as lead, team rules, and Graphify as a group skill.
+  Re-running it reuses what's there.
+- Builders (Frontend, Backend, Tester, Shipper) are Full access so they can run npm, tests and Vercel; the approval
+  guard still stops deploys, pushes, sends, spending and deletes.
+
+### Phase 5: Connectors and safety
+- Connectors page: add MCP servers by URL or command (+ args). Optional API token and secret variables go to the
+  **Keychain** (service "Launchpad"); `connectors.json` only has names. Sign-in buttons open Terminal with Claude Code's
+  or Codex's own MCP login flow.
+- Turn connectors on per bot or per group. Bots get **only** their connectors (`--strict-mcp-config`).
+- Permission levels as in phase 1; default "Can edit its workspace".
+- Approval cards: every bot is told to ask with `[[approve: …]]`; the card shows Approve / Decline and the bot waits.
+  For Claude Code bots it's enforced by the `launchpad-guard` hook (a second small executable shipped inside the app):
+  deploys (vercel, netlify, git push, supabase db push, npm publish…), sends (POST requests, gh pr create, mail…),
+  spending (domain buys, Stripe creates…) and deletes (rm, git reset --hard, DROP TABLE…) are blocked until you approve.
+  Risky-looking MCP tools too (send_*, delete_*, deploy_*, pay…). An approval lasts 15 minutes for that bot's session.
+- Codex has no equivalent hook in `exec` mode, so Codex bots rely on the instruction plus their sandbox.
+
+### Phase 6: Routines and usage
+- Routines: message a bot or group at a time of day (optionally weekdays only), every N minutes/hours, or when a new
+  file appears in a folder (the file paths are added to the message). Run while the app is open; a missed daily one
+  runs once later that day. Each routine posts into its own chat. Stored in `routines.json`.
+- Sidebar usage: Claude 5-hour and weekly usage bars (from the CLI's rate-limit events) and ChatGPT tokens today
+  (from Codex's turn usage). Stored in `.launchpad/usage.json`.
+- Voice input (optional) is not built yet.
+
+### Graphify (your request)
+- Skills page → + → **Add Graphify**. If `graphify` isn't installed, Terminal opens with
+  `uv tool install graphifyy` (or pipx). Otherwise Launchpad runs `graphify install --project` in a scratch folder and
+  imports **only its official skill** (SKILL.md + references) into the library. Its always-on hooks and CLAUDE.md
+  section are left out so they don't clash with each bot's own instructions and the approval guard.
+- The Dev team's `#build-and-ship` group has Graphify as a group skill, and the team rules say to query the graph instead
+  of grepping. It switches on as soon as the skill is in the library.
+- Not added: Graphify's MCP server (`graphify-mcp <graph.json>`), because it needs a fixed graph path per project.
+  You can add it as a connector per project if wanted.
+- Checked with the real Graphify (pip package `graphifyy`): the import works.
+
+### Tests
+94 tests (plus 2 opt-in live ones). New: group flow (order, history, parallel, member hand-offs, limit, approvals,
+failures, Ask everyone), skills (front matter, seeding, linking, teach), approvals (parsing, risky commands and MCP tools,
+guard and grants), connectors (Claude JSON, Codex flags, Keychain environment, no secrets on disk or argv), run options,
+usage, routines (schedules, weekdays, catch-up, new files), Hire / Dev team, Graphify import.

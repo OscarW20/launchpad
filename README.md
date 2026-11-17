@@ -48,11 +48,15 @@ LAUNCHPAD_LIVE_TESTS=1 swift test --filter LiveEngineTests
     AGENTS.md       the same instructions (Codex reads this), kept in sync
     notes.md        the bot's own memory
     workspace/      where it does its work
-  groups/<group-id>/group.json
+  groups/<group-id>/
+    group.json      name, members, lead, rules, hand-off limit, skills, connectors
+    SUMMARY.md      decisions, owners, open issues (kept by the lead)
+    workspace/      the group's shared project folder
   skills/<skill-id>/SKILL.md
   chats/<chat-id>.json    title, members, engine session per bot
   chats/<chat-id>.jsonl   message history
-  connectors.json         MCP servers (no secrets)
+  connectors.json         MCP servers (no secrets: those are in your Keychain)
+  routines.json           scheduled and folder-triggered messages
 ```
 
 The app watches these files, so you (or any agent) can add or edit a bot by hand and it shows up
@@ -60,12 +64,26 @@ straight away. If `CLAUDE.md` and `AGENTS.md` differ, the one edited most recent
 
 Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
 
+## What's in it
+
+- **Chats** with any bot or group, streaming replies, a collapsible list of steps, Stop, and plain-English errors.
+- **Bots** you create or **Hire** (Lead, Planner, Designer, Frontend, Backend, Tester, Reviewer, Shipper), or the whole
+  **Dev team** with a `#build-and-ship` group in one click.
+- **Groups**: the lead replies first and hands work out by @mention; members go one at a time (or in parallel when the
+  lead says so); a hand-off limit pauses the team and asks you. **Ask everyone** gets a quick view from each member.
+- **Skills** library (with Graphify one click away), given to bots or whole groups, plus **Teach a skill** from any chat.
+- **Connectors** (MCP servers) per bot or group, secrets in the Keychain.
+- **Approval cards**: bots ask before deploying, sending, spending or deleting. For Claude Code bots this is enforced
+  by a hook, not just requested.
+- **Routines** on a schedule or when a file appears, and plan **usage** in the sidebar.
+
 ## Code layout
 
 - `Sources/LaunchpadCore`: everything that isn't UI. Bot and chat storage, the folder watcher,
   the engine runner (`Runner/`), stream parsers for both CLIs, plain-English errors, markdown blocks.
   Builds and tests on Linux too.
 - `Sources/Launchpad`: the SwiftUI app.
+- `Sources/launchpad-guard`: the approval hook Claude Code runs before shell commands and MCP tools.
 - `Tests/LaunchpadCoreTests`: runner, parser, storage and markdown tests. Parser fixtures are real
   CLI output.
 

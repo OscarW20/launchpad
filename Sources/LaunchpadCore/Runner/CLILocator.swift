@@ -74,11 +74,25 @@ public final class CLILocator: @unchecked Sendable {
         process.standardInput = FileHandle.nullDevice
         do { try process.run() } catch { cachedPATH = ""; return nil }
 
-        let deadline = Date().addingTimeInterval(5)
-        while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
-        if process.isRunning { process.terminate(); cachedPATH = ""; return nil }
+        // Read until we see the PATH between the markers. Don't wait for the pipe to close:
+        // shell start-up files sometimes leave a background process holding it open.
+        let buffer = LockedBuffer(limit: 256 * 1024)
+        let found = DispatchSemaphore(value: 0)
+        let handle = out.fileHandleForReading
+        EngineRunner.spawnThread {
+            while true {
+                let chunk = handle.availableData
+                if chunk.isEmpty { break }
+                buffer.append(chunk)
+                let s = buffer.string
+                if let a = s.range(of: "__LP__"), s.range(of: "__LP__", range: a.upperBound..<s.endIndex) != nil { break }
+            }
+            found.signal()
+        }
+        _ = found.wait(timeout: .now() + 5)
+        if process.isRunning { process.terminate() }
 
-        let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let text = buffer.string
         guard let start = text.range(of: "__LP__"),
               let end = text.range(of: "__LP__", range: start.upperBound..<text.endIndex) else {
             cachedPATH = ""

@@ -176,12 +176,21 @@ public enum GuardDecision: Equatable {
 
 /// Rules every bot gets, on top of its own instructions.
 public enum LaunchpadProtocol {
-    public static func text(skills: [String]) -> String {
-        var s = """
-        You're running inside Launchpad, a chat app where I work with a team of AI bots.
+    /// - Parameter liveApprovals: the bot runs with the permission guard and approval cards (`GuardHookSetup` with
+    ///   an `askBase`): it just goes ahead and Launchpad asks me while its tool call waits.
+    public static func text(skills: [String], liveApprovals: Bool = false) -> String {
+        let ask = liveApprovals ? """
+        - Some actions need my OK: sending or posting, deleting outside your folder, spending money, and changing code \
+        or shared systems (deploys, git push). Just do the step: Launchpad shows me an approval card and your tool call \
+        waits for my answer. If I say no, don't try another way; ask me what I'd like instead.
+        """ : """
         - Ask before risky actions. Before you deploy or publish, push code, send or post anything outside this computer, \
         spend money, or delete anything, ask first: write a line `[[approve: <what you'll do, in plain words>]]` and \
         end your turn. Only do it after I reply "Approved". Launchpad blocks these actions until then.
+        """
+        var s = """
+        You're running inside Launchpad, a chat app where I work with a team of AI bots.
+        \(ask)
         - Never write passwords, API keys or tokens into files, logs or chat. If you need a secret, ask me to add it.
         - Your long-term memory is ./MEMORY.md in your own folder. Read it at the start of a task; keep facts short.
         - Keep replies friendly and short. Say what you did and what's next.

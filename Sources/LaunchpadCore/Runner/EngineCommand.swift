@@ -10,15 +10,24 @@ public struct EngineInvocation: Equatable, Sendable {
     public var plannedSessionId: String?
     /// Extra environment (connector secrets). Never logged or written to disk.
     public var environment: [String: String]
+    /// When set (macOS), the engine runs inside `sandbox-exec` with this profile (`BotSandbox`).
+    public var sandboxProfile: String?
 
     public init(engine: BotEngine, arguments: [String], stdin: String, workingDirectory: URL,
-                plannedSessionId: String? = nil, environment: [String: String] = [:]) {
+                plannedSessionId: String? = nil, environment: [String: String] = [:], sandboxProfile: String? = nil) {
         self.engine = engine
         self.arguments = arguments
         self.stdin = stdin
         self.workingDirectory = workingDirectory
         self.plannedSessionId = plannedSessionId
         self.environment = environment
+        self.sandboxProfile = sandboxProfile
+    }
+
+    /// What to launch, given where the engine's executable is: the engine itself, or `sandbox-exec` around it.
+    public func launch(executable: URL) -> (executable: URL, arguments: [String]) {
+        guard let sandboxProfile else { return (executable, arguments) }
+        return BotSandbox.wrap(executable: executable, arguments: arguments, profile: sandboxProfile)
     }
 }
 
@@ -31,8 +40,14 @@ public struct RunOptions: Equatable, Sendable {
     /// When true, only `connectors` are available as MCP servers.
     public var manageConnectors = false
     public var connectors: [Connector] = []
-    /// Claude Code PreToolUse hook command that blocks risky actions until approved.
+    /// Claude Code PreToolUse hook command that blocks risky actions until approved (the older, Bash and MCP only
+    /// guard: `launchpad-guard --approvals <dir>`). Ignored when `guardHook` is set.
     public var guardCommand: String?
+    /// The permission guard on every tool, with the bot's rules and approval cards (`launchpad-guard hook …`).
+    public var guardHook: GuardHookSetup?
+    /// Run inside the macOS sandbox with this profile (`BotSandbox.profile()`). Claude: always when set, with Claude
+    /// Code's own sandbox turned off. Codex: only when it runs without its own sandbox (they can't be nested).
+    public var sandboxProfile: String?
     /// Secrets for connectors, passed via the process environment.
     public var environment: [String: String] = [:]
     /// Don't keep a session (e.g. drafting a skill).
@@ -64,7 +79,8 @@ public enum EngineCommand {
                           permission: bot.permission, sessionId: sessionId, options: options, newSessionId: newSessionId)
         case .codex:
             return codex(prompt: prompt, botDirectory: botDirectory, model: bot.model,
-                         permission: bot.permission, threadId: sessionId, options: options)
+                         permission: bot.permission, threadId: sessionId, options: options,
+                         rules: bot.rules, lockedDown: bot.lockedDown)
         }
     }
 
@@ -107,29 +123,41 @@ public enum EngineCommand {
         if options.manageConnectors {
             args += ["--strict-mcp-config", "--mcp-config", MCPConfig.claudeJSON(options.connectors)]
         }
-        if let guardCommand = options.guardCommand {
-            args += ["--settings", guardSettings(command: guardCommand)]
+        if let settings = GuardHookSetup.claudeSettings(hook: options.guardHook, legacyCommand: options.guardCommand,
+                                                        sandboxed: options.sandboxProfile != nil) {
+            args += ["--settings", settings]
         }
         return EngineInvocation(engine: .claude, arguments: args, stdin: prompt, workingDirectory: botDirectory,
-                                plannedSessionId: planned, environment: options.environment)
+                                plannedSessionId: planned, environment: options.environment,
+                                sandboxProfile: options.sandboxProfile)
     }
 
     /// `codex exec --json …  -` or `codex exec resume --json … THREAD -`, prompt on stdin.
     public static func codex(
         prompt: String, botDirectory: URL, model: String?, permission: PermissionLevel, threadId: String?,
-        options: RunOptions = RunOptions()
+        options: RunOptions = RunOptions(), rules: BotRules = BotRules(), lockedDown: Bool = false
     ) -> EngineInvocation {
         var args = ["exec"]
         let resuming = !(threadId ?? "").isEmpty
         if resuming { args.append("resume") }
         args += ["--json", "--skip-git-repo-check"]
         if options.ephemeral && !resuming { args.append("--ephemeral") }
+        // `codex exec` can't stop mid-task to ask (no hook), so the rules map onto its own sandbox where they can:
+        // a full-access bot whose commands outside its folder are Ask/Never, or whose deletes are Never, is fenced
+        // into its workspace (network stays on). Locked down: always the workspace sandbox, with no network.
+        // Sends, spending and Ask rules go in its instructions (`BotRules.codexNote`).
+        let fenced = permission == .fullAccess && (rules.rule(.shell) != .allow || rules.rule(.delete) == .never)
         switch permission {
         case .readOnly: args += ["-c", "sandbox_mode=\"read-only\""]
+        case _ where lockedDown:
+            args += ["-c", "sandbox_mode=\"workspace-write\"", "-c", "sandbox_workspace_write.network_access=false"]
+        case .fullAccess where fenced:
+            args += ["-c", "sandbox_mode=\"workspace-write\"", "-c", "sandbox_workspace_write.network_access=true"]
         case .editWorkspace: args += ["-c", "sandbox_mode=\"workspace-write\""]
         case .fullAccess: args += ["--dangerously-bypass-approvals-and-sandbox"]
         }
-        if permission == .editWorkspace, !options.addDirectories.isEmpty {
+        let workspaceWrite = args.contains("sandbox_mode=\"workspace-write\"")
+        if workspaceWrite, !options.addDirectories.isEmpty {
             let roots = options.addDirectories.map { MCPConfig.toml($0.path) }.joined(separator: ",")
             args += ["-c", "sandbox_workspace_write.writable_roots=[\(roots)]"]
         }
@@ -144,8 +172,10 @@ public enum EngineCommand {
         if !resuming, let append = options.systemAppend, !append.isEmpty {
             input = "<launchpad-rules>\n\(append)\n</launchpad-rules>\n\n\(prompt)"
         }
+        // Our sandbox goes around Codex only when Codex runs without its own (macOS can't nest them).
+        let outer = args.contains("--dangerously-bypass-approvals-and-sandbox") ? options.sandboxProfile : nil
         return EngineInvocation(engine: .codex, arguments: args, stdin: input, workingDirectory: botDirectory,
-                                plannedSessionId: threadId, environment: options.environment)
+                                plannedSessionId: threadId, environment: options.environment, sandboxProfile: outer)
     }
 
     /// A one-off run that keeps no session, e.g. drafting a skill from a chat.
@@ -154,13 +184,5 @@ public enum EngineCommand {
         options.ephemeral = true
         let bot = Bot(id: "scratch", name: "Scratch", engine: engine, model: model, permission: .readOnly)
         return invocation(for: bot, prompt: prompt, botDirectory: directory, sessionId: nil, options: options)
-    }
-
-    /// `--settings` JSON that runs the approval guard before shell commands and MCP tools.
-    static func guardSettings(command: String) -> String {
-        let hook: [String: Any] = ["type": "command", "command": command, "timeout": 10]
-        let obj: [String: Any] = ["hooks": ["PreToolUse": [["matcher": "Bash|mcp__.*", "hooks": [hook]]]]]
-        let data = (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
-        return String(decoding: data, as: UTF8.self)
     }
 }

@@ -56,12 +56,20 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
     public var connectors: [String]
     public var skills: [String]
     public var createdAt: Date
+    /// What it must ask you about first, may always do, or may never do (send, delete, spend, change, shell, computer).
+    public var rules: BotRules
+    /// Locked down: no internet except through Launchpad's site gateway (only `sites`), no opening or scripting other
+    /// apps, no startup files, and "Always allow" off for writes. Needs the sandbox (macOS).
+    public var lockedDown: Bool
+    /// Websites a locked-down bot may reach ("github.com" also allows its subdomains). Its engine's own sites are added for it.
+    public var sites: [String]
 
     public init(
         id: String, name: String, emoji: String = "🤖", colour: String = BotPalette.default,
         role: String = "", engine: BotEngine = .claude, model: String? = nil,
         permission: PermissionLevel = .editWorkspace, connectors: [String] = [],
-        skills: [String] = [], createdAt: Date = Date()
+        skills: [String] = [], createdAt: Date = Date(), rules: BotRules = BotRules(),
+        lockedDown: Bool = false, sites: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -74,10 +82,14 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
         self.connectors = connectors
         self.skills = skills
         self.createdAt = createdAt
+        self.rules = rules
+        self.lockedDown = lockedDown
+        self.sites = sites
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, emoji, colour, role, engine, model, permission, connectors, skills, createdAt
+        case rules, lockedDown, sites
     }
 
     // bot.json may be written by hand or by another agent, so every field is optional on read.
@@ -95,6 +107,9 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
         connectors = try c.decodeIfPresent([String].self, forKey: .connectors) ?? []
         skills = try c.decodeIfPresent([String].self, forKey: .skills) ?? []
         createdAt = (try? c.decodeIfPresent(Date.self, forKey: .createdAt)) ?? Date()
+        rules = (try? c.decodeIfPresent(BotRules.self, forKey: .rules)) ?? BotRules()
+        lockedDown = (try? c.decodeIfPresent(Bool.self, forKey: .lockedDown)) ?? false
+        sites = (try? c.decodeIfPresent([String].self, forKey: .sites)) ?? []
     }
 }
 

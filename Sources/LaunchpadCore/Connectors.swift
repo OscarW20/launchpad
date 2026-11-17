@@ -103,17 +103,47 @@ public final class ConnectorStore: @unchecked Sendable {
     }
 }
 
+/// What reading a secret found. `failed` (access denied, Keychain locked…) is not the same as `missing`:
+/// the secret may still be there, so don't offer to replace it or tell the person it's gone.
+public enum SecretRead: Equatable, Sendable {
+    case found(String)
+    case missing
+    /// Why it couldn't be read, in plain words (never the secret itself).
+    case failed(String)
+
+    public var value: String? {
+        if case .found(let v) = self { return v }
+        return nil
+    }
+}
+
 /// Where secrets live. The app uses the macOS Keychain; tests use memory.
 public protocol SecretStore: AnyObject {
     func secret(_ account: String) -> String?
     func setSecret(_ value: String?, for account: String) throws
+    /// Found, missing or failed. Stores that can't tell a failure apart get the default: found or missing.
+    func read(_ account: String) -> SecretRead
+}
+
+extension SecretStore {
+    public func read(_ account: String) -> SecretRead {
+        guard let value = secret(account), !value.isEmpty else { return .missing }
+        return .found(value)
+    }
 }
 
 public final class MemorySecretStore: SecretStore {
     private var values: [String: String] = [:]
+    /// Accounts that fail to read (for tests of the `failed` path).
+    public var failing: [String: String] = [:]
     public init() {}
-    public func secret(_ account: String) -> String? { values[account] }
+    public func secret(_ account: String) -> String? { read(account).value }
     public func setSecret(_ value: String?, for account: String) throws { values[account] = value }
+    public func read(_ account: String) -> SecretRead {
+        if let reason = failing[account] { return .failed(reason) }
+        guard let v = values[account], !v.isEmpty else { return .missing }
+        return .found(v)
+    }
 }
 
 /// Builds MCP settings for each engine. Secrets are referenced by variable name and handed to the

@@ -283,3 +283,44 @@ pack twice is idempotent (and repairs a deleted member).
   encodings, Undo, editor save/add/edit/delete, notes import, schedule (idle, budget, back-off, one at a time,
   persistence), the run flags, and the reviewer end to end with a fake engine and clock.
 - The macOS app still has to wire it in (AppModel timer, notices with Undo, a memory section in the bot editor).
+
+### Phase 7: Safety core (permissions, guard, sandbox, undo)
+Core only (`Sources/LaunchpadCore/Guard`, `Sources/LaunchpadCore/Safety`); the app's UI and wiring come next.
+
+- **Permissions per bot** (`BotRules`, saved in bot.json as `rules`): six categories, each Ask / Allow / Never:
+  send or post, delete, spend, change code or shared systems, commands outside its folder, use your Mac.
+  Defaults: Ask for all but "commands outside its folder" (Allow). "Always allow" is per category and tool, never for
+  the Terminal, and Never always wins. Each bot can add its own "change" commands (regular expressions), replacing
+  hard-coded company tools. `PermissionLevel` stays: it still sets Claude's permission mode and Codex's sandbox.
+- **The guard** (`ShellParser`, `GuardEngine`, `GuardHook`): reads shell lines properly (splits on ; & && | ||, looks
+  inside $( ) and backticks, unwraps env / sudo / xargs / nohup / bash -c / eval, follows cd), finds delete targets
+  (rm, find -delete / -exec rm, rsync --delete, git clean, code that deletes in python/node/ruby/perl/osascript),
+  paths outside the bot's folders, and sorts MCP tools by their verbs. Deletes inside the bot's own folder are free
+  (undo covers them). Locked skills, Launchpad's data folder (rules, answers, grants, snapshots, skill locks) and every
+  Claude Code settings file can never be written, in any spelling. It fails closed: unreadable rules or input mean no.
+  Launchpad's old "deploy" kind is now part of "change".
+- **Approval handshake**: the hook now waits for your answer (Biscuit Bots' design) instead of blocking and asking the
+  bot to post `[[approve: …]]`. It writes `.launchpad/requests/<chat>-<run>.approval-<id>.json`, the app shows an
+  Approve / Decline / Always allow card and writes `.launchpad/answers/<id>.answer`, and the tool call goes ahead
+  without the bot ending its turn. Answers live where no bot can write, so a bot can't approve itself. Up to 570 s;
+  a timeout or a stopped bot leaves an `.expired` marker. The older chat flow still works: with no `--ask`, the hook
+  blocks with the `[[approve: …]]` instruction, and a 15-minute session grant lets Ask actions through.
+  Hook settings: matcher "*", timeout 600, `disableAllHooks: false`, and `"sandbox":{"enabled":false}` under our sandbox.
+  `launchpad-guard --approvals <dir>` (the old Bash/MCP-only guard) is unchanged.
+- **Rules file** at `.launchpad/rules/<bot-id>.json`, outside the bot's folder, 0444 in a 0555 folder between writes.
+- **Sandbox** (`BotSandbox`): an SBPL profile for `sandbox-exec` that protects the app bundle, `.launchpad` (except
+  `requests/` and `scratch/`) and Claude settings files; locked down adds no network except localhost, no lsopen or
+  Apple Events, no shell profiles / LaunchAgents / cron. `RunOptions.sandboxProfile` → `EngineInvocation.launch(executable:)`
+  wraps the engine. Codex is wrapped only when it runs without its own sandbox (they can't nest).
+- **Codex mapping**: full access with commands-outside Ask/Never or delete Never → workspace-write (network on);
+  locked down → workspace-write, no network. The rest goes in its instructions (`BotRules.codexNote`).
+- **Site gateway** (`SiteGateway`): a tiny proxy on 127.0.0.1 so locked-down bots can reach their engine and listed
+  sites (CONNECT tunnels for https, forwarding for http, per-run token). Host names only; no inspection or logging.
+- **Undo** (`Snapshots`): a private git store per bot (`.launchpad/snapshots/<bot-id>.git`, work tree = bot folder),
+  snapshot before a reply, list changed files after, undo restores changed and deleted files and removes new ones.
+  Instructions, notes.md, bot.json, engine folders and build output are left out.
+- **Secrets**: `SecretStore.read(_:)` returns found / missing / failed; existing stores get a default.
+
+Tests: 139 (plus 2 opt-in live ones). The 186 Biscuit Bots guard self-checks are now XCTest cases (`GuardEngineTests`),
+with Biscuit-only ones swapped for generic ones; plus the hook and handshake end to end, rules file, settings JSON, run
+options, Codex mapping, sandbox profiles (kernel test on macOS only), snapshots with real git, secrets and the gateway.

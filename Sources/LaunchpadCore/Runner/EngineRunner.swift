@@ -61,8 +61,9 @@ public final class EngineRunner: @unchecked Sendable {
         let parser: StreamParser = inv.engine == .claude ? ClaudeStreamParser() : CodexStreamParser()
 
         let process = Process()
-        process.executableURL = executable
-        process.arguments = inv.arguments
+        let launch = inv.launch(executable: executable)
+        process.executableURL = launch.executable
+        process.arguments = launch.arguments
         process.currentDirectoryURL = inv.workingDirectory
         process.environment = locator.environment().merging(inv.environment) { _, new in new }
         let stdout = Pipe(), stderr = Pipe(), stdin = Pipe()

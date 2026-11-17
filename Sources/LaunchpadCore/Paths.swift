@@ -36,6 +36,20 @@ public struct LaunchpadPaths: Sendable {
     }
     public func workspace(_ id: String) -> URL { botDir(id).appendingPathComponent("workspace", isDirectory: true) }
 
+    // The app's own data. Bots may never write here (the guard and the sandbox both stop them), except
+    // `approvalRequests`, where the guard hook (which runs inside the bot's sandbox) leaves its questions.
+    public var launchpadData: URL { root.appendingPathComponent(".launchpad", isDirectory: true) }
+    /// Each bot's guard rules: `rules/<bot-id>.json`, written by the app, read by `launchpad-guard`.
+    public var guardRules: URL { launchpadData.appendingPathComponent("rules", isDirectory: true) }
+    public func rulesFile(_ botId: String) -> URL { guardRules.appendingPathComponent("\(botId).json") }
+    /// Approval cards the guard is waiting on (written by the hook).
+    public var approvalRequests: URL { launchpadData.appendingPathComponent("requests", isDirectory: true) }
+    /// Your answers to approval cards (written by the app only).
+    public var approvalAnswers: URL { launchpadData.appendingPathComponent("answers", isDirectory: true) }
+    /// Private git stores for undo: `snapshots/<bot-id>.git`.
+    public var snapshots: URL { launchpadData.appendingPathComponent("snapshots", isDirectory: true) }
+    public func snapshotStore(_ botId: String) -> URL { snapshots.appendingPathComponent("\(botId).git", isDirectory: true) }
+
     public func chatMeta(_ id: String) -> URL { chats.appendingPathComponent("\(id).json") }
     public func chatLog(_ id: String) -> URL { chats.appendingPathComponent("\(id).jsonl") }
 

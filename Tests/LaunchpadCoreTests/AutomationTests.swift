@@ -562,27 +562,27 @@ final class WebhookAuthTests: XCTestCase {
 // MARK: - Webhook secrets
 
 final class WebhookSecretTests: XCTestCase {
-    final class LockedStore: SecretStore, SecretStatusReading {
+    final class LockedStore: SecretStore {
         var value: String?
         var read: SecretRead = .missing
         var writes = 0
         func secret(_ account: String) -> String? { value }
         func setSecret(_ value: String?, for account: String) throws { writes += 1; self.value = value }
-        func readSecret(_ account: String) -> SecretRead { read }
+        func read(_ account: String) -> SecretRead { read }
     }
 
     func testAKeychainErrorNeverReplacesTheSecret() {
         var made = 0
         let make = { () -> String? in made += 1; return "new" }
-        XCTAssertNil(WebhookSecrets.secret(from: .failed(-25293), make: make))
-        XCTAssertNil(WebhookSecrets.secret(from: .failed(-25308), make: make))
+        XCTAssertNil(WebhookSecrets.secret(from: .failed("Keychain locked"), make: make))
+        XCTAssertNil(WebhookSecrets.secret(from: .failed("Interaction not allowed"), make: make))
         XCTAssertEqual(made, 0, "a denied or locked Keychain doesn't mint a new secret")
         XCTAssertEqual(WebhookSecrets.secret(from: .found("old"), make: make), "old")
         XCTAssertEqual(WebhookSecrets.secret(from: .missing, make: make), "new")
         XCTAssertEqual(made, 1)
 
         let locked = LockedStore()
-        locked.read = .failed(-25308)
+        locked.read = .failed("Interaction not allowed")
         XCTAssertNil(WebhookSecrets.token(for: "r", in: locked))
         XCTAssertEqual(locked.writes, 0)
     }

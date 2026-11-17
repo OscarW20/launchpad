@@ -75,6 +75,9 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
 - **Connectors** (MCP servers) per bot or group, secrets in the Keychain.
 - **Approval cards**: bots ask before deploying, sending, spending or deleting. For Claude Code bots this is enforced
   by a hook, not just requested.
+- **Safety core** (in LaunchpadCore, app wiring in progress): per-bot permissions (Ask / Allow / Never for send, delete,
+  spend, change, commands outside its folder, use your Mac), a guard that really reads shell commands, locked skills,
+  the macOS sandbox with an optional lock-down, and undo for a bot's file changes.
 - **Routines** on a schedule or when a file appears, and plan **usage** in the sidebar.
 - **Marketplace**: 35 roles, 5 team packs, 41 skills and 40 app (MCP)
   presets with logos. See `CatalogRoles.swift`, `TeamPacks.swift`, `CatalogSkills.swift`, `ConnectorCatalog.swift`.
@@ -89,6 +92,11 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
   Builds and tests on Linux too.
 - `Sources/Launchpad`: the SwiftUI app. `Resources/Logos` holds the app logos (Simple Icons, CC0, plus a few vendor icons).
 - `Sources/launchpad-guard`: the approval hook Claude Code runs before shell commands and MCP tools.
+
+- `Sources/Launchpad`: the SwiftUI app.
+- `Sources/LaunchpadCore/Guard`: the permission guard (shell parser, rules engine, hook and approval handshake).
+- `Sources/LaunchpadCore/Safety`: permissions model, sandbox profile, site gateway, snapshots for undo.
+- `Sources/launchpad-guard`: the hook Claude Code runs before tool calls (`launchpad-guard hook <rules.json> …`).
 - `Tests/LaunchpadCoreTests`: runner, parser, storage and markdown tests. Parser fixtures are real
   CLI output.
 

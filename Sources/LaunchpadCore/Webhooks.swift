@@ -130,19 +130,8 @@ public struct HTTPResponse: Equatable, Sendable {
 
 // MARK: - Secrets
 
-/// A secret read that can tell "not there" from "the Keychain wouldn't answer". A store that can't tell (e.g.
-/// `MemorySecretStore`) is treated as found / missing.
-public enum SecretRead: Equatable, Sendable {
-    case found(String)
-    case missing
-    case failed(Int32)
-}
-
-/// Adopt in the app's Keychain store (errSecItemNotFound → .missing, other errors → .failed) so a locked or denied
-/// Keychain never makes a routine's secret be replaced.
-public protocol SecretStatusReading {
-    func readSecret(_ account: String) -> SecretRead
-}
+// Secret reads use `SecretRead` / `SecretStore.read(_:)` from Connectors.swift: a locked or denied Keychain
+// reads as `.failed`, so a routine's secret is never replaced by mistake.
 
 public enum WebhookSecrets {
     public static func account(for routineId: String) -> String { "routine.\(routineId).webhook" }
@@ -163,8 +152,7 @@ public enum WebhookSecrets {
     }
 
     static func read(_ account: String, in store: SecretStore) -> SecretRead {
-        if let s = store as? SecretStatusReading { return s.readSecret(account) }
-        return store.secret(account).map { .found($0) } ?? .missing
+        store.read(account)
     }
 
     /// The routine's secret, made the first time. nil when the store wouldn't answer or save (nothing is replaced).

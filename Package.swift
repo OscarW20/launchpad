@@ -16,7 +16,8 @@ let package = Package(
         // The approval hook Claude Code runs before shell commands and MCP tools.
         .executableTarget(name: "launchpad-guard", dependencies: ["LaunchpadCore"]),
         // The SwiftUI app (macOS only).
-        .executableTarget(name: "Launchpad", dependencies: ["LaunchpadCore"]),
+        // Brand logos for the marketplace (see Resources/Logos/README.md).
+        .executableTarget(name: "Launchpad", dependencies: ["LaunchpadCore"], resources: [.copy("Resources/Logos")]),
         .testTarget(name: "LaunchpadCoreTests", dependencies: ["LaunchpadCore"]),
     ]
 )

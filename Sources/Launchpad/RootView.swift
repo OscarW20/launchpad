@@ -79,7 +79,7 @@ struct RootView: View {
                             message: "Put bots together with a lead. Make one, or add the Dev team from Hire.")
             }
         case .hire:
-            HireView()
+            MarketplaceView()
         case .skills:
             if let id = model.selectedSkillId, model.skill(id) != nil {
                 SkillDetailView(skillId: id).id(id)

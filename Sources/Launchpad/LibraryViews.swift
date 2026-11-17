@@ -193,65 +193,7 @@ struct GiveSkillBar: View {
     }
 }
 
-// MARK: - Hire
-
-struct HireView: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                devTeamCard
-                Text("Or hire one at a time")
-                    .font(Theme.rounded(.title3, weight: .bold))
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 14)], spacing: 14) {
-                    ForEach(HireCatalog.all) { t in
-                        TemplateCard(template: t)
-                    }
-                }
-            }
-            .padding(24)
-            .frame(maxWidth: 1000)
-            .frame(maxWidth: .infinity)
-        }
-        .background(Theme.canvas)
-        .navigationTitle("Hire")
-    }
-
-    private var devTeamCard: some View {
-        let hired = model.group(HireCatalog.devTeamGroupName) != nil
-        return HStack(alignment: .center, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Dev team")
-                    .font(Theme.rounded(.title, weight: .bold))
-                Text("All eight bots below, plus a #\(HireCatalog.devTeamGroupName) group with Lead in charge. Post \"build a habit tracker with Google sign-in and deploy it\" and watch them work.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: -8) {
-                    ForEach(HireCatalog.all) { t in
-                        AvatarView(bot: t.bot, size: 34)
-                            .background(Circle().fill(Theme.surface))
-                    }
-                }
-                .padding(.top, 4)
-            }
-            Spacer()
-            Button {
-                model.hireDevTeam()
-            } label: {
-                Label(hired ? "Open #\(HireCatalog.devTeamGroupName)" : "Add Dev team", systemImage: hired ? "bubble.left.and.bubble.right.fill" : "person.3.fill")
-                    .padding(.horizontal, 6)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-        }
-        .padding(22)
-        .background(
-            LinearGradient(colors: [Theme.accent.opacity(0.18), Theme.userBubble.opacity(0.5)], startPoint: .topLeading, endPoint: .bottomTrailing),
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-        )
-    }
-}
+// MARK: - Marketplace (see MarketplaceView.swift)
 
 struct TemplateCard: View {
     @Environment(AppModel.self) private var model

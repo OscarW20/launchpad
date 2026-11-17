@@ -192,3 +192,57 @@ You said to carry on through all the remaining phases, so they were built in one
 failures, Ask everyone), skills (front matter, seeding, linking, teach), approvals (parsing, risky commands and MCP tools,
 guard and grants), connectors (Claude JSON, Codex flags, Keychain environment, no secrets on disk or argv), run options,
 usage, routines (schedules, weekdays, catch-up, new files), Hire / Dev team, Graphify import.
+
+---
+
+## Marketplace catalog (2026-11-17)
+
+Ported the catalog data of an earlier app of mine into `LaunchpadCore` as plain Swift data, so the Marketplace UI
+(Apps / Skills / Roles / Teams) only has to render it. No UI changes in this phase.
+
+### What was built
+- **Roles** (`CatalogRoles.swift`, `Hire.swift`): 27 new `HireTemplate`s plus the existing 8 dev-team ones = 35, in 12
+  departments (`HireCatalog.categories`). Old pun names were replaced with plain job names, an emoji and a `BotPalette`
+  colour. `HireTemplate` gained `category` and `suggestedApps` (both defaulted). Six old roles were folded into the
+  dev team instead of duplicated: Product Manager → Planner, Product Designer → Designer, Web Developer → Frontend,
+  Code Reviewer → Reviewer, QA Engineer → Tester, DevOps Engineer → Shipper (their duties and skills were merged in).
+- **Team packs** (`TeamPacks.swift`): Dev team (`#build-and-ship`), Launch team (`#launch-crew`), Content team
+  (`#content-studio`), Engineering team (`#engineering`), Back office (`#back-office`), each with a lead and rules.
+  `Hiring.hireTeam(_:)` hires the roles (reusing bots with the same id), creates the group, and on a re-run only
+  re-hires deleted bots and puts missing members back. `hireDevTeam()` now calls it.
+- **Skills** (`CatalogSkills.swift`): 41 catalog skills = the 4 starters (same text as `StarterSkills`) + 37 more.
+  The old catalog's `code-review` is the existing starter. `SkillStore.install(_:)` writes SKILL.md;
+  `installIfMissing(_:)` keeps your edits.
+- **Apps** (`ConnectorCatalog.swift`): 40 `ConnectorPreset`s in 7 categories. `ConnectorStore.install(_:settings:)`
+  creates a connector with id = preset id (re-installing refreshes it in place); `ConnectorStore.storeSecrets`
+  puts typed secret values in the secret store (Keychain in the app).
+- **Logos**: 51 image files in `Sources/Launchpad/Resources/Logos`, bundled with `.copy("Resources/Logos")`.
+
+### Decisions
+- **Role id = slug of its name**, because `BotStore.create` makes the bot id from the name; "already hired?" checks
+  and team packs rely on it (a test enforces it).
+- **`HireCatalog.all` still means the 8 dev-team templates** because the current Hire page and Dev team card use it.
+  The full list is `HireCatalog.roles`.
+- **Hiring a role installs the catalog skills it uses** if they're missing (so a hired bot isn't missing its skills),
+  and turns on suggested connectors **only if already installed**. It never installs a connector or asks for secrets.
+- **Hosted apps are native `.http` connectors** (no mcp-remote) and sign in with the engines' own MCP login. Hosts that
+  only speak SSE (Asana, monday.com, Intercom, Webflow, PayPal, Square) stay on `npx -y mcp-remote <url>` as stdio,
+  since the http connector type is streamable HTTP only. Jira & Confluence moved to Atlassian's v2 `/mcp` endpoint.
+- **GitHub** uses GitHub's hosted server (`https://api.githubcopilot.com/mcp/`) with a personal access token as a
+  Keychain bearer token, instead of the deprecated npm package.
+- **No secrets in args**: Supabase reads `SUPABASE_ACCESS_TOKEN` from the environment; Postgres's connection string
+  (it holds a password) goes in through `sh -c 'exec npx … "$DATABASE_URL"'`. Non-secret paths (SQLite file, folder
+  for "Folder access") are `settings` filled into args at install.
+- Dropped: the old app's own illustrator app, and its "shared folder" wording (the filesystem preset now asks for a folder).
+
+### Tests
+106 tests (plus 2 opt-in live ones), all passing on Linux. New `CatalogTests` (12): counts and unique ids, roles well
+formed (id = slug(name), palette colour, known skills/apps, notes/approval/secret rules in the text), team packs
+reference real roles, presets well formed (no secret placeholders in args), every logo file exists, no old-brand or
+dog wording anywhere, installing every skill gives a parseable SKILL.md, installing every app gives a connector that
+round-trips and builds Claude/Codex config, secrets stay out of connectors.json, hiring a role, and hiring every team
+pack twice is idempotent (and repairs a deleted member).
+
+### Known gaps / next
+- The Marketplace page itself (see the integration notes in the hand-off).
+- Docs URLs and the SSE/v2 endpoints were taken from the vendors' published docs as I knew them, not re-checked live here.

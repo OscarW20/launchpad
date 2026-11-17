@@ -14,7 +14,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .chats: return "Chats"
         case .bots: return "Bots"
         case .groups: return "Groups"
-        case .hire: return "Hire"
+        case .hire: return "Marketplace"
         case .skills: return "Skills"
         case .connectors: return "Connectors"
         case .routines: return "Routines"
@@ -27,7 +27,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .chats: return "bubble.left.and.bubble.right"
         case .bots: return "face.smiling"
         case .groups: return "person.3"
-        case .hire: return "person.badge.plus"
+        case .hire: return "bag"
         case .skills: return "sparkles"
         case .connectors: return "powerplug"
         case .routines: return "clock.arrow.circlepath"
@@ -40,7 +40,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .chats: return "Your conversations with bots and groups."
         case .bots: return "Your AI teammates. Each one is a folder in ~/Launchpad/bots."
         case .groups: return "Put bots in a group with a lead. You post a task; the lead hands work out by @mention."
-        case .hire: return "Ready-made teammates you can add in one click, or the whole Dev team at once."
+        case .hire: return "Ready-made teams, roles, skills and apps you can add in one click."
         case .skills: return "Your skill library. Give skills to bots or whole groups; Claude Code and Codex find them automatically."
         case .connectors: return "MCP servers your bots can use. Tokens are kept in your Keychain, never in files."
         case .routines: return "Send a message to a bot or group on a schedule, or when a file appears. Runs while Launchpad is open."
@@ -429,6 +429,38 @@ final class AppModel {
             section = .bots
         } catch {
             alertMessage = "Couldn't hire \(template.name): \(error.localizedDescription)"
+        }
+    }
+
+    func hireTeam(_ pack: TeamPack) {
+        do {
+            let (_, group) = try Hiring(paths: paths).hireTeam(pack)
+            reloadAll()
+            openChat(with: group)
+        } catch {
+            alertMessage = "Couldn't add \(pack.name): \(error.localizedDescription)"
+        }
+    }
+
+    func installSkill(_ skill: CatalogSkill) {
+        do {
+            _ = try skillStore.install(skill)
+            reloadSkills()
+            relinkSkills()
+        } catch {
+            alertMessage = "Couldn't add \(skill.name): \(error.localizedDescription)"
+        }
+    }
+
+    /// Adds an app from the marketplace. Returns an error message to show, or nil.
+    func installApp(_ preset: ConnectorPreset, settings: [String: String], secrets values: [String: String]) -> String? {
+        do {
+            let c = try connectorStore.install(preset, settings: settings)
+            try ConnectorStore.storeSecrets(values, for: preset, connector: c, in: secrets)
+            reloadConnectors()
+            return nil
+        } catch {
+            return error.localizedDescription
         }
     }
 

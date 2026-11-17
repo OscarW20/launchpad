@@ -76,13 +76,15 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
 - **Approval cards**: bots ask before deploying, sending, spending or deleting. For Claude Code bots this is enforced
   by a hook, not just requested.
 - **Routines** on a schedule or when a file appears, and plan **usage** in the sidebar.
+- **Marketplace data** (in `LaunchpadCore`, UI to come): 35 roles, 5 team packs, 41 skills and 40 app (MCP)
+  presets with logos. See `CatalogRoles.swift`, `TeamPacks.swift`, `CatalogSkills.swift`, `ConnectorCatalog.swift`.
 
 ## Code layout
 
 - `Sources/LaunchpadCore`: everything that isn't UI. Bot and chat storage, the folder watcher,
   the engine runner (`Runner/`), stream parsers for both CLIs, plain-English errors, markdown blocks.
   Builds and tests on Linux too.
-- `Sources/Launchpad`: the SwiftUI app.
+- `Sources/Launchpad`: the SwiftUI app. `Resources/Logos` holds the app logos (Simple Icons, CC0, plus a few vendor icons).
 - `Sources/launchpad-guard`: the approval hook Claude Code runs before shell commands and MCP tools.
 - `Tests/LaunchpadCoreTests`: runner, parser, storage and markdown tests. Parser fixtures are real
   CLI output.

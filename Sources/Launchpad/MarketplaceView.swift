@@ -47,7 +47,7 @@ struct MarketplaceView: View {
         }
         .navigationTitle("Marketplace")
         .sheet(item: $installing) { preset in
-            InstallAppSheet(preset: preset)
+            AppDetailSheet(preset: preset)
         }
     }
 

@@ -107,7 +107,7 @@ struct RootView: View {
         case .tasks: TaskListView()
         case .workflows: WorkflowListView()
         case .routines: RoutineListView()
-        case .hire, .settings: SectionIntro(section: model.section)
+        case .hire, .settings, .connectors: SectionIntro(section: model.section)
         }
     }
 
@@ -150,11 +150,7 @@ struct RootView: View {
                 EmptyDetail(symbol: "sparkles", title: "Skills", message: "Pick a skill to edit it, or make a new one.")
             }
         case .connectors:
-            if let id = model.selectedConnectorId, model.connectors.contains(where: { $0.id == id }) {
-                ConnectorDetailView(connectorId: id).id(id)
-            } else {
-                EmptyDetail(symbol: "powerplug", title: "Connectors", message: "Add an MCP server by URL or command, then turn it on for bots or groups.")
-            }
+            AppsPage()
         case .tasks:
             if let id = model.selectedTaskId, model.task(id) != nil {
                 TaskDetailView(taskId: id).id(id)
@@ -181,7 +177,7 @@ struct RootView: View {
 
 extension SidebarSection {
     /// Marketplace and Settings use the whole width; every other page has a list column.
-    var hasListColumn: Bool { self != .hire && self != .settings }
+    var hasListColumn: Bool { self != .hire && self != .settings && self != .connectors }
 }
 
 /// The gap between the list and the conversation: drag to resize the list.
@@ -389,7 +385,7 @@ struct EmptyDetail: View {
                 Button { model.newSkill() } label: { Label("New Skill", systemImage: "plus") }
                     .buttonStyle(PillButtonStyle())
             case .connectors:
-                Button { model.addConnector() } label: { Label("Add Connector", systemImage: "plus") }
+                Button { model.showingNewServer = true } label: { Label("Add MCP server", systemImage: "plus") }
                     .buttonStyle(PillButtonStyle())
             case .routines:
                 Button { model.newRoutine() } label: { Label("New Routine", systemImage: "plus") }

@@ -17,7 +17,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .groups: return "Groups"
         case .hire: return "Marketplace"
         case .skills: return "Skills"
-        case .connectors: return "Connectors"
+        case .connectors: return "Apps"
         case .tasks: return "Tasks"
         case .workflows: return "Workflows"
         case .routines: return "Routines"
@@ -33,7 +33,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .groups: return "person.3"
         case .hire: return "bag"
         case .skills: return "sparkles"
-        case .connectors: return "powerplug"
+        case .connectors: return "square.grid.2x2"
         case .tasks: return "checklist"
         case .workflows: return "flowchart"
         case .routines: return "clock.arrow.circlepath"
@@ -49,7 +49,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .groups: return "Put bots in a group with a lead. You post a task; the lead hands work out by @mention."
         case .hire: return "Ready-made teams, roles, skills and apps you can add in one click."
         case .skills: return "Your skill library. Give skills to bots or whole groups; Claude Code and Codex find them automatically."
-        case .connectors: return "MCP servers your bots can use. Tokens are kept in your Keychain, never in files."
+        case .connectors: return "Apps and MCP servers your bots can use. Keys stay in your Keychain, never in files."
         case .tasks: return "Hand a job to a bot or group and see how it's going. Workflow approvals wait here too."
         case .workflows: return "Steps that pass work from bot to bot, run by hand or on a schedule."
         case .routines: return "Send a message to a bot or group on a schedule, when a file appears, or when its web address is called. Runs while Launchpad is open."
@@ -183,6 +183,7 @@ final class AppModel {
     var chatFilter: ChatFilter = .all
     var showingNewBot = false
     var showingNewGroup = false
+    var showingNewServer = false
     var teach: TeachState?
     var summaryGroupId: String?
     var drafts: [String: String] = [:]
@@ -288,6 +289,7 @@ final class AppModel {
         _ = try? TeamNotes.ensure(paths: paths)
         savedPrompts = savedPromptsStore.load()
         reloadAll()
+        removeBlankConnectors()
         usage = usageStore.load()
         selectedChatId = chats.first?.id
 
@@ -777,13 +779,57 @@ final class AppModel {
 
     // MARK: - Connectors
 
+    /// Opens the "Add MCP server" sheet. Nothing is saved until you press Add.
     func addConnector() {
+        section = .connectors
+        showingNewServer = true
+    }
+
+    /// Adds your own MCP server from the sheet. Returns an error to show, or nil.
+    func addServer(_ c: Connector) -> String? {
+        let name = c.name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return "Give it a name." }
+        if c.kind == .http {
+            guard let url = c.url, let u = URL(string: url), u.scheme?.hasPrefix("http") == true, u.host != nil else {
+                return "Enter the server's full address, starting with https://."
+            }
+        } else if (c.command ?? "").trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Enter the command that starts the server."
+        }
         do {
-            let c = try connectorStore.add(name: "New connector", kind: .http, url: "https://", command: nil, args: [])
+            var added = try connectorStore.add(name: name, kind: c.kind, url: c.url, command: c.command, args: c.args)
+            added.secretEnv = c.secretEnv
+            added.usesToken = c.usesToken
+            try connectorStore.update(added)
             reloadConnectors()
-            selectedConnectorId = c.id
+            return nil
         } catch {
-            alertMessage = error.localizedDescription
+            return error.localizedDescription
+        }
+    }
+
+    /// Bots and groups that have a connector turned on.
+    func holders(of connectorId: String) -> (bots: [Bot], groups: [BotGroup]) {
+        (bots.filter { $0.connectors.contains(connectorId) }, groups.filter { $0.connectors.contains(connectorId) })
+    }
+
+    /// Turns a catalogue app on or off for a bot or group, adding the app first if needed.
+    func setApp(_ preset: ConnectorPreset, on: Bool, bot botId: String? = nil, group groupId: String? = nil) {
+        if on, !connectors.contains(where: { $0.id == preset.id }) {
+            if let error = installApp(preset, settings: [:], secrets: [:]) {
+                alertMessage = "Couldn't add \(preset.name): \(error)"
+                return
+            }
+        }
+        if let botId, let b = bot(botId), b.connectors.contains(preset.id) != on { toggle(connector: preset.id, for: botId) }
+        if let groupId, let g = group(groupId), g.connectors.contains(preset.id) != on { toggle(connector: preset.id, forGroup: groupId) }
+    }
+
+    /// Removes empty "New connector" entries made by the old Add button.
+    func removeBlankConnectors() {
+        for c in connectors where c.name == "New connector" && (c.url ?? "https://") == "https://" && (c.command ?? "").isEmpty {
+            let h = holders(of: c.id)
+            if h.bots.isEmpty && h.groups.isEmpty { removeConnector(c.id) }
         }
     }
 

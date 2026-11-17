@@ -9,21 +9,49 @@ struct MessageRow: View {
     let message: ChatMessage
     let chatId: String
     var activeStep: Step? = nil
+    /// Still streaming: no menu yet.
+    var isLive = false
+    @State private var editing = false
 
     var body: some View {
+        content
+            .contextMenu {
+                if !isLive && message.role != .notice && message.deleted != true {
+                    MessageMenu(message: message, chatId: chatId, editing: $editing)
+                }
+            }
+            .sheet(isPresented: $editing) { EditMessageSheet(message: message, chatId: chatId) }
+    }
+
+    @ViewBuilder private var content: some View {
         switch message.role {
         case .user:
             HStack {
                 Spacer(minLength: 80)
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text(message.text)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(Theme.userBubble, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    Text(TimeLabel.clock(message.createdAt))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                VStack(alignment: .trailing, spacing: 4) {
+                    if let from = message.forwardedFrom {
+                        Label("Forwarded from \(from)", systemImage: "arrowshape.turn.up.right")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if message.deleted == true {
+                        DeletedBubble()
+                    } else {
+                        if !message.text.isEmpty {
+                            Text(message.text)
+                                .textSelection(.enabled)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(message.isSide == true ? Theme.raised : Theme.userBubble,
+                                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        if let gif = message.gif { GifView(gif: gif) }
+                        if let poll = message.poll { PollView(poll: poll, messageId: message.id, chatId: chatId) }
+                        if let files = message.attachments, !files.isEmpty {
+                            FileChips(urls: files.map { URL(fileURLWithPath: $0) })
+                        }
+                        ReactionsBar(message: message, chatId: chatId)
+                    }
+                    MessageMeta(message: message, alignment: .trailing)
                 }
             }
         case .notice:
@@ -57,6 +85,35 @@ struct MessageRow: View {
     }
 }
 
+struct DeletedBubble: View {
+    var body: some View {
+        Label("This message was deleted", systemImage: "trash")
+            .font(.callout.italic())
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 1, dash: [4])))
+    }
+}
+
+/// Time, plus edited / pinned / saved / side-question marks.
+struct MessageMeta: View {
+    let message: ChatMessage
+    var alignment: HorizontalAlignment = .leading
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if message.isSide == true { Text("Side question").fontWeight(.medium) }
+            if message.pinned == true { Image(systemName: "pin.fill") }
+            if message.saved == true { Image(systemName: "bookmark.fill") }
+            Text(TimeLabel.clock(message.createdAt))
+            if ChatOps.isEdited(message) { Text("· edited") }
+        }
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
+    }
+}
+
 struct BotMessageView: View {
     @Environment(AppModel.self) private var model
     let message: ChatMessage
@@ -65,52 +122,70 @@ struct BotMessageView: View {
 
     var body: some View {
         let bot = model.bot(message.botId)
+        let live = message.status == .streaming
         HStack(alignment: .top, spacing: 10) {
             AvatarView(bot: bot, size: 30)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Text(bot?.name ?? "Bot")
                         .font(Theme.rounded(.subheadline, weight: .semibold))
-                    Text(TimeLabel.clock(message.createdAt))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    MessageMeta(message: message)
                     if message.status == .stopped {
                         Pill(text: "Stopped", symbol: "stop.circle")
                     }
                 }
 
-                if !message.steps.isEmpty {
-                    StepsView(steps: message.steps, isLive: message.status == .streaming)
-                }
-
-                if !message.text.isEmpty {
-                    MarkdownView(text: message.text)
-                }
-
-                if message.status == .streaming {
-                    TypingIndicator(label: activeStep?.title ?? (message.text.isEmpty ? "Thinking…" : nil))
-                }
-
-                if let failure = message.failure {
-                    FailureCard(failure: failure)
-                }
-
-                if let cards = message.liveApprovals {
-                    ForEach(cards) { card in
-                        LiveApprovalCardView(card: card, chatId: chatId, botId: message.botId)
+                if message.deleted == true {
+                    DeletedBubble()
+                } else {
+                    if let todos = message.todos, !todos.isEmpty {
+                        TodoListView(items: todos)
                     }
-                }
 
-                if let approval = message.approval {
-                    ApprovalCard(request: approval, messageId: message.id, chatId: chatId)
-                }
+                    if !message.steps.isEmpty {
+                        StepsView(steps: message.steps, isLive: live)
+                    }
 
-                if message.status != .streaming, message.snapshot != nil, !(message.changedFiles ?? []).isEmpty {
-                    ReplyChangesBar(message: message, chatId: chatId)
+                    if !message.text.isEmpty {
+                        MarkdownView(text: message.text)
+                    }
+
+                    if let gif = message.gif { GifView(gif: gif) }
+                    if let plan = message.plan { PlanCardView(card: plan, messageId: message.id, chatId: chatId) }
+                    if let questions = message.questions {
+                        QuestionCardView(card: questions, messageId: message.id, chatId: chatId)
+                    }
+                    if let poll = message.poll { PollView(poll: poll, messageId: message.id, chatId: chatId) }
+
+                    if live {
+                        TypingIndicator(label: activeStep.map { StepLabel.describe($0).text } ?? (message.text.isEmpty ? "Thinking…" : nil))
+                    } else if !message.text.isEmpty {
+                        FileMentionChips(message: message, chatId: chatId)
+                    }
+
+                    if let failure = message.failure {
+                        FailureCard(failure: failure)
+                    }
+
+                    if let cards = message.liveApprovals {
+                        ForEach(cards) { card in
+                            LiveApprovalCardView(card: card, chatId: chatId, botId: message.botId)
+                        }
+                    }
+
+                    if let approval = message.approval {
+                        ApprovalCard(request: approval, messageId: message.id, chatId: chatId)
+                    }
+
+                    if !live, message.snapshot != nil, !(message.changedFiles ?? []).isEmpty {
+                        ReplyChangesBar(message: message, chatId: chatId)
+                    }
+                    ReactionsBar(message: message, chatId: chatId)
                 }
             }
             .padding(12)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(message.isSide == true ? Theme.raised.opacity(0.5) : Theme.surface,
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.border))
             Spacer(minLength: 40)
         }
@@ -190,17 +265,19 @@ struct StepRow: View {
     private var hasMore: Bool { step.detail != nil || step.output != nil }
 
     private var label: some View {
-        HStack(spacing: 6) {
+        let described = StepLabel.describe(step)
+        return HStack(spacing: 6) {
             statusIcon
                 .frame(width: 14)
-            Image(systemName: toolSymbol)
+            Image(systemName: described.icon)
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
-            InlineText(step.title)
+            InlineText(described.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
         .font(.callout)
+        .help(step.title)
     }
 
     @ViewBuilder private var statusIcon: some View {
@@ -216,19 +293,6 @@ struct StepRow: View {
         }
     }
 
-    private var toolSymbol: String {
-        switch step.tool {
-        case "Bash": return "terminal"
-        case "Read": return "doc.text"
-        case "Write", "Edit", "MultiEdit", "NotebookEdit": return "pencil"
-        case "Glob", "Grep": return "magnifyingglass"
-        case "WebSearch", "WebFetch": return "globe"
-        case "TodoWrite": return "checklist"
-        case "Task", "Agent": return "person.2"
-        case "Skill": return "sparkles"
-        default: return step.tool.hasPrefix("mcp__") ? "powerplug" : "wrench.and.screwdriver"
-        }
-    }
 }
 
 struct StepTextBox: View {

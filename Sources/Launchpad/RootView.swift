@@ -28,6 +28,15 @@ struct RootView: View {
         .sheet(isPresented: Binding(get: { model.summaryGroupId != nil }, set: { if !$0 { model.summaryGroupId = nil } })) {
             if let id = model.summaryGroupId { GroupSummarySheet(groupId: id) }
         }
+        .sheet(isPresented: Binding(get: { model.pastThreadsChatId != nil }, set: { if !$0 { model.pastThreadsChatId = nil } })) {
+            if let id = model.pastThreadsChatId { PastThreadsSheet(chatId: id) }
+        }
+        .sheet(isPresented: $model.showingQuickSwitcher) {
+            QuickSwitcherSheet()
+        }
+        .sheet(isPresented: $model.showingSavedMessages) {
+            SavedMessagesSheet()
+        }
         .alert(
             "Something went wrong",
             isPresented: Binding(get: { model.alertMessage != nil }, set: { if !$0 { model.alertMessage = nil } })
@@ -193,7 +202,7 @@ struct EngineStatusFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             UsageSummary()
-            ForEach(BotEngine.allCases) { engine in
+            ForEach(shownEngines) { engine in
                 HStack(spacing: 6) {
                     Circle()
                         .fill(colour(for: engine))
@@ -215,13 +224,20 @@ struct EngineStatusFooter: View {
         .help("Engines Launchpad can use. Click for details.")
     }
 
+    /// The local engine only shows once a bot uses it (Ollama is optional).
+    private var shownEngines: [BotEngine] {
+        BotEngine.allCases.filter { $0.isAgent || model.bots.contains { $0.engine == .local } }
+    }
+
     private func colour(for engine: BotEngine) -> Color {
         guard let found = model.engineLocations else { return .gray }
+        if engine == .local { return found[engine] != nil ? Theme.success : .gray }
         return found[engine] != nil ? Theme.success : Theme.failure
     }
 
     private func label(for engine: BotEngine) -> String {
         guard let found = model.engineLocations else { return "checking…" }
+        if engine == .local { return found[engine] != nil ? "Ollama found" : "server needed" }
         return found[engine] != nil ? "ready" : "not installed"
     }
 }

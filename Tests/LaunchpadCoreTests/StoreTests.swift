@@ -96,6 +96,26 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(LiveApproval(PendingApproval(id: "a2", category: "shell", tool: "Bash", detail: "ls")).offersAlways, false)
     }
 
+    func testTodosAndSideFlagAreOptionalAndRoundTrip() throws {
+        // A line written before to-do lists and side questions were saved.
+        let old = #"{"id":"m1","role":"bot","botId":"pixel","text":"Done","steps":[],"status":"done","createdAt":"2026-11-01T10:00:00Z"}"#
+        let decoded = try JSONCoding.decoder().decode(ChatMessage.self, from: Data(old.utf8))
+        XCTAssertNil(decoded.todos)
+        XCTAssertNil(decoded.isSide)
+
+        var m = ChatMessage(role: .bot, botId: "pixel", text: "All done", createdAt: Date(timeIntervalSince1970: 1_800_000_000))
+        m.todos = [TodoItem(id: "1", title: "Write tests", activeTitle: "Writing tests", status: .completed),
+                   TodoItem(id: "2", title: "Ship it", status: .inProgress)]
+        m.isSide = true
+        let chats = ChatStore(paths: paths)
+        try chats.append(m, chatId: "c")
+        let back = chats.messages(chatId: "c").first
+        XCTAssertEqual(back, m)
+        XCTAssertEqual(back?.todos?.map(\.status), [.completed, .inProgress])
+        XCTAssertEqual(back?.todos?.last?.label, "Ship it")
+        XCTAssertEqual(back?.isSide, true)
+    }
+
     func testChatHistoryAppendsAndReplaces() throws {
         let bots = BotStore(paths: paths)
         let chats = ChatStore(paths: paths)

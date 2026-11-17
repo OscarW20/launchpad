@@ -109,23 +109,102 @@ struct BotFormSections: View {
             TextField("Model", text: Binding(
                 get: { bot.model ?? "" },
                 set: { bot.model = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-            ), prompt: Text(bot.engine == .claude ? "Default (or opus, sonnet…)" : "Default (or gpt-5-codex…)"))
-        } header: {
-            Text("Engine")
-        } footer: {
-            Text("Runs on your \(bot.engine.planName) plan through \(bot.engine.displayName).")
-        }
-
-        Section {
-            Picker("Permission", selection: $bot.permission) {
-                ForEach(PermissionLevel.allCases) { level in
-                    Text(level.displayName).tag(level)
+            ), prompt: Text(Self.modelPrompt(bot.engine)))
+            if bot.engine == .local {
+                LocalServerFields(baseURL: $bot.localBaseURL)
+                if bot.model == nil {
+                    Label("Pick a model you've downloaded, e.g. llama3.2 (in Terminal: ollama pull llama3.2).", systemImage: "exclamationmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(Theme.warning)
                 }
             }
         } header: {
-            Text("What it can do")
+            Text("Engine")
         } footer: {
-            Text(bot.permission.explanation)
+            Text(bot.engine == .local
+                 ? "Runs on your computer through Ollama, LM Studio or any OpenAI-compatible server. Chat only: no tools, files, connectors or approvals."
+                 : "Runs on your \(bot.engine.planName) plan through \(bot.engine.displayName).")
+        }
+
+        if bot.engine.isAgent {
+            BackupSection(bot: $bot)
+            Section {
+                Picker("Permission", selection: $bot.permission) {
+                    ForEach(PermissionLevel.allCases) { level in
+                        Text(level.displayName).tag(level)
+                    }
+                }
+            } header: {
+                Text("What it can do")
+            } footer: {
+                Text(bot.permission.explanation)
+            }
+        }
+    }
+
+    static func modelPrompt(_ engine: BotEngine) -> String {
+        switch engine {
+        case .claude: return "Default (or opus, sonnet…)"
+        case .codex: return "Default (or gpt-5-codex…)"
+        case .local: return "Required, e.g. llama3.2 or qwen2.5-coder"
+        }
+    }
+}
+
+/// The address of a local model server, with presets for Ollama and LM Studio.
+struct LocalServerFields: View {
+    @Binding var baseURL: String?
+
+    var body: some View {
+        TextField("Server address", text: Binding(
+            get: { baseURL ?? "" },
+            set: { baseURL = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+        ), prompt: Text(LocalModel.defaultBaseURL))
+        HStack {
+            Text("Preset").foregroundStyle(.secondary)
+            Spacer()
+            Button("Ollama") { baseURL = nil }
+            Button("LM Studio") { baseURL = LocalModel.lmStudioBaseURL }
+        }
+        .controlSize(.small)
+    }
+}
+
+/// The engine and model a bot answers on when its plan's usage limit is hit.
+struct BackupSection: View {
+    @Binding var bot: Bot
+
+    var body: some View {
+        Section {
+            Picker("Backup brain", selection: Binding<BotEngine?>(
+                get: { bot.backup?.engine },
+                set: { engine in
+                    bot.backup = engine.map { BotBrain(engine: $0, model: bot.backup?.model, localBaseURL: bot.backup?.localBaseURL) }
+                }
+            )) {
+                Text("None").tag(BotEngine?.none)
+                ForEach(BotEngine.allCases) { engine in
+                    Text(engine.displayName).tag(BotEngine?.some(engine))
+                }
+            }
+            if let backup = bot.backup {
+                TextField("Backup model", text: Binding(
+                    get: { backup.model ?? "" },
+                    set: { bot.backup?.model = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+                ), prompt: Text(BotFormSections.modelPrompt(backup.engine)))
+                if backup.engine == .local {
+                    LocalServerFields(baseURL: Binding(get: { bot.backup?.localBaseURL }, set: { bot.backup?.localBaseURL = $0 }))
+                }
+                if backup.engine == bot.engine && backup.model == bot.model {
+                    Label("That's the same engine and model, so there's nothing to fall back to.", systemImage: "exclamationmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+        } header: {
+            Text("Backup")
+        } footer: {
+            Text("If \(bot.engine.displayName) hits your \(bot.engine.planName) plan's usage limit, \(bot.name.isEmpty ? "the bot" : bot.name) answers that message once on the backup, with a recap of the chat.")
         }
     }
 }
@@ -198,6 +277,10 @@ struct NewBotSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var bot = Bot(id: "", name: "", emoji: BotPalette.emojis.randomElement() ?? "🤖",
                                  colour: BotPalette.colours.randomElement() ?? BotPalette.default)
+    @State private var description = ""
+    @State private var instructions = ""
+    @State private var drafting = false
+    @State private var draftProblem: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -214,7 +297,36 @@ struct NewBotSheet: View {
             .padding(20)
 
             Form {
+                Section {
+                    HStack {
+                        TextField("Describe your bot", text: $description,
+                                  prompt: Text("e.g. a researcher who digs up sources and sums them up"))
+                            .onSubmit(draft)
+                        if drafting {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Button("Draft", action: draft)
+                                .disabled(description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    }
+                    if let draftProblem {
+                        Label(draftProblem, systemImage: "exclamationmark.triangle").foregroundStyle(Theme.warning)
+                    }
+                } header: {
+                    Text("Describe your bot")
+                } footer: {
+                    Text("Launchpad drafts a name, role, instructions, emoji and colour. Change anything before you create it.")
+                }
                 BotFormSections(bot: $bot)
+                Section {
+                    TextEditor(text: $instructions)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minHeight: 120)
+                } header: {
+                    Text("Instructions")
+                } footer: {
+                    Text("Leave empty for the standard instructions. You can change them any time.")
+                }
             }
             .formStyle(.grouped)
 
@@ -223,18 +335,39 @@ struct NewBotSheet: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Create Bot") {
-                    if let created = model.createBot(from: bot) {
+                    let text = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let created = model.createBot(from: bot, instructions: text.isEmpty ? nil : instructions) {
                         dismiss()
                         model.openChat(with: created)
                     }
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
-                .disabled(bot.name.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(bot.name.trimmingCharacters(in: .whitespaces).isEmpty || (bot.engine == .local && bot.model == nil))
             }
             .padding(16)
         }
-        .frame(width: 560, height: 680)
+        .frame(width: 580, height: 720)
+    }
+
+    private func draft() {
+        let text = description
+        guard !drafting, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        drafting = true
+        draftProblem = nil
+        Task {
+            switch await model.draftBot(text, engine: bot.engine) {
+            case .success(let d):
+                bot.name = d.name
+                bot.role = d.role
+                bot.emoji = d.emoji
+                bot.colour = d.colour
+                instructions = d.instructions
+            case .failure(let error):
+                draftProblem = error.localizedDescription
+            }
+            drafting = false
+        }
     }
 }
 
@@ -358,6 +491,7 @@ struct BotDetailView: View {
                         } footer: {
                             Text("Saved to CLAUDE.md and AGENTS.md in the bot's folder, so both engines read the same thing.")
                         }
+                        if bot.engine.isAgent {
                         Section {
                             if model.skills.isEmpty {
                                 Text("No skills yet. Add some on the Skills page.").foregroundStyle(.secondary)
@@ -401,6 +535,7 @@ struct BotDetailView: View {
                         }
                         PermissionsSection(bot: binding, removedAlways: $removedAlways)
                         LockDownSection(bot: binding)
+                        }
                         MemorySection(botId: botId)
                         Section {
                             Button("Move Bot to Trash…", role: .destructive) { confirmDelete = true }

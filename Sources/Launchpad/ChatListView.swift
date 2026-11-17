@@ -2,6 +2,17 @@
 import SwiftUI
 import LaunchpadCore
 
+/// What your bots are doing, live.
+struct ActivityButton: View {
+    @State private var showing = false
+
+    var body: some View {
+        Button { showing.toggle() } label: { Label("Activity", systemImage: "waveform.path.ecg") }
+            .help("What your bots are doing")
+            .popover(isPresented: $showing) { ActivityFeedView() }
+    }
+}
+
 struct ChatListView: View {
     @Environment(AppModel.self) private var model
 
@@ -44,6 +55,13 @@ struct ChatListView: View {
         .searchable(text: $model.chatSearch, prompt: "Search chats")
         .navigationTitle("Chats")
         .toolbar {
+            ToolbarItem {
+                ActivityButton()
+            }
+            ToolbarItem {
+                Button { model.showingSavedMessages = true } label: { Label("Saved Messages", systemImage: "bookmark") }
+                    .help("Messages you saved for later (⇧⌘S)")
+            }
             ToolbarItem {
                 NewChatMenu()
             }

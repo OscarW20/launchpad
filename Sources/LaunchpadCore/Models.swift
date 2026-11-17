@@ -285,6 +285,13 @@ public struct ChatMessage: Codable, Identifiable, Hashable, Sendable {
     /// Undo was used on this reply.
     public var undone: Bool?
 
+    // Added with the conversation features. Optional, so older chat logs still decode.
+
+    /// The bot's to-do list as it stood when the reply ended (TaskCreate / TodoWrite / Codex `todo_list`).
+    public var todos: [TodoItem]?
+    /// A side question (yours) or its answer: asked while the bot worked, answered from a fork of its session.
+    public var isSide: Bool?
+
     public init(
         id: String = UUID().uuidString.lowercased(), role: MessageRole, botId: String? = nil,
         text: String = "", steps: [Step] = [], status: MessageStatus = .done,

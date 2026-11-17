@@ -21,7 +21,7 @@ struct SettingsView: View {
                 Text("Bots, groups, skills and chats are plain files here. Edit them by hand or with any agent; the app picks up changes live. Set LAUNCHPAD_HOME to use a different folder.")
             }
 
-            ForEach(BotEngine.allCases) { engine in
+            ForEach(BotEngine.allCases.filter(\.isAgent)) { engine in
                 Section(engine.displayName) {
                     LabeledContent("Status") {
                         if let found = model.engineLocations {
@@ -44,6 +44,51 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Section {
+                LabeledContent("Ollama") {
+                    if let found = model.engineLocations {
+                        if let path = found[.local] {
+                            Label(path, systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(Theme.success)
+                                .textSelection(.enabled)
+                        } else {
+                            Text("Not found (optional)").foregroundStyle(.secondary)
+                        }
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                LabeledContent("Default address") {
+                    Text(LocalModel.defaultBaseURL).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                }
+                SecretField(title: "API key", account: LocalModelKey.account,
+                            prompt: "Only if your server asks for one")
+                HStack {
+                    Button("Start Ollama") { model.perform(.openTerminal(command: BotEngine.local.signInCommand)) }
+                        .disabled(model.engineLocations?[.local] == nil)
+                    Button("Get Ollama") { NSWorkspace.shared.open(BotEngine.local.installURL) }
+                }
+            } header: {
+                Text(BotEngine.local.displayName)
+            } footer: {
+                Text("Bots on a local model talk to Ollama, LM Studio or any OpenAI-compatible server on your Mac. They chat only: no tools or files. Pick the address per bot.")
+            }
+
+            Section {
+                Picker("Plan cards", selection: Binding(get: { model.planWait }, set: { model.planWait = $0 })) {
+                    ForEach(PlanWait.options.map { $0.seconds }, id: \.self) { seconds in
+                        Text(PlanWait.title(seconds)).tag(seconds)
+                    }
+                }
+                SecretField(title: "GIPHY API key", account: GiphySearch.keyAccount, prompt: "For GIFs (free at developers.giphy.com)")
+            } header: {
+                Text("Chat")
+            } footer: {
+                Text("Before a long task, a bot shares its plan with Start and Cancel. Pick whether it waits for you or starts by itself. GIFs need a GIPHY key, kept in your Keychain.")
+            }
+
+            TeamNotesSection()
 
             Section {
                 LabeledContent("Approval guard") {
@@ -91,6 +136,76 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .background(Theme.canvas)
         .navigationTitle("Settings")
+    }
+}
+
+/// A secret kept in your Keychain: shows whether it's set, and lets you save or remove it. Never shows the value.
+struct SecretField: View {
+    @Environment(AppModel.self) private var model
+    let title: String
+    let account: String
+    var prompt = ""
+    @State private var value = ""
+    @State private var isSet = false
+
+    var body: some View {
+        LabeledContent(title) {
+            if isSet {
+                HStack {
+                    Label("Saved in your Keychain", systemImage: "key.fill").foregroundStyle(Theme.success)
+                    Button("Remove") {
+                        model.setSecret(nil, for: account)
+                        isSet = model.hasSecret(account)
+                    }
+                }
+            } else {
+                HStack {
+                    SecureField("", text: $value, prompt: Text(prompt))
+                        .frame(maxWidth: 260)
+                    Button("Save") {
+                        model.setSecret(value.trimmingCharacters(in: .whitespacesAndNewlines), for: account)
+                        value = ""
+                        isSet = model.hasSecret(account)
+                    }
+                    .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .onAppear { isSet = model.hasSecret(account) }
+    }
+}
+
+/// Shared/TEAM.md: one page every bot reads.
+struct TeamNotesSection: View {
+    @Environment(AppModel.self) private var model
+    @State private var text = ""
+    @State private var saved = ""
+
+    var body: some View {
+        Section {
+            TextEditor(text: $text)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 180)
+            HStack {
+                Button("Save") {
+                    model.saveTeamNotes(text)
+                    saved = text
+                }
+                .disabled(text == saved)
+                Button("Revert") { text = saved }
+                    .disabled(text == saved)
+                Spacer()
+                Button("Open in Editor") { SystemActions.open(model.paths.teamNotes) }
+            }
+        } header: {
+            Text("Team notes")
+        } footer: {
+            Text("~/Launchpad/Shared/TEAM.md. Every bot reads it before it starts and adds decisions the team should know. Bots can also ask a teammate for help in a 1:1 chat.")
+        }
+        .onAppear {
+            text = model.teamNotesText()
+            saved = text
+        }
     }
 }
 

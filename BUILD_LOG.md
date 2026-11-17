@@ -650,3 +650,100 @@ Ported Biscuit Bots' phone link and iPhone app. The bots keep running on the Mac
 Tests: 15 new in `PhoneLinkTests` (pairing and token storage, lock-out and code rotation, auth and browser refusal,
 revoke, state mapping with unread and typing, revision changes, messages with cards and questions, deleted
 messages, send with quote and busy/oversize/unknown, answer routing, a real socket). 374 in total, all passing on Linux.
+
+## Final round: Mac features and computer use (2026-11-17)
+
+Ported the remaining Mac features from Biscuit Bots (`QuickAsk.swift`, `MenuBarContent.swift`, `OfficeView.swift`,
+`PopOut.swift`, `TopBar.swift`'s history, `Core/Awake.swift`, `Core/ComputerUse.swift`), adapted to Launchpad: no
+Biscuit names, no dog art or office props (cards with the bots' emoji avatars), the brand template icon in the menu bar.
+Left out on purpose: voice (dictation, calls, read-aloud), the notch Island, the updater and recovery, FigmaInbox.
+
+Before that, the macOS build on `main` was checked: the failure the previous worker stopped on (`live` / `messages`
+setters in `AppModel+Chat.swift`) was already fixed on `port/app-integration` (its CI run built, tested and bundled),
+and the chat/runner wiring matches the integration notes (chat tools, cards, message actions, attachments, export, ⌘K,
+drafter, team notes, hand-offs, huddles, pacing, file chips, step labels, local models, Codex home, recaps, backup,
+to-dos, context ring, Codex usage, threads, side questions, steering).
+
+### What was built
+
+**Core (`LaunchpadCore`, Linux-tested)**
+- `Desktop/ComputerUse.swift`: where Cua Driver lives (`~/.local/bin`, `CuaDriver.app`, Homebrew, your PATH), the
+  installer command, the private socket (`<tmp>/launchpad-cua/driver.sock`), the "computer" MCP connector
+  (`/bin/sh -c 'wait for the socket; exec cua-driver mcp --socket …'`), `allowingComputer` (adds `mcp__computer` to
+  Claude's `--allowedTools`, so a call the guard lets through isn't refused by Claude Code), `Blocker` (why a bot can't
+  use the Mac on this reply: switched off, not Claude, locked down, Never, no guard, no driver, no Accessibility, no
+  Screen Recording, driver failed) and the bot's instructions (background only, session label, claim apps first).
+- `AppClaims`: reads `.launchpad/scratch/app-claims.json` (written by the chat tools' use_app / done_with_app, 15 min
+  expiry) and releases a bot's claims under the same `flock` when its reply ends.
+- `Bot.useComputer` ("Use this Mac", off by default; older bot.json files load).
+- `Office.swift`: `Attention` (a pending approval card or `[[approve]]`, an unanswered question card, a plan waiting
+  for Start; only a chat's latest message counts), `DeskState` (needs you, working, up next, free) and `WorkSummary`
+  (what a working bot is doing: in-progress to-do, last step, thinking, writing), `NavigationHistory` (back/forward
+  stacks with a limit) and `ReplyNotice` (notification text for finished, stuck and needs-you replies and for live
+  approval cards).
+- `ChatToolsSetup.allowing(_:in:)` generalises the `--allowedTools` helper.
+
+**Mac app**
+- **Office** (new sidebar page under Talk, ⇧⌘O): the list column is the live activity feed (started, each tool step
+  in plain words, asked, finished, got stuck; click to open the chat); the detail is a desk card per bot with its status
+  badge, what it's doing and for how long, the app it has claimed, and Watch (its live chat in its own window), Chat
+  and Stop, plus the team notes (TEAM.md) with an editor sheet. Needs-you comes from live replies and the 20 most recent
+  chats (loaded when the Office opens). The sidebar badge counts bots working.
+- **Menu bar extra** (`MenuBarExtra`, window style): the template icon from `Resources/Brand/MenuBarIcon.png`/`@2x`
+  (loaded through `AppResources`, `isTemplate = true`) with a count while bots work; the panel shows status, an "Ask
+  your team" bar (Quick Ask), Working now (what each bot is doing, Stop per bot, Stop All), Needs you, recent chats,
+  and New Bot / Office / Open / Settings / Quit. Switch it off in Settings › This Mac. With it on, closing the main
+  window keeps Launchpad running; the main window is now a single `Window` that reopens from the menu bar or the Dock.
+- **Quick Ask**: ⌃⌥B anywhere (Carbon `RegisterEventHotKey`) opens a floating, non-activating panel: pick any bot or
+  group, type, Return. It goes to that target's everyday chat (like the composer, so a busy 1:1 bot is steered) and the
+  reply streams into the panel; follow-ups stay in the same chat; Open Chat jumps there. Also in File › Quick Ask… and
+  the menu bar. Switch the hot key off in Settings.
+- **Pop-out chats**: Open in New Window from the chat header or the chat list's context menu (`WindowGroup` with a chat
+  id); the Office's Watch opens the same window.
+- **Back / forward**: ⌘[ and ⌘] (Go menu) and toolbar buttons, across pages and their selection (chat, bot, group,
+  skill, connector, routine, task, workflow). Moves made by Back/Forward aren't recorded as new visits; deleted chats
+  are dropped from the history.
+- **Keep awake**: an `IOPMAssertionCreateWithName(PreventUserIdleSystemSleep)` while any chat is busy or any reply
+  (side questions too) is streaming; released when everything stops or the app quits. Settings switch, on by default.
+- **Notifications** (`UNUserNotificationCenter`, only inside the .app): while Launchpad is in the background, a
+  notification when a chat's work ends (replied, got stuck, or needs you), when a live approval card appears, and when a
+  bot asks a question card or shares a plan. Reply sends your text to that chat (`submit`, so it steers a busy bot);
+  clicking opens the chat. Settings switch, on by default.
+- **Computer use**: Settings › Computer use shows Cua Driver (installed path, or Install in Terminal… which opens the
+  official installer in Terminal, never run silently), Accessibility and Screen Recording (`AXIsProcessTrusted`,
+  `CGPreflightScreenCaptureAccess`, with buttons that ask macOS and open the right Privacy pane), whether the driver
+  runs, which bots may use the Mac, and who's using which app. The bot editor has "Use this Mac" with its status and a
+  Set Up… button. For each main reply of a bot with the switch on, `prepareRun` checks the blockers; if clear it starts
+  Launchpad's private driver (`cua-driver serve --socket …`, restarted if it died, not retried for 10 min after a
+  failure, leftovers from a crash killed at launch), adds the "computer" connector and the instructions; otherwise the
+  bot is told in one line why it can't. Every computer call goes through the guard's "Use your Mac" category (Ask by
+  default, so it shows an approval card; Always allow works per tool; Never blocks). When the reply ends the bot's app
+  claims are released (unless it's still working in another chat). Side questions never get the computer tools.
+- `AppResources`: the resource bundle in `Contents/Resources` (make-app.sh now copies `Launchpad_Launchpad.bundle`
+  there) or SwiftPM's when run with `swift run`. Marketplace logos use it too.
+
+### Decisions
+- Computer use is Claude Code only: Codex has no tool hook, so its clicks couldn't be asked about one by one. It also
+  needs the live guard (the bundled `launchpad-guard`), and locked-down bots never get it (they can't open other apps).
+- The driver socket lives in the temporary folder, as asked (`<tmp>/launchpad-cua/driver.sock`); bots that aren't
+  locked down can reach it from the sandbox (`allow default`).
+- Watching a bot opens its real chat in a window rather than BB's read-only step sheet, so you can answer its cards
+  and stop it from there.
+- Notifications are per chat when its work ends (not per bot turn), so a group posts one notification, not one per
+  member.
+- The main window became a single `Window` scene (no ⌘N duplicates) so the menu bar and Quick Ask can always find or
+  reopen it.
+
+### Not done / left out
+- Voice, the notch Island, the updater, recovery and FigmaInbox (as agreed).
+- No quit guard ("bots are still working, quit anyway?").
+- Needs-you in the Office only sees chats whose messages are loaded (the 20 most recent plus any you've opened).
+- macOS ties Accessibility and Screen Recording to the app's signature; an ad-hoc signed build from make-app.sh may
+  need the permissions granted again after a rebuild.
+- Computer use was built against BB's working integration and Cua Driver's documented commands, but couldn't be run
+  here (no Mac): try it by hand (checklist below in the hand-off).
+
+Tests: 11 new in `MacFeatureTests` (useComputer round trip, driver lookup, connector and socket, every computer call
+asks and Never blocks, allowed tools, blockers, claims read/release/expiry, attention, desk state and work line,
+back/forward history, notification text). 386 on Linux (387 on macOS), all passing. The app is built, tested and
+bundled by the macOS CI (run 18 onwards).

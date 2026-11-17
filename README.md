@@ -98,6 +98,16 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
 - **iPhone app** (`iOS/`): pair your phone in Settings › Mobile and chat with your bots from it, answer their
   questions and approval cards, and stop work. The bots keep running on the Mac. See BUILD_LOG.md.
 
+- **On your Mac**: an **Office** page (every bot's desk with live status, a live activity feed, watch a bot work, team
+  notes), a **menu bar** icon (who's working, who needs you, recent chats, Stop), **Quick Ask** on ⌃⌥B from any app,
+  chats in their **own windows**, **back / forward** with ⌘[ and ⌘], the Mac kept **awake** while bots work, and
+  **notifications** you can reply to while Launchpad is in the background.
+
+- **Computer use** (optional): turn on "Use this Mac" for a Claude Code bot and it can click and type in your apps in
+  the background through [Cua Driver](https://github.com/trycua/cua). Settings › Computer use installs it (in Terminal)
+  and checks Accessibility and Screen Recording. Every action asks you first (the bot's "Use your Mac" permission), and
+  bots claim an app so two never drive the same one.
+
 - **Memory**: each bot keeps `MEMORY.md` by topic. When a chat goes quiet, a cheap no-tools pass files lasting
   facts there (secrets redacted, size capped, daily limit per bot), and every change can be undone.
 
@@ -113,6 +123,9 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
 - `Sources/LaunchpadCore/Guard`: the permission guard (shell parser, rules engine, hook and approval handshake).
 - `Sources/LaunchpadCore/Safety`: permissions model, sandbox profile, site gateway, snapshots for undo.
 - `Sources/launchpad-guard`: the hook Claude Code runs before tool calls (`launchpad-guard hook <rules.json> …`).
+- `Sources/LaunchpadCore/Desktop` and `Office.swift`: computer use (Cua Driver, app claims), the Office's desk states,
+  back/forward history and notification text. The Mac side is in `Sources/Launchpad` (`OfficeView`, `MenuBarContent`,
+  `QuickAsk`, `PopOut`, `MacSupport`, `ComputerUseController`, `MacSettingsViews`, `AppModel+Desk`).
 - `Tests/LaunchpadCoreTests`: runner, parser, storage and markdown tests. Parser fixtures are real
   CLI output.
 

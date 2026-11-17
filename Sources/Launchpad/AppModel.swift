@@ -285,7 +285,7 @@ final class AppModel {
         }
         skillStore.seedStarterSkillsIfNeeded()
         lockedSkills = SkillLocks(paths: paths).load()
-        try? TeamNotes.ensure(paths: paths)
+        _ = try? TeamNotes.ensure(paths: paths)
         savedPrompts = savedPromptsStore.load()
         reloadAll()
         usage = usageStore.load()

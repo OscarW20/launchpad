@@ -70,6 +70,11 @@ public enum WorkSummary {
         return reply.text.isEmpty ? "Thinking…" : "Writing a reply…"
     }
 
+    /// A group's members with the working ones first; each half keeps the group's order.
+    public static func workingFirst(_ members: [String], working: Set<String>) -> [String] {
+        members.filter(working.contains) + members.filter { !working.contains($0) }
+    }
+
     /// How long a bot has been going: "Just started", "4 min", "1 h 5 min".
     public static func elapsed(since start: Date, now: Date = Date()) -> String {
         let mins = Int(max(0, now.timeIntervalSince(start)) / 60)

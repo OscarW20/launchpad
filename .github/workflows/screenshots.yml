@@ -1,0 +1,37 @@
+name: Screenshots
+
+on:
+  workflow_dispatch:
+
+jobs:
+  shots:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Launchpad.app
+        run: ./scripts/make-app.sh
+      - name: Demo data
+        run: LAUNCHPAD_HOME="$RUNNER_TEMP/demo" python3 scripts/demo-data.py
+      - name: Screenshots (dark and light)
+        run: |
+          mkdir -p shots
+          for mode in dark light; do
+            rm -rf "$RUNNER_TEMP/demo" && LAUNCHPAD_HOME="$RUNNER_TEMP/demo" python3 scripts/demo-data.py
+            if [ $mode = dark ]; then ARGS="-AppleInterfaceStyle Dark"; else ARGS=""; fi
+            LAUNCHPAD_HOME="$RUNNER_TEMP/demo" dist/Launchpad.app/Contents/MacOS/Launchpad $ARGS &
+            PID=$!
+            sleep 12
+            osascript -e 'tell application "System Events" to tell (first process whose unix id is '"$PID"') to set frontmost to true' || true
+            osascript -e 'tell application "System Events" to tell (first process whose unix id is '"$PID"') to set position of window 1 to {0, 25}' || true
+            osascript -e 'tell application "System Events" to tell (first process whose unix id is '"$PID"') to set size of window 1 to {1440, 900}' || true
+            sleep 4
+            screencapture -x "shots/$mode-full.png" || true
+            kill $PID || true
+            sleep 2
+          done
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: shots/

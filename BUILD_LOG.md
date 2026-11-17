@@ -1057,3 +1057,33 @@ Tests only; the app behaves as before.
 
 Tests: 441 run from inside a bot's sandbox, 0 failures, 3 skipped (the kernel test, plus the two that were already
 skipped).
+
+## Capture a skill, and "/name" to use one: the core (2026-11-17)
+
+What existed: skills are `skills/<id>/SKILL.md` in the library, given to a bot through its own or its groups' skill
+lists and linked into its folder (`SkillLinker`); locked skills (`SkillLocks`) can't be changed by bots. "Teach a
+Skill" in a chat header already drafts a skill from the last 30 messages and saves it to the library, but gives it
+to nobody, and there was no way to use a skill by typing its name.
+
+New in `Sources/LaunchpadCore/SkillCapture.swift` (no UI yet):
+
+- **Saving**: `SkillDraft` (name, "use when" line, steps) and `SkillStore.capture(_:)`, which never overwrites: a
+  name already in the library, or one of Launchpad's own skills, throws. `SkillStore.update(id:with:locked:)` edits
+  one of your own skills in place and refuses built-in and locked ones. `SkillCapture.skillId(_:)` validates names.
+- **Who gets it**: `SkillCapture.defaultAudience(for:)` is the chat's group (or the one bot of a one-to-one chat) and
+  `SkillCapture.assign(_:to:bots:groups:)` adds the skill to the group's or the chosen bots' lists.
+- **"/name …"**: `SkillCommand.query(in:)`, `candidates(for:among:)` and `insert(_:into:)` for the picker,
+  `parse(_:skills:)` for a sent message and `prompt(for:)` for what the bot is sent.
+- **Drafting**: `SkillTeacher.stretch(endingAt:in:)` picks the messages from your request to the chosen reply, and
+  `SkillTeacher.capturePrompt(_:name:botName:)` turns them into the write-up prompt.
+
+### Decisions
+- A captured skill goes on the group, not on each member, so bots that join later get it too.
+- "/name" only counts when the name is a skill in the library and is followed by a space or the end of the message,
+  so paths like `/usr/bin/x` and unknown names stay ordinary messages.
+- The prompt for "/name" carries the skill's text, so it works for a bot that doesn't have the skill linked.
+- "accept" and "ask" can't be skill names: "/accept" and "/ask" switch the approvals mode.
+- Saving only happens from the app. None of this is exposed to bots as a tool. (A bot can still edit an unlocked
+  skill's file in its own folder, as before; lock a skill to stop that.)
+
+Tests: 21 new in `SkillCaptureTests`.

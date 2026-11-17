@@ -57,6 +57,7 @@ LAUNCHPAD_LIVE_TESTS=1 swift test --filter LiveEngineTests
   chats/<chat-id>.jsonl   message history
   connectors.json         MCP servers (no secrets: those are in your Keychain)
   routines.json           scheduled and folder-triggered messages
+  Shared/TEAM.md          team notes every bot reads
 ```
 
 The app watches these files, so you (or any agent) can add or edit a bot by hand and it shows up
@@ -73,6 +74,9 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
   lead says so); a hand-off limit pauses the team and asks you. **Ask everyone** gets a quick view from each member.
 - **Skills** library (with Graphify one click away), given to bots or whole groups, plus **Teach a skill** from any chat.
 - **Connectors** (MCP servers) per bot or group, secrets in the Keychain.
+- **Chat tools** (in LaunchpadCore, app wiring in progress): bots react, send GIFs, run polls, ask tappable questions,
+  share a plan with Start / Cancel before long tasks and set up routines, through the bundled `launchpad-chat` MCP server.
+  Messages can be pinned, saved, edited, deleted and forwarded; files can be attached; chats export to Markdown.
 - **Approval cards**: bots ask before deploying, sending, spending or deleting. For Claude Code bots this is enforced
   by a hook, not just requested.
 - **Safety core** (in LaunchpadCore, app wiring in progress): per-bot permissions (Ask / Allow / Never for send, delete,

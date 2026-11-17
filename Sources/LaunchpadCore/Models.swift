@@ -217,6 +217,29 @@ public struct ChatMessage: Codable, Identifiable, Hashable, Sendable {
     /// For notices that offer a next step (e.g. "Keep going" after the hand-off limit).
     public var noticeAction: NoticeAction?
 
+    // Chat features (see Chat/ChatFeatures.swift). All optional, so chat history written before they existed still
+    // decodes, and a change is saved by appending the whole message again (the latest line with an id wins).
+
+    /// Emoji -> who reacted: `ChatOps.you` or a bot id.
+    public var reactions: [String: [String]]?
+    public var pinned: Bool?
+    /// Saved for later ("Saved messages").
+    public var saved: Bool?
+    /// Earlier versions of the text, oldest first. Non-empty means "edited".
+    public var edits: [MessageEdit]?
+    /// Deleted: shown as "This message was deleted"; text and extras are cleared.
+    public var deleted: Bool?
+    /// Files that came with the message (absolute paths, copied into the bot's or group's Inbox).
+    public var attachments: [String]?
+    /// Who wrote the original, for a forwarded message.
+    public var forwardedFrom: String?
+    public var gif: GifRef?
+    public var poll: Poll?
+    /// A plan the bot asked you to start (long tasks), with Start and Cancel and an optional countdown.
+    public var plan: PlanCard?
+    /// Questions the bot asked as tappable choices.
+    public var questions: QuestionCard?
+
     public init(
         id: String = UUID().uuidString.lowercased(), role: MessageRole, botId: String? = nil,
         text: String = "", steps: [Step] = [], status: MessageStatus = .done,

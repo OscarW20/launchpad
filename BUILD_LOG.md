@@ -324,3 +324,37 @@ Core only (`Sources/LaunchpadCore/Guard`, `Sources/LaunchpadCore/Safety`); the a
 Tests: 139 (plus 2 opt-in live ones). The 186 Biscuit Bots guard self-checks are now XCTest cases (`GuardEngineTests`),
 with Biscuit-only ones swapped for generic ones; plus the hook and handshake end to end, rules file, settings JSON, run
 options, Codex mapping, sandbox profiles (kernel test on macOS only), snapshots with real git, secrets and the gateway.
+
+### Phase 8: Chat tools and chat features (ported from an earlier app)
+Core only (`Sources/LaunchpadCore/Chat`, new executable `launchpad-chat`); the macOS app wires it in next.
+
+- **`launchpad-chat`** MCP server (stdio JSON-RPC; logic in `ChatToolsServer` so it's tested in-process). Tools:
+  create_routine (checked with `RoutineRequests`, target fixed to the chat's bot or group), list_routines, ask_user,
+  share_plan (waits for Start / Cancel / your words; with a countdown, silence means start; otherwise 570 s then "don't
+  start"), react, send_gif, start_poll, vote, use_app / done_with_app (shared claims, 15 min expiry, `flock`).
+  Settings come as flags (`--actions … --routine-target …`) or `LP_*` variables; `ChatToolsRun.connector(executable:)`
+  passes them as flags, so it goes through `MCPConfig` like any stdio connector and needs no Runner changes.
+  `ChatToolsSetup.allowingChatTools` adds `mcp__launchpad_chat` to Claude's `--allowedTools`.
+- **Files**: `.launchpad/requests/chat/<run>.actions.jsonl` (one `ChatAction` per line; `requests/` is writable from
+  the sandbox), plan answers in `.launchpad/answers/chat/<run>.plan` (app only, so a bot can't start its own plan),
+  claims in `.launchpad/scratch/app-claims.json`. `ChatActionReader` tails the file during a run;
+  `ChatActionApplier` turns actions into changed messages, reply extras (GIF, poll, plan, questions), GIF searches and
+  routines. `ChatTokens` keeps the text fallback (`[react: 🎉]`, `[gif: …]`, `[poll: Q | A | B]`, `[vote: 2]`).
+  The legacy guard (`RiskClassifier`) no longer asks about `mcp__launchpad_chat__*`; the permission guard needs
+  `trustedServers: ["launchpad_chat"]`.
+- **Chat features**: `ChatMessage` gained optional `reactions`, `pinned`, `saved`, `edits` (history), `deleted`,
+  `attachments`, `forwardedFrom`, `gif`, `poll`, `plan`, `questions` (old JSONL still decodes). `ChatOps` does
+  reactions, pin, save, edit, delete (tombstone), forward, polls, plan and question answers; `ChatStore.update` saves
+  by appending (latest wins). `GiphySearch` (key `giphy.API_KEY` in the Keychain) builds the URL and parses replies.
+  `TextPacing` splits short replies into texts. To-do lists are left to the runners work (no `todoList` field).
+- **Collab**: `ActivityFeed`; team notes in `~/Launchpad/Shared/TEAM.md` (one page for every bot, decided over
+  per-group files because groups already have SUMMARY.md); `DirectHandOff` (`@id: …` lines in a 1:1 chat, answer goes
+  back to the chat's bot, hop limit); `ReviewRequest`; `Huddle` (a message, then `askEveryone()`).
+- **Drafter** (`BotDrafter`): name, role, instructions, emoji and a `BotPalette` colour from one line, via
+  `EngineCommand.oneShot`. **FileMentions** / **StepLabel**, **Attachments** (copy into `workspace/Inbox`, "name 2.ext"),
+  **SavedPromptsStore** (`.launchpad/saved-prompts.json`), **ChatExport** (Markdown), **QuickSearch** (⌘K ranking).
+- Not ported: stickers, phone hang-ups, link previews (UI), image drop decoding (AppKit), per-bot plan wait (a `Bot`
+  field; an app setting for now).
+- Tests: 45 new (316 total, 2 opt-in live skipped): JSON-RPC handshake and every tool in-process, plan wait with a
+  fake clock, claims, routines, config, reader, applier, the guard exemption, and the built binary run once with a
+  scripted stdin.

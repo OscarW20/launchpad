@@ -95,6 +95,8 @@ public enum RiskClassifier {
     }
 
     public static func classify(mcpTool name: String) -> RiskKind? {
+        // Launchpad's own chat tools (react, send_gif, share_plan…) only touch the chat.
+        if name.hasPrefix("mcp__\(ChatToolsSetup.serverKey)__") { return nil }
         // mcp__server__tool_name
         let tool = name.split(separator: "_", omittingEmptySubsequences: true).dropFirst(2).joined(separator: "_").lowercased()
         for (kind, words) in mcpWords where words.contains(where: { tool.contains($0) }) {

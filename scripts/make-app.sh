@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 
 swift build -c release --product Launchpad
 swift build -c release --product launchpad-guard
+swift build -c release --product launchpad-chat
 BINDIR="$(swift build -c release --show-bin-path)"
 BIN="$BINDIR/Launchpad"
 
@@ -13,6 +14,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Launchpad"
 cp "$BINDIR/launchpad-guard" "$APP/Contents/MacOS/launchpad-guard"
+cp "$BINDIR/launchpad-chat" "$APP/Contents/MacOS/launchpad-chat"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

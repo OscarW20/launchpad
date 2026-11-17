@@ -125,8 +125,8 @@ extension AppModel {
     /// so the main job carries on untouched. The question and answer appear in the chat.
     func phoneSideQuestion(chatId: String, text: String) -> PhoneResult {
         guard let meta = chat(chatId) else { return .rejected(404, "That chat isn’t on your Mac any more") }
-        let botId = meta.kind == .bot ? meta.botId : group(meta.groupId)?.lead
-        guard let bot = bot(botId) else { return .rejected(409, "There’s no one to ask in this chat") }
+        let askerId = meta.kind == .bot ? meta.botId : group(meta.groupId)?.lead
+        guard let bot = bot(askerId) else { return .rejected(409, "There’s no one to ask in this chat") }
         if bot.lockedDown {
             return .rejected(409, "\(bot.name) is locked down, so side questions aren’t available for it yet.")
         }

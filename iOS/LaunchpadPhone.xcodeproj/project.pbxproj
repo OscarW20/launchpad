@@ -1,0 +1,276 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		F89FBA8C89FB0B85923CC1E7 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 830578DE825BD771E27F7A71 /* App.swift */; };
+		D3D6311E4A5A4AF7B4509F3C /* Cards.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3BB528699D3BAAFBA30BF19 /* Cards.swift */; };
+		8D183300340BDB42B4BDA54B /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BB935CF7152BB88D58BB49B /* ChatListView.swift */; };
+		7DB30F5018B864040D005AE7 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2C0FB5E789C7AA87D33E5EB /* ChatView.swift */; };
+		A60D6176E32193CE55716377 /* MacLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B48538D02647B80BEE1D94 /* MacLink.swift */; };
+		F03B17A5F99F67AB053DE9A1 /* PairView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74340829AA9FE14FCB037043 /* PairView.swift */; };
+		7725B42CC0005C3DB8BCBDED /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BBA828D5E9FE8F0D95F9D33 /* Theme.swift */; };
+		A14D491BE1761340680A5E9B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 775BBB668A636401B79AA7A7 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		4B09F7F154C12CB0E04568FB /* Launchpad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Launchpad.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		830578DE825BD771E27F7A71 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		D3BB528699D3BAAFBA30BF19 /* Cards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Cards.swift; sourceTree = "<group>"; };
+		5BB935CF7152BB88D58BB49B /* ChatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListView.swift; sourceTree = "<group>"; };
+		C2C0FB5E789C7AA87D33E5EB /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		B7B48538D02647B80BEE1D94 /* MacLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLink.swift; sourceTree = "<group>"; };
+		74340829AA9FE14FCB037043 /* PairView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairView.swift; sourceTree = "<group>"; };
+		7BBA828D5E9FE8F0D95F9D33 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		775BBB668A636401B79AA7A7 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D774F1D25551E3D7B4682EF6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		98E605AF12DC31081DB1CB1A = {
+			isa = PBXGroup;
+			children = (
+				494620FD928E17712DBAA258 /* LaunchpadPhone */,
+				31EEFE275307A621E381F2FF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		31EEFE275307A621E381F2FF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4B09F7F154C12CB0E04568FB /* Launchpad.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		494620FD928E17712DBAA258 /* LaunchpadPhone */ = {
+			isa = PBXGroup;
+			children = (
+				830578DE825BD771E27F7A71 /* App.swift */,
+				775BBB668A636401B79AA7A7 /* Assets.xcassets */,
+				D3BB528699D3BAAFBA30BF19 /* Cards.swift */,
+				5BB935CF7152BB88D58BB49B /* ChatListView.swift */,
+				C2C0FB5E789C7AA87D33E5EB /* ChatView.swift */,
+				B7B48538D02647B80BEE1D94 /* MacLink.swift */,
+				74340829AA9FE14FCB037043 /* PairView.swift */,
+				7BBA828D5E9FE8F0D95F9D33 /* Theme.swift */,
+				D774F1D25551E3D7B4682EF6 /* Info.plist */,
+			);
+			path = LaunchpadPhone;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		DC92358E565407297B6F6B5E /* LaunchpadPhone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 08ADDE9493F224370FC54170 /* Build configuration list for PBXNativeTarget "LaunchpadPhone" */;
+			buildPhases = (
+				9A96429B9EF829C101F4EAB9 /* Sources */,
+				63B79405CA8C93B3B3A78690 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LaunchpadPhone;
+			packageProductDependencies = (
+			);
+			productName = LaunchpadPhone;
+			productReference = 4B09F7F154C12CB0E04568FB /* Launchpad.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		44BEE67C03997304ECE016B9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					DC92358E565407297B6F6B5E = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = F8ABA950553CAB12D9A43C24 /* Build configuration list for PBXProject "LaunchpadPhone" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 98E605AF12DC31081DB1CB1A;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 31EEFE275307A621E381F2FF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DC92358E565407297B6F6B5E /* LaunchpadPhone */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		63B79405CA8C93B3B3A78690 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A14D491BE1761340680A5E9B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9A96429B9EF829C101F4EAB9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F89FBA8C89FB0B85923CC1E7 /* App.swift in Sources */,
+				D3D6311E4A5A4AF7B4509F3C /* Cards.swift in Sources */,
+				8D183300340BDB42B4BDA54B /* ChatListView.swift in Sources */,
+				7DB30F5018B864040D005AE7 /* ChatView.swift in Sources */,
+				A60D6176E32193CE55716377 /* MacLink.swift in Sources */,
+				F03B17A5F99F67AB053DE9A1 /* PairView.swift in Sources */,
+				7725B42CC0005C3DB8BCBDED /* Theme.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		BCBC843BC53F805265ADA303 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E09FDF64650C4C4D4B0C5FF0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E24F8A14376AF789B194EB1B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LaunchpadPhone/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Launchpad;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Launchpad finds your Mac on this Wi-Fi so you can chat with your bots.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.launchpad.phone;
+				PRODUCT_NAME = Launchpad;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A5A7A8208CD42C4F7CDA1DF8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LaunchpadPhone/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Launchpad;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Launchpad finds your Mac on this Wi-Fi so you can chat with your bots.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.launchpad.phone;
+				PRODUCT_NAME = Launchpad;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F8ABA950553CAB12D9A43C24 /* Build configuration list for PBXProject "LaunchpadPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BCBC843BC53F805265ADA303 /* Debug */,
+				E09FDF64650C4C4D4B0C5FF0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		08ADDE9493F224370FC54170 /* Build configuration list for PBXNativeTarget "LaunchpadPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E24F8A14376AF789B194EB1B /* Debug */,
+				A5A7A8208CD42C4F7CDA1DF8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 44BEE67C03997304ECE016B9 /* Project object */;
+}

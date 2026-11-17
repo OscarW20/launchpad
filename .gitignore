@@ -1,6 +1,9 @@
 .build/
 .swiftpm/
 *.xcodeproj/
+# The iPhone app's project is checked in (see iOS/project.yml); per-user Xcode state isn't.
+!iOS/LaunchpadPhone.xcodeproj/
+xcuserdata/
 DerivedData/
 dist/
 .DS_Store

@@ -84,6 +84,8 @@ struct SettingsView: View {
                 Text("Claude Code bots wait for your Approve on a card before they send, delete, spend or change shared systems (set this per bot under Permissions). Codex bots are told the same and kept in their sandbox. Bots can't touch Launchpad's own files or your Claude settings.")
             }
 
+            PhoneSettingsSection()   // Phone link hook (PhoneSettingsView.swift)
+
             Section {
                 Button("Check again") { model.refreshEngines() }
             }

@@ -23,3 +23,26 @@ jobs:
         run: grep -E "Test Case|error" test-output.txt | tail -40 || true
       - name: Bundle Launchpad.app
         run: ./scripts/make-app.sh
+
+  ios:
+    name: Build iPhone app (simulator)
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode
+        run: xcodebuild -version
+      - name: Build the checked-in project
+        run: >
+          xcodebuild -quiet -project iOS/LaunchpadPhone.xcodeproj -scheme LaunchpadPhone
+          -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO build
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build from project.yml
+        run: |
+          rm -rf "$RUNNER_TEMP/gen" && cp -R iOS "$RUNNER_TEMP/gen"
+          cd "$RUNNER_TEMP/gen" && rm -rf LaunchpadPhone.xcodeproj && xcodegen generate
+          xcodebuild -quiet -project LaunchpadPhone.xcodeproj -scheme LaunchpadPhone \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd-gen" CODE_SIGNING_ALLOWED=NO build

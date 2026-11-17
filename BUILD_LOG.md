@@ -802,3 +802,25 @@ Tests: no core changes; `swift build` and `swift test` still pass on Linux, and 
 `~/launchpad` (this checkout) are the same folder, so a `git add -A` could have committed chat history. The patterns
 are anchored to the root so same-named folders deeper in the tree are unaffected; none of the names were tracked.
 Moving the default data home out of the checkout is still open. No code changes.
+
+## @-mention picker in group chats (2026-11-17)
+
+Typing `@` in a group chat's composer did nothing: bots hand work to each other by @mention, but there was never a
+picker for the person typing. Now there is one.
+
+- **Core** (`Chat/MentionPicker.swift`): `query(in:)` finds the handle being typed at the end of the draft (the `@`
+  must start a word, the same rule as `GroupPlan.mentions`), `candidates(for:among:)` filters the group's bots by id
+  or name (prefix matches first, then contains, in group order) and `insert(_:into:)` replaces the typed handle with
+  `@id `.
+- **App** (`MentionList` and `Composer` in `ConversationView.swift`): a small list above the composer with avatar,
+  name, role and `@id`. ↑ ↓ move (wrapping), Return, Tab or a click inserts the tag, Esc closes the list and keeps the
+  text. With the list closed Return sends as before. One-to-one chats have no picker.
+
+### Decisions
+- The picker looks at the end of the draft, not the caret: `TextField` has no selection binding on macOS 14. Typing
+  `@` in the middle of existing text doesn't open it.
+- Esc remembers the draft it closed on, so the list stays shut until you type again.
+- `onSubmit` also picks when the list is open, in case the field editor swallows Return before `onKeyPress` sees it.
+
+Tests: 9 new in `MentionPickerTests` (what counts as a query, filtering and order, insertion, and that the inserted
+tag is understood by `GroupPlan.mentions`).

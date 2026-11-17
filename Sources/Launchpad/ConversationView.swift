@@ -389,10 +389,44 @@ struct Composer: View {
     @State private var showingPoll = false
     @State private var asking = false
     @State private var sideText = ""
+    @State private var mentionSelection = 0
+    /// The draft as it was when Esc closed the mention list; the list stays closed until the draft changes.
+    @State private var mentionDismissed: String?
+
+    /// Group members that match the @handle being typed; empty when the mention list is closed.
+    private var mentionMatches: [Bot] {
+        let draft = model.drafts[chatId] ?? ""
+        guard let chat = model.chat(chatId), chat.kind == .group, let group = model.group(chat.groupId),
+              draft != mentionDismissed, let query = MentionPicker.query(in: draft) else { return [] }
+        return MentionPicker.candidates(for: query, among: group.everyone.compactMap { model.bot($0) })
+    }
+
+    private func moveMention(_ step: Int) -> KeyPress.Result {
+        let count = mentionMatches.count
+        guard count > 0 else { return .ignored }
+        mentionSelection = (min(mentionSelection, count - 1) + step + count) % count
+        return .handled
+    }
+
+    /// Writes the selected (or clicked) bot's tag into the draft. False when the list is closed.
+    @discardableResult private func pickMention(_ bot: Bot? = nil) -> Bool {
+        let matches = mentionMatches
+        guard let bot = bot ?? (matches.isEmpty ? nil : matches[min(mentionSelection, matches.count - 1)]) else { return false }
+        model.drafts[chatId] = MentionPicker.insert(bot.id, into: model.drafts[chatId] ?? "")
+        focused = true
+        return true
+    }
+
+    private func closeMentions() -> KeyPress.Result {
+        guard !mentionMatches.isEmpty else { return .ignored }
+        mentionDismissed = model.drafts[chatId] ?? ""
+        return .handled
+    }
 
     var body: some View {
         let running = model.isRunning(chatId)
         let draft = model.drafts[chatId] ?? ""
+        let mentions = mentionMatches
         let files = model.pendingAttachments[chatId] ?? []
         let empty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty
         let chat = model.chat(chatId)
@@ -425,6 +459,10 @@ struct Composer: View {
                 }
                 .padding(.leading, 48)
             }
+            if !mentions.isEmpty {
+                MentionList(bots: mentions, selection: min(mentionSelection, mentions.count - 1)) { pickMention($0) }
+                    .padding(.leading, 48)
+            }
             HStack(alignment: .bottom, spacing: Theme.Space.s) {
                 CircleMenu(symbol: "plus", help: "Attach files, send a GIF, start a poll, ask on the side, or use a saved prompt", size: 40) {
                     Button("Attach Files…") { model.chooseAttachments(for: chatId) }
@@ -448,7 +486,16 @@ struct Composer: View {
                 .textFieldStyle(.plain)
                 .lineLimit(1...10)
                 .focused($focused)
-                .onSubmit { model.send(chatId: chatId) }
+                .onSubmit { if !pickMention() { model.send(chatId: chatId) } }
+                .onKeyPress(.downArrow) { moveMention(1) }
+                .onKeyPress(.upArrow) { moveMention(-1) }
+                .onKeyPress(.return) { pickMention() ? .handled : .ignored }
+                .onKeyPress(.tab) { pickMention() ? .handled : .ignored }
+                .onKeyPress(.escape) { closeMentions() }
+                .onChange(of: draft) {
+                    mentionSelection = 0
+                    if draft != mentionDismissed { mentionDismissed = nil }
+                }
                 .font(.system(size: 14))
                 .padding(.vertical, 11)
                 .padding(.horizontal, Theme.Space.l)
@@ -502,6 +549,46 @@ struct Composer: View {
         .padding(.top, Theme.Space.s)
         .padding(.bottom, Theme.Space.m)
         .onAppear { focused = true }
+    }
+}
+
+/// The group's bots that match the @handle being typed, shown above the composer.
+struct MentionList: View {
+    let bots: [Bot]
+    let selection: Int
+    let pick: (Bot) -> Void
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ForEach(Array(bots.enumerated()), id: \.element.id) { i, bot in
+                Button { pick(bot) } label: {
+                    HStack(spacing: Theme.Space.s) {
+                        AvatarView(bot: bot, size: 24)
+                        Text(bot.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                        if !bot.role.isEmpty {
+                            Text(bot.role).font(.system(size: 12)).foregroundStyle(Theme.secondary).lineLimit(1)
+                        }
+                        Spacer(minLength: Theme.Space.s)
+                        Text("@\(bot.id)").font(.system(size: 12)).foregroundStyle(Theme.secondary).lineLimit(1)
+                    }
+                    .padding(.horizontal, Theme.Space.s)
+                    .padding(.vertical, 5)
+                    .background(
+                        i == selection ? Theme.accentSoft : Color.clear,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Mention \(bot.name)")
+                .accessibilityAddTraits(i == selection ? .isSelected : [])
+            }
+        }
+        .padding(6)
+        .frame(maxWidth: 420)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
     }
 }
 

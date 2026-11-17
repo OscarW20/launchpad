@@ -353,7 +353,8 @@ public enum WebhookRouter {
 
 // MARK: - The listener
 
-/// A tiny HTTP/1.1 listener on 127.0.0.1 only (nothing on the network can reach it), built on POSIX sockets so it
+/// A tiny HTTP/1.1 listener on 127.0.0.1 only (nothing on the network can reach it) unless made with `.all` (the phone
+/// link listens on the local network). Built on POSIX sockets so it
 /// runs and is tested the same on macOS and Linux. One short-lived thread per connection, at most `maxConnections`
 /// at once (more get 503); a connection that doesn't finish its request in `requestTimeout` is closed.
 public final class LoopbackHTTPListener: @unchecked Sendable {
@@ -370,7 +371,11 @@ public final class LoopbackHTTPListener: @unchecked Sendable {
         }
     }
 
+    /// Where it listens: this Mac only (web address routines), or every network interface (the phone link).
+    public enum Interface: Sendable { case loopback, all }
+
     private let handler: Handler
+    private let interface: Interface
     private let lock = NSLock()
     private var fd: Int32 = -1
     private var stopped = false
@@ -379,13 +384,14 @@ public final class LoopbackHTTPListener: @unchecked Sendable {
     public var requestTimeout: TimeInterval = 15
     public private(set) var port: UInt16 = 0
 
-    public init(handler: @escaping Handler) {
+    public init(interface: Interface = .loopback, handler: @escaping Handler) {
+        self.interface = interface
         self.handler = handler
     }
 
     deinit { stop() }
 
-    /// Starts listening on 127.0.0.1. `port` 0 picks a free one. Returns the port.
+    /// Starts listening on 127.0.0.1 (or every interface, see `Interface`). `port` 0 picks a free one. Returns the port.
     @discardableResult
     public func start(port wanted: UInt16 = WebhookAuth.port) throws -> UInt16 {
         #if canImport(Glibc)
@@ -402,7 +408,7 @@ public final class LoopbackHTTPListener: @unchecked Sendable {
         addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         #endif
         addr.sin_port = wanted.bigEndian
-        addr.sin_addr.s_addr = UInt32(0x7f00_0001).bigEndian   // 127.0.0.1 only
+        addr.sin_addr.s_addr = interface == .all ? 0 : UInt32(0x7f00_0001).bigEndian   // 0.0.0.0, or 127.0.0.1 only
         let bound = withUnsafePointer(to: &addr) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
         }

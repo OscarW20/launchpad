@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# A newer push cancels the older run on the same branch, so we never queue behind stale builds.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   macos:
     name: Build app and run tests (macOS)
@@ -11,8 +16,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Toolchain
-        run: swift --version
       - name: Build
         run: swift build
       - name: Test
@@ -22,4 +25,31 @@ jobs:
         if: failure() || cancelled()
         run: grep -E "Test Case|error" test-output.txt | tail -40 || true
       - name: Bundle Launchpad.app
+        if: github.ref == 'refs/heads/main'
         run: ./scripts/make-app.sh
+
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ios: ${{ steps.diff.outputs.ios }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: diff
+        run: |
+          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q '^iOS/'; then echo "ios=true" >> "$GITHUB_OUTPUT"; else echo "ios=false" >> "$GITHUB_OUTPUT"; fi
+
+  ios:
+    name: Build iPhone app (simulator)
+    needs: changes
+    if: needs.changes.outputs.ios == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the iPhone app
+        run: >
+          xcodebuild -quiet -project iOS/LaunchpadPhone.xcodeproj -scheme LaunchpadPhone
+          -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO build

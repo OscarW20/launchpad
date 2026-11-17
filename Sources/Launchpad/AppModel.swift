@@ -303,6 +303,7 @@ final class AppModel {
             let s = Snapshots(paths: p)
             await MainActor.run { [weak self] in self?.snapshots = s.available ? s : nil }
         }
+        PhoneLinkController.shared.attach(self)   // Phone link hook (PhoneLinkController.swift)
     }
 
     // MARK: - Loading
@@ -434,6 +435,12 @@ final class AppModel {
 
     func messages(for chatId: String) -> [ChatMessage] { messages[chatId] ?? [] }
     func liveRuns(for chatId: String) -> [LiveRun] { live[chatId] ?? [] }
+    /// Phone link hook (AppModel+Phone.swift): saves a changed message, in memory and on disk.
+    func phoneReplaceMessage(_ message: ChatMessage, in chatId: String) {
+        guard let i = messages[chatId]?.firstIndex(where: { $0.id == message.id }) else { return }
+        messages[chatId]?[i] = message
+        try? chatStore.append(message, chatId: chatId)
+    }
 
     func loadMessagesIfNeeded(_ chatId: String) {
         if messages[chatId] == nil { messages[chatId] = chatStore.messages(chatId: chatId) }

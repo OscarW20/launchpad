@@ -95,6 +95,9 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
   chat header, threads (New thread, Compact, Branch from here, past threads), side questions that fork the session,
   and steering a busy bot by just writing to it.
 
+- **iPhone app** (`iOS/`): pair your phone in Settings › Mobile and chat with your bots from it, answer their
+  questions and approval cards, and stop work. The bots keep running on the Mac. See BUILD_LOG.md.
+
 - **Memory**: each bot keeps `MEMORY.md` by topic. When a chat goes quiet, a cheap no-tools pass files lasting
   facts there (secrets redacted, size capped, daily limit per bot), and every change can be undone.
 

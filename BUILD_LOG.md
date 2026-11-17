@@ -575,3 +575,78 @@ message menu, pinned bar, saved messages, quick switcher, context ring, thread m
 
 Tests: 1 new (to-do list and side flag round-trip; old lines decode). 360 in total on Linux, all passing. The app is
 built and bundled by the macOS CI.
+
+## Phone link and iOS app (2026-11-17)
+
+Ported Biscuit Bots' phone link and iPhone app. The bots keep running on the Mac; the phone is a remote for chats.
+
+### What was built
+
+**Core (`LaunchpadCore/PhoneLink.swift`, Linux-tested)**
+- `PhoneLinkServer`: HTTP on port 8790 on every interface, using `LoopbackHTTPListener`, which now takes
+  `interface: .all` (the web address routines still use the loopback default). Routes: `/hello` (no token),
+  `/pair`, `/rev`, `/state`, `/messages`, `/send`, `/side`, `/answer`, `/read`, `/stop`. BB's `/avatar` dog
+  endpoint is gone: bots and chats carry their emoji and colour instead.
+- Request handling is pure: the server calls an injected `PhoneLinkBridge` (the app, or a fake in tests) for a
+  `PhoneSnapshot` (bots, groups, chats, messages including streaming replies, who's working, read marks) and for each
+  action. `PhoneMapper` turns the snapshot into the phone's JSON (`PhoneState`, `PhoneChat`, `PhoneMessage`).
+- `/rev` is a stable FNV-1a fingerprint (not `Hasher`, which is seeded per run) of the state plus the tail of each
+  chat: streaming text, steps, reactions, answered questions and approval cards all move it.
+- **Pairing**: a 6-digit code (ASCII digits, spaces/dashes ignored, constant-time compare). A used code changes.
+  After 5 wrong codes in 5 minutes pairing is refused (429) and the code is replaced, so one code never gets more
+  than 5 guesses.
+- **Tokens**: 32 random bytes per phone, stored in the SecretStore (`phone.<device id>.token`, the Keychain in the
+  app). `~/Launchpad/.launchpad/phones.json` only holds names and dates. Every request compares the given token with
+  every paired token in full (`WebhookAuth.constantTimeEquals`). Remove a phone and its token stops working at once.
+  At most 20 phones.
+- Requests with `Origin` or `Sec-Fetch-Site` (browsers) are refused, so a web page can't pair or guess.
+- `/answer` takes a question card (`message` + `answers`), an `[[approve: …]]` card (`message` + `approve`) or a
+  live guard card (`card` + `decision`: approve, deny, always). `/send` refuses a working chat with 409 instead of
+  dropping the message; `replyTo` quotes the first line of that message.
+
+**Mac app (new files only, plus two marked hooks)**
+- `PhoneLinkController.swift`: starts and stops the server, publishes it with `NetService` as
+  `_launchpad._tcp` (TXT: host = the Mac's `.local` name, port, v), the pairing code, paired phones, and the Mac's
+  IPv4 addresses (Wi-Fi first, Tailscale 100.x last) for typing in by hand. Off until switched on.
+- `AppModel+Phone.swift`: `AppPhoneBridge` (main actor, weak model). Sending goes through `AppModel.send`;
+  approvals through `respond(to:)` and `answerApproval`; Stop through `stop`. Question cards are answered with
+  `ChatOps.answer` (in a group the asking bot is @mentioned), marking the card answered. Side questions ask the
+  bot (or a group's lead) from a read-only fork of its session (`SideQuestion.invocation`, `quiet`: no tools, in the
+  sandbox when available); the question and the 💭 answer appear in the chat. Locked-down bots refuse side
+  questions for now. Read marks live in UserDefaults; the chat open on the Mac counts as read while you look at it,
+  and replies from before the switch was first turned on aren't unread.
+- `PhoneSettingsView.swift`: Settings › Mobile with the switch, status, pairing code and New code, addresses, and
+  paired phones (last seen, Remove with confirmation).
+
+**iPhone app (`iOS/`)**
+- `LaunchpadPhone` target, bundle id `app.launchpad.phone`, iOS 17, display name Launchpad. Ported from BB's app:
+  pair (Bonjour list or typed address, then the code), chat list (All / Unread / Bots / Groups, search), chat
+  (markdown, steps, typing, reply, Stop). New: question cards with choices, approval cards (Approve / Decline /
+  Always when allowed), and sending while a bot works becomes a side question. The token is in the iPhone's Keychain.
+- No MabryPro fonts or Biscuit assets: system fonts, emoji avatars on the bot's colour, an SF Symbol on the pair
+  screen, no app icon yet, and a placeholder blue accent kept in `Theme.swift` for the restyle.
+- `project.yml` (XcodeGen) and a checked-in `LaunchpadPhone.xcodeproj` with a shared scheme. CI job `ios`
+  (macos-15) builds the checked-in project, then generates one from `project.yml` and builds that too.
+
+### Decisions
+- The phone link reuses the POSIX listener instead of `NWListener`, so the same server is tested on Linux with a real
+  socket. Bonjour stays in the app (`NetService`).
+- Pairing is open whenever the switch is on, as in BB; the rate limit and code rotation keep guessing impractical.
+- Plain HTTP on the LAN, as in BB: tokens are long and per phone, but anyone who can sniff the Wi-Fi could read
+  traffic. Fine for a home network or Tailscale; TLS would need a certificate the phone trusts.
+
+### How to try it
+1. Mac: Launchpad › Settings › Mobile › switch on "Chat from your iPhone". Allow incoming connections if macOS asks.
+2. Open `iOS/LaunchpadPhone.xcodeproj` in Xcode (or `cd iOS && xcodegen generate`), pick your team under Signing &
+   Capabilities, and run on your iPhone (or the simulator). Allow Local Network access.
+3. Pick your Mac (or type an address from Settings), type the 6-digit code.
+   Debug builds also accept `-autopair http://<mac>:8790 <code>` as launch arguments.
+
+### Not done
+- No push notifications (the phone polls `/rev` every second while open).
+- Attachments, reactions, polls and plan cards are shown read-only (or not at all for plans) on the phone.
+- Side questions don't run for locked-down bots (they need the site gateway set-up that `prepareRun` keeps private).
+
+Tests: 15 new in `PhoneLinkTests` (pairing and token storage, lock-out and code rotation, auth and browser refusal,
+revoke, state mapping with unread and typing, revision changes, messages with cards and questions, deleted
+messages, send with quote and busy/oversize/unknown, answer routing, a real socket). 374 in total, all passing on Linux.

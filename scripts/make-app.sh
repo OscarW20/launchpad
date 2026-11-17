@@ -3,6 +3,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The version is the newest v* tag (v0.2.0 gives 0.2.0; 0.1.0 until there is one) and the build number is the
+# commit count. DESCRIBE names the exact commit, e.g. v0.2.0-3-gabc1234 three commits after the tag.
+TAG="$(git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || true)"
+VERSION="${TAG#v}"
+VERSION="${VERSION:-0.1.0}"
+if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+  echo "Tag $TAG isn't a version like v0.2.0" >&2
+  exit 1
+fi
+BUILD="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
+DESCRIBE="$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || true)"
+
 swift build -c release --product Launchpad
 swift build -c release --product launchpad-guard
 swift build -c release --product launchpad-chat
@@ -31,8 +43,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>Launchpad</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$BUILD</string>
+  <key>LaunchpadGitDescribe</key><string>$DESCRIBE</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
@@ -45,7 +58,7 @@ iconutil -c icns "Sources/Launchpad/Resources/Brand/AppIcon.iconset" -o "$APP/Co
 
 # Ad-hoc signature so macOS will run it locally.
 codesign --force --sign - "$APP" >/dev/null 2>&1 || true
-echo "Built $APP"
+echo "Built $APP $VERSION ($BUILD)"
 
 case "${1:-}" in
   --open)

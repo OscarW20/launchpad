@@ -824,3 +824,23 @@ picker for the person typing. Now there is one.
 
 Tests: 9 new in `MentionPickerTests` (what counts as a query, filtering and order, insertion, and that the inserted
 tag is understood by `GroupPlan.mentions`).
+
+## Version from git tags (2026-11-17)
+
+Release plan step 1. Every build used to say `0.1.0 (1)`, so nobody could tell which build was installed.
+
+- **`scripts/make-app.sh`**: the version is the newest `v*` tag (`v0.2.0` gives `0.2.0`; `0.1.0` until the first
+  tag), the build number is the commit count, and `git describe` goes into a new Info.plist key,
+  `LaunchpadGitDescribe`. A tag that isn't a plain version (`v1.0-rc1`) stops the build.
+- **Core** (`AppVersion.swift`): reads those three values and makes the label: `0.2.0 (57)` on a tag,
+  `0.2.0 (60, v0.2.0-3-gabc1234)` between tags, `Development build` under `swift run`.
+- **App**: Settings shows a selectable **Version** row at the bottom.
+- `.gitignore` also covers `routines.json` and `workflows/`, the two data names the first pass missed.
+
+### Decisions
+- `CFBundleShortVersionString` stays a plain `1.2.3`; the commit detail lives in its own key rather than the
+  version string, which macOS and notarisation expect to be numeric.
+- CI checks out one commit with no tags, so a CI-built app reads `0.1.0 (1)`. The release workflow (step 3) will
+  fetch full history.
+
+Tests: 5 new in `AppVersionTests`.

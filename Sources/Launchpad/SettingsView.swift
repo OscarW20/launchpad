@@ -136,6 +136,11 @@ struct SettingsView: View {
             PhoneSettingsSection()   // Phone link hook (PhoneSettingsView.swift)
 
             Section {
+                LabeledContent("Version") {
+                    Text(AppVersion.label(info: Bundle.main.infoDictionary))
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                }
                 Button("Check again") { model.refreshEngines() }
             }
         }

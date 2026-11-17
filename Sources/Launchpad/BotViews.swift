@@ -535,6 +535,7 @@ struct BotDetailView: View {
                         }
                         PermissionsSection(bot: binding, removedAlways: $removedAlways)
                         LockDownSection(bot: binding)
+                        ComputerUseBotSection(bot: binding)
                         }
                         MemorySection(botId: botId)
                         Section {

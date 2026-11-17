@@ -5,13 +5,14 @@ import Observation
 import LaunchpadCore
 
 enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
-    case chats, bots, groups, hire, skills, connectors, tasks, workflows, routines, settings
+    case chats, office, bots, groups, hire, skills, connectors, tasks, workflows, routines, settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .chats: return "Chats"
+        case .office: return "Office"
         case .bots: return "Bots"
         case .groups: return "Groups"
         case .hire: return "Marketplace"
@@ -27,6 +28,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
     var symbol: String {
         switch self {
         case .chats: return "bubble.left.and.bubble.right"
+        case .office: return "building.2"
         case .bots: return "face.smiling"
         case .groups: return "person.3"
         case .hire: return "bag"
@@ -42,6 +44,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
     var blurb: String {
         switch self {
         case .chats: return "Your conversations with bots and groups."
+        case .office: return "Your team at their desks: who's working, who needs you, and what they're doing right now."
         case .bots: return "Your AI teammates. Each one is a folder in ~/Launchpad/bots."
         case .groups: return "Put bots in a group with a lead. You post a task; the lead hands work out by @mention."
         case .hire: return "Ready-made teams, roles, skills and apps you can add in one click."
@@ -97,6 +100,8 @@ struct RunSetup {
     var refusal: String?
     /// The launchpad-chat server for this reply (nil when it isn't bundled, or for local models).
     var tools: ChatToolsRun?
+    /// The bot got the computer tools ("Use this Mac") for this reply.
+    var computer = false
 }
 
 /// How one bot turn runs.
@@ -211,6 +216,13 @@ final class AppModel {
     /// Group chats that got a message while busy: run the group again when it's free.
     @ObservationIgnored var pendingGroupRun: Set<String> = []
     @ObservationIgnored var usageTimer: Timer?
+
+    // Mac features
+    /// Back / forward across pages and chats (⌘[ ⌘]).
+    var nav = NavigationHistory<NavSpot>()
+    /// Where Back or Forward is taking you, so that move isn't recorded as a new visit.
+    @ObservationIgnored var pendingTravel: NavSpot?
+    @ObservationIgnored var macFeaturesStarted = false
 
     // Safety
     /// Skills locked so bots can't change them.
@@ -863,6 +875,7 @@ final class AppModel {
         queues[id] = nil
         contextByChat[id] = nil
         pendingAttachments[id] = nil
+        nav.removeAll { $0.section == .chats && $0.item == id }
         reloadChats()
     }
 
@@ -959,12 +972,15 @@ final class AppModel {
     func stopAll() {
         for task in chatTasks.values { task.cancel() }
         for handle in handles.values { handle.cancel() }
+        ComputerUseController.shared.stopDaemon()
+        Awake.update(working: false)
     }
 
     /// Runs a bot in a chat, then any teammates it asks (1:1 chats), then whatever you wrote meanwhile.
     @discardableResult
     func startSolo(_ chatId: String, bot: Bot, prompt: String, turn: Turn? = nil, handOffs: Bool = true) -> Task<Void, Never> {
         busyChats.insert(chatId)
+        workingChanged()
         let task = Task { @MainActor [weak self] in
             var prompt = prompt
             var turn = turn
@@ -980,6 +996,7 @@ final class AppModel {
             self?.chatTasks[chatId] = nil
             self?.busyChats.remove(chatId)
             self?.typing[chatId] = nil
+            self?.chatWentQuiet(chatId)
         }
         chatTasks[chatId] = task
         return task
@@ -1019,6 +1036,7 @@ final class AppModel {
             }
         )
         busyChats.insert(chatId)
+        workingChanged()
         let task = Task { @MainActor [weak self] in
             let outcome = await body(orchestrator)
             self?.groupFinished(chatId, group: group, outcome: outcome)
@@ -1028,6 +1046,7 @@ final class AppModel {
             if self?.pendingGroupRun.remove(chatId) != nil, !Task.isCancelled {
                 self?.startGroup(chatId) { await $0.runTask() }
             }
+            self?.chatWentQuiet(chatId)
         }
         chatTasks[chatId] = task
         return task
@@ -1149,6 +1168,12 @@ final class AppModel {
         }
         let team = TeamNotes.teamLine(for: bot, others: bots, paths: paths)
         if !team.isEmpty { system += "\n\n" + team }
+        // "Use this Mac": the computer tools, gated by the guard's "Use your Mac" category. Not for side questions.
+        if chatTools {
+            let computer = computerSetup(for: bot, guardActive: liveApprovals, options: &o)
+            if let note = computer.note { system += "\n\n" + note }
+            setup.computer = computer.given
+        }
 
         if bot.lockedDown && !BotSandbox.available {
             setup.refusal = "\(bot.name) is locked down, which needs macOS's sandbox, and it isn't available here, so \(bot.name) didn't run."
@@ -1212,8 +1237,10 @@ final class AppModel {
             for: bot, prompt: sendPrompt, botDirectory: folder, sessionId: session, options: setup.options
         )
         if setup.tools != nil { invocation = ChatToolsSetup.allowingChatTools(invocation) }
+        if setup.computer { invocation = ComputerUse.allowingComputer(invocation) }
         activity.record(.started, bot: bot.id, chat: chatId, "Started on: \(prompt)")
         let run = await streamRun(invocation, chatId: chatId, runId: runId, bot: bot, setup: setup, isSide: false)
+        if setup.computer { releaseApps(of: bot.id) }
 
         var changed: [String] = []
         if let snapshot, let snaps {
@@ -1352,6 +1379,7 @@ final class AppModel {
         start.isSide = isSide
         start.tools = setup.tools
         live[chatId, default: []].append(start)
+        workingChanged()
         let messageId = start.builder.message.id
         if Task.isCancelled { handle.cancel() }
         // You steered before this run had started: it stops straight away and the next turn takes your words.
@@ -1377,8 +1405,13 @@ final class AppModel {
             default: break
             }
             if let i = live[chatId]?.firstIndex(where: { $0.id == runId }) {
+                let stepsBefore = live[chatId]?[i].builder.message.steps.count ?? 0
                 live[chatId]?[i].builder.apply(event)
                 if case .context = event, !isSide, let c = live[chatId]?[i].builder.context { contextByChat[chatId] = c }
+                // The live feed: each new tool step, in plain words.
+                if !isSide, let steps = live[chatId]?[i].builder.message.steps, steps.count > stepsBefore, let step = steps.last {
+                    activity.record(.step, bot: botId, chat: chatId, StepLabel.describe(step).text)
+                }
             }
         }
 
@@ -1396,6 +1429,7 @@ final class AppModel {
         if live[chatId]?.isEmpty == true { live[chatId] = nil }
         handles[runId] = nil
         runChats[runId] = nil
+        workingChanged()
         return run
     }
 
@@ -1413,6 +1447,9 @@ final class AppModel {
                 item.state = .always
             }
             live[chatId]?[i].approvals.append(item)
+            if item.state == .pending {
+                notifyNeedsYou(ReplyNotice.approval(item, botName: bot(botId)?.name ?? "A bot"), chatId: chatId)
+            }
         }
         for id in found.expired {
             if let j = live[chatId]?[i].approvals.firstIndex(where: { $0.id == id && $0.state == .pending }) {

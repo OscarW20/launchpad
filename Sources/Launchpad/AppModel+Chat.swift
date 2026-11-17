@@ -22,6 +22,14 @@ extension AppModel {
         if extras != current, let i = live[chatId]?.firstIndex(where: { $0.id == runId }) {
             live[chatId]?[i].extras = extras
         }
+        // A question or a plan now waits on you: tell you if Launchpad is in the background.
+        let name = bot(botId)?.name ?? "A bot"
+        if let q = extras.questions, !q.answered, current.questions == nil {
+            notifyNeedsYou(ReplyNotice(title: "\(name) needs you", body: q.items.first?.text ?? "Asked you a question", needsYou: true), chatId: chatId)
+        }
+        if let p = extras.plan, p.state == .waiting, current.plan == nil {
+            notifyNeedsYou(ReplyNotice(title: "\(name) has a plan", body: p.message, needsYou: true), chatId: chatId)
+        }
     }
 
     /// Applies chat actions: reactions and votes on earlier messages, GIF searches, routines. Returns the reply's

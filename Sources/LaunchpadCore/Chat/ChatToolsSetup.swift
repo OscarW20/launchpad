@@ -19,13 +19,19 @@ public enum ChatToolsSetup {
     /// Lets a Claude run use the chat tools without asking: adds `mcp__launchpad_chat` to its `--allowedTools`
     /// (joining an existing list, e.g. a read-only bot's). Codex runs are returned unchanged.
     public static func allowingChatTools(_ invocation: EngineInvocation) -> EngineInvocation {
+        allowing(allowedToolsEntry, in: invocation)
+    }
+
+    /// Adds one entry (e.g. `mcp__computer`) to a Claude run's `--allowedTools`, joining an existing list.
+    /// Codex runs are returned unchanged.
+    public static func allowing(_ entry: String, in invocation: EngineInvocation) -> EngineInvocation {
         guard invocation.engine == .claude else { return invocation }
         var inv = invocation
         if let i = inv.arguments.firstIndex(of: "--allowedTools"), i + 1 < inv.arguments.count {
             let list = inv.arguments[i + 1].split(separator: ",").map(String.init)
-            if !list.contains(allowedToolsEntry) { inv.arguments[i + 1] = (list + [allowedToolsEntry]).joined(separator: ",") }
+            if !list.contains(entry) { inv.arguments[i + 1] = (list + [entry]).joined(separator: ",") }
         } else {
-            inv.arguments += ["--allowedTools", allowedToolsEntry]
+            inv.arguments += ["--allowedTools", entry]
         }
         return inv
     }

@@ -92,13 +92,17 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
     public var localBaseURL: String?
     /// The engine (and model) to switch to once when this bot hits its plan's usage limit.
     public var backup: BotBrain?
+    /// "Use this Mac": the bot gets the computer tools (Cua Driver) when computer use is set up. Every action still
+    /// goes through the guard's "Use your Mac" category (Ask by default).
+    public var useComputer: Bool
 
     public init(
         id: String, name: String, emoji: String = "🤖", colour: String = BotPalette.default,
         role: String = "", engine: BotEngine = .claude, model: String? = nil,
         permission: PermissionLevel = .editWorkspace, connectors: [String] = [],
         skills: [String] = [], createdAt: Date = Date(), rules: BotRules = BotRules(),
-        lockedDown: Bool = false, sites: [String] = [], localBaseURL: String? = nil, backup: BotBrain? = nil
+        lockedDown: Bool = false, sites: [String] = [], localBaseURL: String? = nil, backup: BotBrain? = nil,
+        useComputer: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -116,11 +120,12 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
         self.sites = sites
         self.localBaseURL = localBaseURL
         self.backup = backup
+        self.useComputer = useComputer
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, emoji, colour, role, engine, model, permission, connectors, skills, createdAt
-        case rules, lockedDown, sites, localBaseURL, backup
+        case rules, lockedDown, sites, localBaseURL, backup, useComputer
     }
 
     // bot.json may be written by hand or by another agent, so every field is optional on read.
@@ -144,6 +149,7 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
         let rawURL = try? c.decodeIfPresent(String.self, forKey: .localBaseURL)
         localBaseURL = (rawURL?.isEmpty ?? true) ? nil : rawURL
         backup = try? c.decodeIfPresent(BotBrain.self, forKey: .backup)
+        useComputer = (try? c.decodeIfPresent(Bool.self, forKey: .useComputer)) ?? false
     }
 }
 

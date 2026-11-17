@@ -210,7 +210,7 @@ struct AppLogo: View {
         guard let file else { return nil }
         let name = (file as NSString).deletingPathExtension
         let ext = (file as NSString).pathExtension
-        guard let url = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Logos") else { return nil }
+        guard let url = AppResources.url(name, ext, in: "Logos") else { return nil }
         return NSImage(contentsOf: url)
     }
 }

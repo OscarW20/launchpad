@@ -90,6 +90,10 @@ struct SettingsView: View {
 
             TeamNotesSection()
 
+            MacSettingsSection()
+
+            ComputerUseSection()
+
             Section {
                 LabeledContent("Approval guard") {
                     if let url = model.guardExecutable {

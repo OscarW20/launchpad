@@ -4,6 +4,7 @@ import LaunchpadCore
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var model = model
@@ -15,7 +16,16 @@ struct RootView: View {
                 .navigationSplitViewColumnWidth(min: 260, ideal: 310, max: 420)
         } detail: {
             detailColumn
+                .toolbar {
+                    ToolbarItem(placement: .navigation) { HistoryButtons() }
+                }
         }
+        .background(WindowReader { MainWindow.window = $0 })
+        .onAppear {
+            MainWindow.openWindow = openWindow
+            model.startMacFeatures()
+        }
+        .onChange(of: model.navSpot) { old, new in model.navigated(from: old, to: new) }
         .sheet(isPresented: $model.showingNewBot) {
             NewBotSheet()
         }
@@ -50,6 +60,7 @@ struct RootView: View {
     @ViewBuilder private var contentColumn: some View {
         switch model.section {
         case .chats: ChatListView()
+        case .office: OfficeFeedColumn()
         case .bots: BotListView()
         case .groups: GroupListView()
         case .skills: SkillListView()
@@ -89,6 +100,8 @@ struct RootView: View {
                 EmptyDetail(symbol: "person.3", title: "Groups",
                             message: "Put bots together with a lead. Make one, or add the Dev team from Hire.")
             }
+        case .office:
+            OfficeView()
         case .hire:
             MarketplaceView()
         case .skills:
@@ -136,6 +149,7 @@ struct SidebarView: View {
         List(selection: Binding(get: { Optional(model.section) }, set: { if let s = $0 { model.section = s } })) {
             Section("Talk") {
                 row(.chats)
+                row(.office)
             }
             Section("Team") {
                 row(.bots)
@@ -185,6 +199,7 @@ struct SidebarView: View {
         case .bots: return model.bots.count
         case .groups: return model.groups.count
         case .tasks: return model.tasksNeedingYou
+        case .office: return model.workingRuns.count
         default: return 0
         }
     }

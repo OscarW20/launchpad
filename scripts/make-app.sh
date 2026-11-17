@@ -15,6 +15,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Launchpad"
 cp "$BINDIR/launchpad-guard" "$APP/Contents/MacOS/launchpad-guard"
 cp "$BINDIR/launchpad-chat" "$APP/Contents/MacOS/launchpad-chat"
+# Logos and brand images (menu bar icon), found by AppResources in Contents/Resources.
+if [[ -d "$BINDIR/Launchpad_Launchpad.bundle" ]]; then
+  cp -R "$BINDIR/Launchpad_Launchpad.bundle" "$APP/Contents/Resources/"
+fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

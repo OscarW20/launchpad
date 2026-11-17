@@ -15,6 +15,7 @@ struct ActivityButton: View {
 
 struct ChatListView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var model = model
@@ -41,6 +42,7 @@ struct ChatListView: View {
                                 if let bot = model.bot(chat.botId) {
                                     Button("New Chat with \(bot.name)") { model.newChat(with: bot) }
                                 }
+                                Button("Open in New Window") { openWindow(id: "chat", value: chat.id) }
                                 Button("Teach a Skill from This Chat") { model.teachSkill(from: chat.id) }
                                 Divider()
                                 Button("Delete Chat", role: .destructive) { model.deleteChat(chat.id) }

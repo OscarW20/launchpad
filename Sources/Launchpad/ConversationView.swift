@@ -5,11 +5,13 @@ import LaunchpadCore
 struct ConversationView: View {
     @Environment(AppModel.self) private var model
     let chatId: String
+    /// Shown in its own window (no "Open in New Window" button).
+    var poppedOut = false
     @State private var dropping = false
 
     var body: some View {
         VStack(spacing: 0) {
-            ConversationHeader(chatId: chatId)
+            ConversationHeader(chatId: chatId, poppedOut: poppedOut)
             Divider()
             PinnedBar(chatId: chatId)
             MessagesList(chatId: chatId)
@@ -39,6 +41,7 @@ struct ConversationView: View {
 struct ConversationHeader: View {
     @Environment(AppModel.self) private var model
     let chatId: String
+    var poppedOut = false
 
     var body: some View {
         let chat = model.chat(chatId)
@@ -146,6 +149,9 @@ struct ConversationHeader: View {
             Button { model.exportChat(chatId) } label: { Label("Export", systemImage: "square.and.arrow.up") }
                 .help("Save this chat as a Markdown file")
                 .disabled(model.messages(for: chatId).isEmpty)
+            if !poppedOut {
+                OpenInWindowButton(chatId: chatId)
+            }
         }
     }
 

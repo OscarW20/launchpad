@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds Launchpad.app into ./dist. Usage: ./scripts/make-app.sh [--open]
+# Builds Launchpad.app into ./dist. Usage: ./scripts/make-app.sh [--open | --install]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -47,4 +47,19 @@ iconutil -c icns "Sources/Launchpad/Resources/Brand/AppIcon.iconset" -o "$APP/Co
 codesign --force --sign - "$APP" >/dev/null 2>&1 || true
 echo "Built $APP"
 
-if [[ "${1:-}" == "--open" ]]; then open "$APP"; fi
+case "${1:-}" in
+  --open)
+    open "$APP"
+    ;;
+  --install)
+    # Quit a running copy, replace /Applications/Launchpad.app, and open it.
+    osascript -e 'tell application id "app.launchpad.personal" to quit' >/dev/null 2>&1 || true
+    sleep 1
+    DEST="/Applications/Launchpad.app"
+    if [ ! -w /Applications ]; then mkdir -p "$HOME/Applications"; DEST="$HOME/Applications/Launchpad.app"; fi
+    rm -rf "$DEST"
+    ditto "$APP" "$DEST"
+    echo "Installed $DEST"
+    open "$DEST"
+    ;;
+esac

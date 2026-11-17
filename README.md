@@ -21,7 +21,19 @@ git clone https://github.com/OscarW20/launchpad.git
 cd launchpad && swift run Launchpad
 ```
 
-Or build a proper app bundle into `dist/Launchpad.app` and open it:
+Or install it into your Applications folder (builds `Launchpad.app` and replaces any older copy):
+
+```bash
+./scripts/make-app.sh --install
+```
+
+To update later (pull, build, reinstall):
+
+```bash
+~/launchpad/scripts/update.sh
+```
+
+Or just build `dist/Launchpad.app` and open it:
 
 ```bash
 ./scripts/make-app.sh --open

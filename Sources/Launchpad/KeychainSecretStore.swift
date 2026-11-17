@@ -24,6 +24,27 @@ final class KeychainSecretStore: SecretStore {
         return String(data: data, encoding: .utf8)
     }
 
+    /// Found, missing, or why the Keychain wouldn't answer (locked, access refused…), so a secret that's there but
+    /// unreadable is never mistaken for one that isn't and replaced.
+    func read(_ account: String) -> SecretRead {
+        var q = query(account)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var out: AnyObject?
+        let status = SecItemCopyMatching(q as CFDictionary, &out)
+        switch status {
+        case errSecSuccess:
+            guard let data = out as? Data, let value = String(data: data, encoding: .utf8) else {
+                return .failed("The Keychain item isn't readable text.")
+            }
+            return value.isEmpty ? .missing : .found(value)
+        case errSecItemNotFound:
+            return .missing
+        default:
+            return .failed((SecCopyErrorMessageString(status, nil) as String?) ?? "Keychain error \(status)")
+        }
+    }
+
     func setSecret(_ value: String?, for account: String) throws {
         let q = query(account)
         guard let value, !value.isEmpty else {

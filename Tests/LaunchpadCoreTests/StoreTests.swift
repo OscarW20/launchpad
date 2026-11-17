@@ -71,6 +71,31 @@ final class StoreTests: XCTestCase {
                        try String(contentsOf: paths.claudeMD(bot.id), encoding: .utf8))
     }
 
+    func testOldChatLinesStillDecodeAndSafetyFieldsRoundTrip() throws {
+        // A line written before approval cards and undo existed.
+        let old = #"{"id":"m1","role":"bot","botId":"pixel","text":"Done","steps":[],"status":"done","createdAt":"2026-11-01T10:00:00Z"}"#
+        let decoded = try JSONCoding.decoder().decode(ChatMessage.self, from: Data(old.utf8))
+        XCTAssertEqual(decoded.text, "Done")
+        XCTAssertNil(decoded.liveApprovals)
+        XCTAssertNil(decoded.snapshot)
+        XCTAssertNil(decoded.changedFiles)
+        XCTAssertNil(decoded.undone)
+
+        var m = ChatMessage(role: .bot, botId: "pixel", text: "Sent it", createdAt: Date(timeIntervalSince1970: 1_800_000_000))
+        m.liveApprovals = [LiveApproval(PendingApproval(id: "a1", category: "send", tool: "mcp__slack__post_message", detail: "#general: hi"), state: .always)]
+        m.snapshot = "abc123"
+        m.changedFiles = ["notes/plan.md"]
+        m.undone = true
+        let chats = ChatStore(paths: paths)
+        try chats.append(m, chatId: "c")
+        let back = chats.messages(chatId: "c").first
+        XCTAssertEqual(back, m)
+        XCTAssertEqual(back?.liveApprovals?.first?.kind, .send)
+        XCTAssertEqual(back?.liveApprovals?.first?.key, "send:mcp__slack__post_message")
+        XCTAssertEqual(back?.liveApprovals?.first?.offersAlways, true)
+        XCTAssertEqual(LiveApproval(PendingApproval(id: "a2", category: "shell", tool: "Bash", detail: "ls")).offersAlways, false)
+    }
+
     func testChatHistoryAppendsAndReplaces() throws {
         let bots = BotStore(paths: paths)
         let chats = ChatStore(paths: paths)

@@ -144,7 +144,7 @@ struct MessagesList: View {
     var body: some View {
         let messages = model.messages(for: chatId)
         let live = model.liveRuns(for: chatId)
-        let liveLength = live.reduce(0) { $0 + $1.builder.message.text.count + $1.builder.message.steps.count }
+        let liveLength = live.reduce(0) { $0 + $1.builder.message.text.count + $1.builder.message.steps.count + $1.approvals.count }
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
@@ -156,7 +156,7 @@ struct MessagesList: View {
                             .id(message.id)
                     }
                     ForEach(live) { run in
-                        MessageRow(message: run.builder.message, chatId: chatId, activeStep: run.builder.activeStep)
+                        MessageRow(message: run.message, chatId: chatId, activeStep: run.builder.activeStep)
                             .id(run.id)
                     }
                     if model.isRunning(chatId) && live.isEmpty {

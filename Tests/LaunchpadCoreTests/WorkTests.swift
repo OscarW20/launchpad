@@ -202,6 +202,15 @@ final class WorkflowEngineTests: XCTestCase {
         return wf
     }
 
+    func testRoutineRunsRecordedThroughTheEngineSurviveItsOwnSaves() async throws {
+        engine.record(RunLogEntry(kind: .routine, name: "Morning brief", target: .bot("writer"), sourceId: "brief", chatId: "c1"))
+        let wf = try make([WorkflowStep(kind: .prompt, text: "Hi")])
+        _ = await engine.runToEnd(wf.id)
+        let saved = WorkStore(paths: paths).loadLog()
+        XCTAssertEqual(saved.map(\.kind), [.routine, .workflow])
+        XCTAssertEqual(engine.log.count, 2)
+    }
+
     func testStepsPassWorkAlongAndTheOutputIsPostedAndSaved() async throws {
         fake.replies["editor"] = AgentStepResult(ok: true, text: "Polished draft, APPROVED")
         let wf = try make([

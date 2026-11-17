@@ -306,6 +306,13 @@ public final class WorkflowEngine {
         running[runId] = nil
     }
 
+    /// Adds a run of something else (a routine run) to the history. Use this rather than `store.appendLog`, which
+    /// the engine's next save would overwrite.
+    public func record(_ entry: RunLogEntry) {
+        appendLog(entry)
+        changed()
+    }
+
     private func appendLog(_ entry: RunLogEntry) {
         log.append(entry)
         if log.count > WorkStore.logKept { log.removeFirst(log.count - WorkStore.logKept) }

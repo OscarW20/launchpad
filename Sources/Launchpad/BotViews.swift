@@ -338,6 +338,7 @@ struct BotDetailView: View {
     @State private var instructions = ""
     @State private var originalInstructions = ""
     @State private var confirmDelete = false
+    @State private var removedAlways: Set<String> = []
 
     private var isDirty: Bool { draft != original || instructions != originalInstructions }
 
@@ -398,6 +399,8 @@ struct BotDetailView: View {
                         } footer: {
                             Text("Only the connectors turned on here (or for its groups) are available to this bot.")
                         }
+                        PermissionsSection(bot: binding, removedAlways: $removedAlways)
+                        LockDownSection(bot: binding)
                         MemorySection(botId: botId)
                         Section {
                             Button("Move Bot to Trash…", role: .destructive) { confirmDelete = true }
@@ -466,12 +469,18 @@ struct BotDetailView: View {
         let text = model.botStore.instructions(for: botId)
         instructions = text
         originalInstructions = text
+        removedAlways = []
     }
 
     private func save() {
         guard var bot = draft else { return }
         bot.name = bot.name.trimmingCharacters(in: .whitespacesAndNewlines)
         if bot.name.isEmpty { bot.name = original?.name ?? botId }
+        bot.rules.changePatterns = bot.rules.changePatterns.filter { GuardEngine.invalidPatterns([$0]).isEmpty }
+        // Keep "Always allow"s added from approval cards while this was open.
+        if let stored = model.bot(botId) {
+            bot.rules = BotRules.merged(stored: stored.rules, edited: bot.rules, removed: removedAlways)
+        }
         model.saveBot(bot, instructions: instructions != originalInstructions ? instructions : nil)
         load()
     }

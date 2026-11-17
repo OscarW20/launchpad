@@ -357,10 +357,12 @@ public enum RoutineSchedule {
         return RoutineTick(routines: out, events: events)
     }
 
-    /// The notice posted in the routine's chat for a missed run.
+    /// The notice posted in the routine's chat for a missed run. The time follows the Mac's clock setting
+    /// ("09:00", or "9:00 am" on a 12-hour clock), which comes with `locale`.
     public static func missedNotice(name: String, missed count: Int, last: Date, caughtUp: Bool,
-                                    now: Date = Date(), calendar: Calendar = .current) -> String {
+                                    now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current) -> String {
         let f = DateFormatter()
+        f.locale = locale
         f.calendar = calendar
         f.timeZone = calendar.timeZone
         f.dateFormat = calendar.isDate(last, inSameDayAs: now) ? "HH:mm" : "d MMM HH:mm"

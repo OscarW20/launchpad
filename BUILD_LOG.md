@@ -1043,3 +1043,17 @@ Launchpad now updates itself from inside the app, on top of the build stamps, `s
 Tests: 2 new in `AppVersionTests` (the failure detail, and that the install script still prints the quit step the
 app waits for). Nothing here was tried in the running app: the banner, the Settings rows, a real update started from
 the button, the confirmation, and a failed build's error.
+
+## Two tests that failed on every local run (2026-11-17)
+
+Tests only; the app behaves as before.
+
+- **`MissedRunTests.testCatchUpRunsOnceAndSaysSo`** expected "09:00" and got "9:00 am" on a Mac set to a 12-hour
+  clock. The test was wrong, not the app: the missed-run notice follows the Mac's clock setting. `missedNotice` now
+  takes a `locale` (default `.current`, so nothing changes in the app) and the test passes `en_GB`.
+- **`SandboxTests.testKernelEnforcesTheProfile`** can't start `sandbox-exec` when a bot runs the tests, because
+  macOS won't nest sandboxes. It now tries a trivial profile first and skips, saying why, only when that is refused
+  with "sandbox_apply: Operation not permitted". From Terminal and in CI it runs for real as before.
+
+Tests: 441 run from inside a bot's sandbox, 0 failures, 3 skipped (the kernel test, plus the two that were already
+skipped).

@@ -196,8 +196,9 @@ final class MissedRunTests: XCTestCase {
         XCTAssertEqual(tick.events, [.catchUp("d", missed: 3, last: date("2026-11-12 09:00"))])
         XCTAssertTrue(tick.events[0].runsNow)
         XCTAssertNil(tick.routines[0].missedPending, "nothing left waiting: it runs now")
+        // A fixed locale: the Mac's own may be set to a 12-hour clock, which reads "9:00 am".
         let note = RoutineSchedule.missedNotice(name: "Daily", missed: 3, last: date("2026-11-12 09:00"), caughtUp: true,
-                                                now: date("2026-11-12 18:00"), calendar: london)
+                                                now: date("2026-11-12 18:00"), calendar: london, locale: Locale(identifier: "en_GB"))
         XCTAssertEqual(note, "“Daily” missed 3 runs (the last at 09:00) while your Mac was asleep or Launchpad was closed, so it's running once now.")
     }
 

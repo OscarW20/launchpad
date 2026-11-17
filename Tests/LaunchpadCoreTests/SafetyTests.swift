@@ -409,6 +409,18 @@ final class SandboxTests: XCTestCase {
     /// The kernel really enforces it (macOS only).
     func testKernelEnforcesTheProfile() throws {
         guard BotSandbox.available else { throw XCTSkip("sandbox-exec missing") }
+        // macOS won't start a sandbox from inside one, which is where a bot runs the tests.
+        let probe = Process()
+        let refusal = Pipe()
+        probe.executableURL = URL(fileURLWithPath: BotSandbox.tool)
+        probe.arguments = ["-p", "(version 1)(allow default)", "/usr/bin/true"]
+        probe.standardError = refusal
+        try probe.run()
+        let said = String(data: refusal.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        probe.waitUntilExit()
+        if probe.terminationStatus != 0, said.contains("sandbox_apply: Operation not permitted") {
+            throw XCTSkip("Already inside a sandbox (a bot is running the tests), so sandbox-exec can't start another. Run this test from Terminal or CI.")
+        }
         let root = tempDir("kernel")
         defer { try? FileManager.default.removeItem(at: root) }
         let paths = LaunchpadPaths(root: root)

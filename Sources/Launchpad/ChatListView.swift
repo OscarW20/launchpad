@@ -45,7 +45,7 @@ struct ChatListView: View {
                                     Button("New Chat with \(bot.name)") { model.newChat(with: bot) }
                                 }
                                 Button("Open in New Window") { openWindow(id: "chat", value: chat.id) }
-                                Button("Teach a Skill from This Chat") { model.teachSkill(from: chat.id) }
+                                Button("Save as Skill from This Chat") { model.teachSkill(from: chat.id) }
                                 Divider()
                                 Button("Delete Chat", role: .destructive) { model.deleteChat(chat.id) }
                             }

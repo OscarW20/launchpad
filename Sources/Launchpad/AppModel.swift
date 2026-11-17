@@ -125,6 +125,10 @@ struct TeachState {
     var chatId: String
     var phase: Phase
     var draft: String
+    /// "Save as Skill" on one message: the draft covers your request down to this message, not the whole chat.
+    var messageId: String?
+    /// Why saving didn't work (a taken or unusable name), shown in the sheet.
+    var error: String?
 }
 
 /// Which bots have an engine session in which chat. Read from the group runner's threads.
@@ -728,17 +732,20 @@ final class AppModel {
     }
 
     /// "Teach a skill from this chat": asks the chat's engine to write a SKILL.md draft.
-    func teachSkill(from chatId: String) {
+    /// With `messageId`, the draft is about that message's stretch of the chat: your request down to that reply.
+    func teachSkill(from chatId: String, endingAt messageId: String? = nil) {
         loadMessagesIfNeeded(chatId)
-        let msgs = messages(for: chatId)
+        var msgs = messages(for: chatId)
+        if let messageId { msgs = SkillTeacher.stretch(endingAt: messageId, in: msgs) }
         let teacher = bot(chat(chatId)?.botId) ?? bot(msgs.last { $0.role == .bot }?.botId) ?? bots.first
         guard let teacher else { alertMessage = "Add a bot first."; return }
-        teach = TeachState(chatId: chatId, phase: .drafting, draft: "")
-        let transcript = SkillTeacher.transcript(msgs) { [weak self] id in self?.bot(id)?.name ?? "Bot" }
+        guard !msgs.isEmpty else { alertMessage = "There's nothing in this chat to make a skill from yet."; return }
+        teach = TeachState(chatId: chatId, phase: .drafting, draft: "", messageId: messageId)
+        let prompt = SkillTeacher.capturePrompt(msgs, botName: { [weak self] id in self?.bot(id)?.name ?? "Bot" })
         let scratch = paths.root.appendingPathComponent(".launchpad/scratch", isDirectory: true)
         try? FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         let inv = EngineCommand.oneShot(engine: teacher.engine, model: teacher.model,
-                                        prompt: SkillTeacher.prompt(transcript: transcript), directory: scratch)
+                                        prompt: prompt, directory: scratch)
         let handle = runner.run(inv)
         teachHandle = handle
         Task { @MainActor [weak self] in
@@ -763,15 +770,34 @@ final class AppModel {
         teach = nil
     }
 
-    func saveTaughtSkill(_ text: String) {
-        let parsed = SkillFile.parse(text)
-        let taken = Set(skills.map(\.id))
-        let id = Slug.unique(parsed.name ?? "new-skill", taken: taken)
-        let final = SkillFile.compose(name: id, description: parsed.description ?? "", body: parsed.body)
-        saveSkill(id: id, text: final)
-        teach = nil
-        selectedSkillId = id
-        section = .skills
+    /// Saves the draft under `name` and, with `share`, gives it to the chat's group or bot. Nothing is ever
+    /// overwritten: a taken or unusable name stays in the sheet with the reason.
+    func saveTaughtSkill(_ text: String, name: String, share: Bool) {
+        guard let chatId = teach?.chatId else { return }
+        var draft = SkillDraft(text: text)
+        draft.name = name
+        do {
+            let skill = try skillStore.capture(draft)
+            if share, let meta = chat(chatId) {
+                try SkillCapture.assign(skill.id, to: SkillCapture.defaultAudience(for: meta), bots: botStore, groups: groupStore)
+            }
+            reloadAll()
+            relinkSkills()
+            teach = nil
+            append(ChatMessage(role: .notice, text: "Saved the \"\(skill.id)\" skill. Type /\(skill.id) and what you want to use it."), to: chatId)
+        } catch {
+            teach?.error = error.localizedDescription
+        }
+    }
+
+    /// Who "Save as Skill" gives a new skill to in this chat: "everyone in #dev-team", "Frontend", or nil.
+    func skillAudienceName(for chatId: String) -> String? {
+        guard let meta = chat(chatId) else { return nil }
+        switch SkillCapture.defaultAudience(for: meta) {
+        case .group(let id): return group(id).map { "everyone in \($0.displayName)" }
+        case .bots(let ids): return ids.first.flatMap { bot($0)?.name }
+        case .nobody: return nil
+        }
     }
 
     /// Imports Graphify's skill (installing Graphify first, in Terminal, if needed).
@@ -975,6 +1001,10 @@ final class AppModel {
         }
         var message = ChatMessage(role: .user, text: text)
         var prompt = text
+        // "/name what you want": the bot is sent the skill's steps with the request. Only for what you type.
+        if override == nil, let use = SkillCommand.parse(text, skills: skills) {
+            prompt = SkillCommand.prompt(for: use)
+        }
         if !files.isEmpty, let inbox = Attachments.inbox(for: meta, paths: paths) {
             let copied = Attachments.copy(files, into: inbox)
             if !copied.isEmpty {
@@ -1108,7 +1138,8 @@ final class AppModel {
         }
         let registry = sessionRegistry
         let orchestrator = GroupOrchestrator(
-            group: group, bots: group.everyone.compactMap { bot($0) }, history: messages(for: chatId),
+            group: group, bots: group.everyone.compactMap { bot($0) },
+            history: SkillCommand.expand(messages(for: chatId), skills: skills),
             summaryPath: groupStore.summary(group.id).path, workspacePath: groupStore.workspace(group.id).path,
             hasSession: { registry.has(chat: chatId, bot: $0) },
             runTurn: { [weak self] request in

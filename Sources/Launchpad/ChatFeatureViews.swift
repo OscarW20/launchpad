@@ -549,6 +549,8 @@ struct MessageMenu: View {
             .disabled(model.isRunning(chatId))
         }
         Button("Branch from Here") { model.branch(chatId, from: message.id) }
+        Button("Save as Skill…") { model.teachSkill(from: chatId, endingAt: message.id) }
+            .disabled(model.isRunning(chatId))
         Divider()
         Button("Delete", role: .destructive) { model.deleteMessage(message.id, in: chatId) }
     }

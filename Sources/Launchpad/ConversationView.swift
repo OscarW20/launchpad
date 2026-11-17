@@ -169,6 +169,9 @@ struct ConversationHeader: View {
                         } label: { Label("Edit Bot", systemImage: "slider.horizontal.3") }
                             .help("Edit \(bot.name)")
                     }
+                    Button { model.teachSkill(from: chatId) } label: { Label("Save as Skill", systemImage: "graduationcap") }
+                        .help("Have a bot write up what happened in this chat as a skill you can use again with /name")
+                        .disabled(model.messages(for: chatId).isEmpty || model.isRunning(chatId))
                     Button { model.exportChat(chatId) } label: { Label("Export", systemImage: "square.and.arrow.up") }
                         .help("Save this chat as a Markdown file")
                         .disabled(model.messages(for: chatId).isEmpty)
@@ -178,10 +181,10 @@ struct ConversationHeader: View {
                 }
                 let canTeach = !(model.messages(for: chatId).isEmpty || model.isRunning(chatId))
                 ViewThatFits(in: .horizontal) {
-                    Button { model.teachSkill(from: chatId) } label: { Label("Teach a Skill", systemImage: "graduationcap") }
+                    Button { model.teachSkill(from: chatId) } label: { Label("Save as Skill", systemImage: "graduationcap") }
                         .buttonStyle(PillButtonStyle())
                         .fixedSize()
-                    Button { model.teachSkill(from: chatId) } label: { Label("Teach a Skill", systemImage: "graduationcap") }
+                    Button { model.teachSkill(from: chatId) } label: { Label("Save as Skill", systemImage: "graduationcap") }
                         .buttonStyle(CircleButtonStyle(kind: .accent))
                 }
                 .help("Turn what happened in this chat into a skill you can edit")
@@ -411,8 +414,16 @@ struct Composer: View {
         return MentionPicker.candidates(for: query, among: group.everyone.compactMap { model.bot($0) })
     }
 
+    /// Skills that match the "/name" being typed; empty when the skill list is closed.
+    private var skillMatches: [Skill] {
+        let draft = model.drafts[chatId] ?? ""
+        guard draft != mentionDismissed, let query = SkillCommand.query(in: draft) else { return [] }
+        return SkillCommand.candidates(for: query, among: model.skills)
+    }
+
+    // The @ list and the / list are never open together, so they share the selection and the keys.
     private func moveMention(_ step: Int) -> KeyPress.Result {
-        let count = mentionMatches.count
+        let count = mentionMatches.count + skillMatches.count
         guard count > 0 else { return .ignored }
         mentionSelection = (min(mentionSelection, count - 1) + step + count) % count
         return .handled
@@ -420,6 +431,8 @@ struct Composer: View {
 
     /// Writes the selected (or clicked) bot's tag into the draft. False when the list is closed.
     @discardableResult private func pickMention(_ bot: Bot? = nil) -> Bool {
+        let skills = skillMatches
+        if bot == nil, !skills.isEmpty { return pickSkill(skills[min(mentionSelection, skills.count - 1)]) }
         let matches = mentionMatches
         guard let bot = bot ?? (matches.isEmpty ? nil : matches[min(mentionSelection, matches.count - 1)]) else { return false }
         model.drafts[chatId] = MentionPicker.insert(bot.id, into: model.drafts[chatId] ?? "")
@@ -427,8 +440,15 @@ struct Composer: View {
         return true
     }
 
+    /// Writes "/name " into the draft, ready for the request.
+    @discardableResult private func pickSkill(_ skill: Skill) -> Bool {
+        model.drafts[chatId] = SkillCommand.insert(skill.id, into: model.drafts[chatId] ?? "")
+        focused = true
+        return true
+    }
+
     private func closeMentions() -> KeyPress.Result {
-        guard !mentionMatches.isEmpty else { return .ignored }
+        guard !mentionMatches.isEmpty || !skillMatches.isEmpty else { return .ignored }
         mentionDismissed = model.drafts[chatId] ?? ""
         return .handled
     }
@@ -437,6 +457,7 @@ struct Composer: View {
         let running = model.isRunning(chatId)
         let draft = model.drafts[chatId] ?? ""
         let mentions = mentionMatches
+        let skills = skillMatches
         let files = model.pendingAttachments[chatId] ?? []
         let empty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty
         let chat = model.chat(chatId)
@@ -471,6 +492,10 @@ struct Composer: View {
             }
             if !mentions.isEmpty {
                 MentionList(bots: mentions, selection: min(mentionSelection, mentions.count - 1)) { pickMention($0) }
+                    .padding(.leading, 48)
+            }
+            if !skills.isEmpty {
+                SkillCommandList(skills: skills, selection: min(mentionSelection, skills.count - 1)) { pickSkill($0) }
                     .padding(.leading, 48)
             }
             HStack(alignment: .bottom, spacing: Theme.Space.s) {
@@ -550,7 +575,7 @@ struct Composer: View {
             Text(running
                  ? (isGroup ? "\(name) are working. You can still write; they pick it up next. Esc stops."
                             : "\(name) is working. Writing now steers it; Esc stops.")
-                 : "Return to send · ⌥Return for a new line · drop files to attach")
+                 : "Return to send · ⌥Return for a new line · / to use a skill · drop files to attach")
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.secondary)
                 .padding(.leading, 56)
@@ -658,69 +683,6 @@ struct SideQuestionBar: View {
     private func ask() {
         model.askSide(text, in: chatId)
         text = ""
-    }
-}
-
-// MARK: - Teach a skill
-
-struct TeachSkillSheet: View {
-    @Environment(AppModel.self) private var model
-    @State private var text = ""
-
-    var body: some View {
-        let teach = model.teach
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                IconTile(symbol: "graduationcap.fill", size: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Teach a skill from this chat")
-                        .font(Theme.rounded(.title3, weight: .bold))
-                    Text("A SKILL.md draft of what happened here. Edit it, then save it to your library.")
-                        .foregroundStyle(Theme.secondary)
-                }
-            }
-            switch teach?.phase {
-            case .drafting:
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text("Writing a draft…").foregroundStyle(Theme.secondary)
-                }
-                ScrollView {
-                    Text(teach?.draft ?? "")
-                        .font(.system(.body, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                }
-            case .failed(let message):
-                Label(message, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(Theme.warning)
-                Spacer()
-            case .ready:
-                TextEditor(text: $text)
-                    .font(.system(.body, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .padding(Theme.Space.s)
-                    .background(Theme.field, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).strokeBorder(Theme.line))
-            case nil:
-                Spacer()
-            }
-            HStack {
-                Spacer()
-                Button("Cancel") { model.cancelTeach() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Save Skill") { model.saveTaughtSkill(text) }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(PillButtonStyle())
-                    .disabled(teach?.phase != .ready || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(Theme.Space.xl)
-        .frame(width: 680, height: 600)
-        .sheetBackground()
-        .onChange(of: model.teach?.phase) {
-            if model.teach?.phase == .ready { text = model.teach?.draft ?? "" }
-        }
     }
 }
 

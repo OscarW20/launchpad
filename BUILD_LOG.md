@@ -1087,3 +1087,30 @@ New in `Sources/LaunchpadCore/SkillCapture.swift` (no UI yet):
   skill's file in its own folder, as before; lock a skill to stop that.)
 
 Tests: 21 new in `SkillCaptureTests`.
+
+## Save as Skill and /name in the composer (2026-11-17)
+
+The app side of skill capture, on top of `SkillCapture.swift`.
+
+- **Save as Skill**: the old "Teach a Skill" flow, renamed everywhere and extended. It's the header pill, an item in
+  the chat's More menu and the chat list's menu (the whole chat), and "Save as Skill…" on a message's context menu
+  (your request down to that message, `SkillTeacher.stretch`). The sheet (`TeachSkillSheet`, now in
+  `SkillViews.swift`) has a name field with "Use it with /name" beside it, the bot's draft as editable text, and a
+  "Give it to everyone in #group" (or the chat's bot) tick box, on by default.
+- **Saving** goes through `SkillStore.capture` and `SkillCapture.assign`. A taken, built-in or unusable name is
+  shown in the sheet and nothing is overwritten (it used to save as `name-2`). After saving you stay in the chat,
+  with a notice saying how to use it.
+- **`/` picker**: typing `/` at the start of the composer lists skills (`/id` and the "use when" line) in
+  `SkillCommandList`, filtered as you type, with the same keys as the `@` picker (↑ ↓, Return or Tab, Esc).
+- **Sending `/name request`**: in a one-to-one chat the bot gets `SkillCommand.prompt` (the request plus the
+  skill's steps); your bubble still shows what you typed.
+- **Skills list**: skills you made carry a "Yours" pill and an Edit item in the context menu.
+
+### Decisions
+- Group bots read the chat's history, not a prompt, so setting the prompt did nothing there. `SkillCommand.expand`
+  swaps your "/name request" messages for the skill prompt in the history a group run is given. Only messages with
+  the user role are expanded, so a bot writing "/name" can't pull a skill in; a routine's message can.
+- The draft starts as soon as the sheet opens, as before; a name typed while it's being written wins over the
+  bot's suggestion.
+
+Tests: 1 new (`testGroupHistoryGetsTheSkillOnlyForYourMessages`). Nothing on screen was tried in the running app.

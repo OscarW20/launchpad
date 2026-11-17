@@ -12,8 +12,14 @@ struct SkillListView: View {
         PanelList(selection: $model.selectedSkillId) {
             ForEach(model.skills) { skill in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(skill.name)
-                        .font(Theme.rounded(.body, weight: .semibold))
+                    HStack(spacing: 6) {
+                        Text(skill.name)
+                            .font(Theme.rounded(.body, weight: .semibold))
+                        if SkillCapture.isUserSkill(skill) {
+                            Pill(text: "Yours", symbol: "person")
+                                .help("A skill you made or saved from a chat. Use it in a chat with /\(skill.id)")
+                        }
+                    }
                     Text(skill.description.isEmpty ? "No description" : skill.description)
                         .font(.callout)
                         .foregroundStyle(Theme.secondary)
@@ -28,6 +34,9 @@ struct SkillListView: View {
                 .padding(.vertical, 3)
                 .selectableRow(skill.id)
                 .contextMenu {
+                    if SkillCapture.isUserSkill(skill) {
+                        Button("Edit") { model.selectedSkillId = skill.id }
+                    }
                     Button("Duplicate") { model.duplicateSkill(skill.id) }
                     Button("Delete", role: .destructive) { model.deleteSkill(skill.id) }
                 }

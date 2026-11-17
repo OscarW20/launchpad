@@ -228,6 +228,17 @@ public enum SkillCommand {
         """
     }
 
+    /// A group's bots read the chat's history, not a prompt, so there your "/name request" messages are handed to
+    /// them with the skill's steps. Bots' messages and notices are never expanded.
+    public static func expand(_ history: [ChatMessage], skills: [Skill]) -> [ChatMessage] {
+        history.map { message in
+            guard message.role == .user, message.deleted != true, let use = parse(message.text, skills: skills) else { return message }
+            var out = message
+            out.text = prompt(for: use)
+            return out
+        }
+    }
+
     private static func isNameCharacter(_ c: Character) -> Bool {
         c.isASCII && (c.isLetter || c.isNumber || c == "-" || c == "_")
     }

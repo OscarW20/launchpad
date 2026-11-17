@@ -174,6 +174,23 @@ final class SkillCaptureTests: XCTestCase {
         XCTAssertEqual(SkillCommand.insert("release-notes", into: "hello"), "hello")
     }
 
+    func testGroupHistoryGetsTheSkillOnlyForYourMessages() {
+        let skills = [skill("deploy")]
+        let history = [
+            ChatMessage(id: "1", role: .user, text: "/deploy the site"),
+            ChatMessage(id: "2", role: .bot, botId: "lead", text: "/deploy the site"),
+            ChatMessage(id: "3", role: .notice, text: "/deploy"),
+            ChatMessage(id: "4", role: .user, text: "/usr/bin/true is a path"),
+            ChatMessage(id: "5", role: .user, text: "plain message"),
+        ]
+        let out = SkillCommand.expand(history, skills: skills)
+        XCTAssertEqual(out.map(\.id), history.map(\.id))
+        XCTAssertTrue(out[0].text.contains("Use the \"deploy\" skill"))
+        XCTAssertTrue(out[0].text.contains("My request: the site"))
+        // A bot writing "/deploy" can't pull a skill in, and nothing else changes.
+        XCTAssertEqual(Array(out[1...]), Array(history[1...]))
+    }
+
     func testParseASkillCommand() {
         let skills = [skill("deploy"), skill("release-notes")]
         let use = SkillCommand.parse("/release-notes for version 0.2.0\nplease", skills: skills)

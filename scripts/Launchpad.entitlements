@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Bots run as child processes of Launchpad, so macOS asks Launchpad's permission when one of them scripts
+       another app (osascript). Under the hardened runtime that needs this entitlement. Keep this list short:
+       add an entitlement only when a signed build shows it is needed. -->
+  <key>com.apple.security.automation.apple-events</key><true/>
+</dict>
+</plist>

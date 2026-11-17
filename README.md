@@ -39,6 +39,13 @@ Or just build `dist/Launchpad.app` and open it:
 ./scripts/make-app.sh --open
 ```
 
+The app is ad-hoc signed by default, which runs on your Mac only. To sign it with a Developer ID certificate from
+your keychain (hardened runtime, ready to notarise), name the certificate:
+
+```bash
+SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/make-app.sh
+```
+
 Run the tests:
 
 ```bash

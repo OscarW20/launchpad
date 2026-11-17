@@ -902,3 +902,34 @@ been going. It says "Handing over to the next bot…" between two turns in a gro
   button in both group and one-to-one chats. The times refresh every 10 seconds while the popover is open.
 
 Tests: 1 new (`testElapsedSaysHowLongABotHasBeenGoing`). The popover itself was not tried in the running app.
+
+## Full freedom mode for groups (2026-11-17)
+
+Each group now has an Approvals setting: **Ask me** (the default, today's behaviour) or **Full freedom**, where
+anything a bot's rules would ask about (send or post, delete, spend, change code or shared systems, use your Mac)
+goes through without an approval card.
+
+Where approvals were decided before: `GuardEngine.decide` sorts a tool call into categories and returns pass, deny
+or ask; `GuardHook.run` (the `launchpad-guard hook` Claude Code runs before every tool) turns ask into an approval
+card and waits. Codex has no hook, so its Ask rules are instructions (`BotRules.codexNote`).
+
+- **Core**: `ApprovalMode` (`Safety/ApprovalMode.swift`) and `BotGroup.approvals`, saved in group.json and read
+  leniently (missing or unreadable means Ask me). `GuardConfig.fullFreedom` makes `GuardHook.run` answer an ask
+  with allow, the same as you approving the card. `LaunchpadProtocol.text` and `BotRules.codexNote` tell the bot it
+  needn't ask. `ApprovalMode.command(in:)` reads "accept mode" / "ask mode" typed as a whole message.
+- **App**: a segmented Approvals picker in the group form, an amber "Full freedom" badge beside the group's name in
+  the chat header (click it to go back to Ask me), "Switch to …" in the chat's More menu, and the typed commands.
+  Every switch leaves a notice in the chat.
+
+### Decisions
+- Full freedom only loosens Ask. A category set to Never stays off, locked skills and Launchpad's own files stay
+  protected, and a locked-down bot keeps asking: those were choices about one bot, and the group switch doesn't undo
+  them. The rule about secrets is unchanged.
+- It is per group and applies only in that group's chat; one-to-one chats always ask.
+- A bot can be answering in an Ask me chat and a Full freedom group at once, so the Full freedom rules go in their
+  own file (`rules/<bot>.free.json`) instead of rewriting the one the other run is reading.
+- If the guard can't start, a Claude bot falls back to asking in chat even in Full freedom (fail closed).
+- Plan cards (`share_plan`) and questions (`ask_user`) are not approvals and still appear.
+
+Tests: 11 new in `ApprovalModeTests` (default and lenient decoding, saving, the typed commands, the hook letting Ask
+through, Never and protected files still denied, locked-down bots still asking, what bots are told).

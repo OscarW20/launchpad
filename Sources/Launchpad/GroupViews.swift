@@ -118,6 +118,19 @@ struct GroupFormSections: View {
         } footer: {
             Text("Every bot in the group sees these rules. When the team has handed work on this many times, it stops and asks you.")
         }
+        Section {
+            Picker("Approvals", selection: $group.approvals) {
+                ForEach(ApprovalMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+        } header: {
+            Text("Approvals")
+        } footer: {
+            Text(group.approvals.detail + " You can also type “accept mode” or “ask mode” in the group chat.")
+                .foregroundStyle(group.approvals == .fullFreedom ? Theme.warning : Theme.secondary)
+        }
     }
 }
 
@@ -152,6 +165,7 @@ struct NewGroupSheet: View {
                 Button("Create Group") {
                     if let g = model.createGroup(name: group.name, emoji: group.emoji, members: group.members,
                                                  lead: group.lead, rules: group.rules, limit: group.handoffLimit) {
+                        if group.approvals != .ask { model.setApprovalMode(group.approvals, for: g) }
                         dismiss()
                         model.openChat(with: g)
                     }
@@ -247,7 +261,8 @@ struct GroupDetailView: View {
                     if var g = draft {
                         g.name = g.name.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
                         if g.name.isEmpty { g.name = original?.name ?? groupId }
-                        model.saveGroup(g)
+                        // A change of approvals is also said in the group's chats.
+                        if g.approvals != original?.approvals { model.setApprovalMode(g.approvals, for: g) } else { model.saveGroup(g) }
                         load()
                     }
                 }

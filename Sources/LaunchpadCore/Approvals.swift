@@ -180,8 +180,13 @@ public enum GuardDecision: Equatable {
 public enum LaunchpadProtocol {
     /// - Parameter liveApprovals: the bot runs with the permission guard and approval cards (`GuardHookSetup` with
     ///   an `askBase`): it just goes ahead and Launchpad asks me while its tool call waits.
-    public static func text(skills: [String], liveApprovals: Bool = false) -> String {
-        let ask = liveApprovals ? """
+    /// - Parameter fullFreedom: the group is in "Full freedom" and this bot's Ask rules are skipped.
+    public static func text(skills: [String], liveApprovals: Bool = false, fullFreedom: Bool = false) -> String {
+        let ask = fullFreedom ? """
+        - Full freedom is on for this group: you don't need my OK before sending or posting, deleting, spending money, \
+        or changing code or shared systems (deploys, git push). Still look before you delete or overwrite, and tell me \
+        what you did. If something is blocked anyway, I turned it off: don't try another way.
+        """ : liveApprovals ? """
         - Some actions need my OK: sending or posting, deleting outside your folder, spending money, and changing code \
         or shared systems (deploys, git push). Just do the step: Launchpad shows me an approval card and your tool call \
         waits for my answer. If I say no, don't try another way; ask me what I'd like instead.

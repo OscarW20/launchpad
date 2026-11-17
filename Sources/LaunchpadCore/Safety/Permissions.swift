@@ -136,9 +136,10 @@ public struct BotRules: Codable, Hashable, Sendable {
 
     /// Codex has no tool hook, so its rules go in its instructions (the sandbox part is in `EngineCommand.codex`).
     /// Append this to `RunOptions.systemAppend` for Codex bots. Empty when there's nothing to say.
-    public func codexNote(lockedSkills: [String] = []) -> String {
+    /// In a "Full freedom" group the Ask line is left out; Never and locked skills stay.
+    public func codexNote(lockedSkills: [String] = [], fullFreedom: Bool = false) -> String {
         var lines: [String] = []
-        let ask = ApprovalCategory.allCases.filter { rule($0) == .ask && $0 != .computer }
+        let ask = fullFreedom ? [] : ApprovalCategory.allCases.filter { rule($0) == .ask && $0 != .computer }
         let never = ApprovalCategory.allCases.filter { rule($0) == .never && $0 != .computer }
         if !ask.isEmpty {
             lines.append("Before you do any of these, stop and ask me with a line `[[approve: <what you'll do>]]`, end your turn, and only go ahead once I say yes: "

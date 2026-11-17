@@ -562,6 +562,20 @@ final class AppModel {
         }
     }
 
+    /// Switches a group between "Ask me" and "Full freedom", and says so in its chats. Bots already working pick it
+    /// up from their next reply.
+    func setApprovalMode(_ mode: ApprovalMode, for group: BotGroup, chatId: String? = nil) {
+        var g = group
+        g.approvals = mode
+        saveGroup(g)
+        guard self.group(g.id)?.approvals == mode else { return }
+        let ids = chatId.map { [$0] } ?? chats.filter { $0.kind == .group && $0.groupId == g.id }.map(\.id)
+        for id in ids {
+            loadMessagesIfNeeded(id)
+            append(ChatMessage(role: .notice, text: mode.notice), to: id)
+        }
+    }
+
     func saveGroup(_ group: BotGroup) {
         do {
             try groupStore.save(group)
@@ -938,6 +952,13 @@ final class AppModel {
             drafts[chatId] = ""
             pendingAttachments[chatId] = nil
         }
+        // "accept mode" / "ask mode" on its own switches the group's approvals; no bot needs to answer.
+        if override == nil, files.isEmpty, meta.kind == .group, let mode = ApprovalMode.command(in: text),
+           let group = group(meta.groupId) {
+            append(ChatMessage(role: .user, text: text), to: chatId)
+            setApprovalMode(mode, for: group, chatId: chatId)
+            return
+        }
         var message = ChatMessage(role: .user, text: text)
         var prompt = text
         if !files.isEmpty, let inbox = Attachments.inbox(for: meta, paths: paths) {
@@ -1182,9 +1203,11 @@ final class AppModel {
             o.environment.merge(CodexHome().environment()) { _, new in new }
         }
 
+        // "Full freedom" is a group setting: what this bot's rules would ask about goes through without a card.
+        let free = chat.kind == .group && (group(chat.groupId)?.approvals ?? .ask).skipsApprovals(for: bot)
         var liveApprovals = false
         if bot.engine == .claude {
-            if let guardURL = guardExecutable, let rules = writeGuardRules(for: bot) {
+            if let guardURL = guardExecutable, let rules = writeGuardRules(for: bot, fullFreedom: free) {
                 let base = inbox.base(chatId: chat.id, runId: runId)
                 o.guardHook = GuardHookSetup(helper: guardURL.path, rulesFile: rules.path, askBase: base.path,
                                              approvalsDir: grants.directory.path)
@@ -1197,9 +1220,11 @@ final class AppModel {
                 o.guardCommand = "\"\(guardURL.path)\" --approvals \"\(grants.directory.path)\""
             }
         }
-        var system = LaunchpadProtocol.text(skills: botSkills, liveApprovals: liveApprovals)
+        // Without the guard a Claude bot keeps asking in chat, so it isn't told otherwise.
+        let told = free && (liveApprovals || bot.engine == .codex)
+        var system = LaunchpadProtocol.text(skills: botSkills, liveApprovals: liveApprovals, fullFreedom: told)
         if bot.engine == .codex {
-            let note = bot.rules.codexNote(lockedSkills: lockedNames)
+            let note = bot.rules.codexNote(lockedSkills: lockedNames, fullFreedom: free)
             if !note.isEmpty { system += "\n" + note }
         }
 
@@ -1556,14 +1581,15 @@ final class AppModel {
 
     /// Writes the bot's rules file for the guard. nil if it couldn't be written.
     @discardableResult
-    func writeGuardRules(for bot: Bot) -> URL? {
+    func writeGuardRules(for bot: Bot, fullFreedom: Bool = false) -> URL? {
         let skillIds = SkillLinker.effectiveSkills(for: bot, groups: groups)
         let lockedDirs = SkillLocks.lockedDirs(skillIds: skillIds, locked: lockedSkills, paths: paths, botId: bot.id)
         // Every group folder it works in, so a rules file written for one chat suits the others too.
         let extra = groups(containing: bot.id).map { groupStore.dir($0.id) }
         // Team notes (Shared/TEAM.md) are every bot's to edit; the chat tools never need asking.
         let cfg = GuardRulesFile.config(for: bot, paths: paths, extraRoots: extra + [paths.shared], lockedSkillDirs: lockedDirs,
-                                        alwaysForWrites: alwaysForWrites, trustedServers: [ChatToolsSetup.serverKey])
+                                        alwaysForWrites: alwaysForWrites, trustedServers: [ChatToolsSetup.serverKey],
+                                        fullFreedom: fullFreedom)
         return try? GuardRulesFile.write(cfg, botId: bot.id, paths: paths)
     }
 

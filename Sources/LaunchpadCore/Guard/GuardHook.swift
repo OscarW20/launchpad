@@ -190,6 +190,8 @@ public enum GuardHook {
         case .deny(let reason):
             return .deny(reason)
         case .ask(let category, let detail):
+            // Full freedom: the same as you approving the card.
+            if config.fullFreedom { return .allow("Full freedom is on for this group.") }
             // You already approved something for this session in the chat (the older flow).
             if let grants, let session = call["session_id"] as? String, grants.isApproved(sessionId: session, now: now) {
                 return .pass
@@ -272,9 +274,11 @@ public enum GuardRulesFile {
     ///   - alwaysForWrites: false turns "Always allow" off for sends, deletes, spending and changes (always off when
     ///     the bot is locked down).
     ///   - trustedServers: MCP servers whose tools never need asking.
+    ///   - fullFreedom: the run is in a group set to "Full freedom" (`ApprovalMode.skipsApprovals`).
     public static func config(
         for bot: Bot, paths: LaunchpadPaths, extraRoots: [URL] = [], lockedSkillDirs: [String] = [],
-        alwaysForWrites: Bool = true, trustedServers: [String] = [], home: URL = FileManager.default.homeDirectoryForCurrentUser
+        alwaysForWrites: Bool = true, trustedServers: [String] = [], fullFreedom: Bool = false,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> GuardConfig {
         let folder = paths.botDir(bot.id)
         var c = GuardConfig()
@@ -290,6 +294,8 @@ public enum GuardRulesFile {
         c.locked = lockedSkillDirs
         c.changePatterns = bot.rules.changePatterns
         c.trustedServers = trustedServers
+        // A locked-down bot keeps asking, whatever its group says.
+        c.fullFreedom = fullFreedom && !bot.lockedDown
         c.answers = paths.approvalAnswers.path
         c.dataFolderName = paths.launchpadData.lastPathComponent
         c.protected = [
@@ -303,7 +309,10 @@ public enum GuardRulesFile {
         return c
     }
 
-    /// Writes `paths.rulesFile(bot.id)` and returns its URL. The file is read-only (0444) and its folder 0555 between
+    /// A bot can be answering in an "Ask me" chat and a "Full freedom" group at once, so each mode has its own file.
+    public static func fileId(botId: String, fullFreedom: Bool) -> String { fullFreedom ? botId + ".free" : botId }
+
+    /// Writes `paths.rulesFile(botId)` and returns its URL. The file is read-only (0444) and its folder 0555 between
     /// writes, on top of the guard's own check, so a bot can't replace or remove it.
     @discardableResult
     public static func write(_ config: GuardConfig, botId: String, paths: LaunchpadPaths) throws -> URL {
@@ -312,7 +321,7 @@ public enum GuardRulesFile {
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
         defer { try? fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path) }
-        let url = paths.rulesFile(botId)
+        let url = paths.rulesFile(fileId(botId: botId, fullFreedom: config.fullFreedom))
         let data = try JSONSerialization.data(withJSONObject: config.json, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         if fm.fileExists(atPath: url.path) { try? fm.removeItem(at: url) }
         try data.write(to: url, options: .atomic)

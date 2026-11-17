@@ -99,10 +99,26 @@ struct ConversationHeader: View {
     @ViewBuilder private func groupInfo(_ group: BotGroup?) -> some View {
         GroupAvatar(group: group, size: 40)
         VStack(alignment: .leading, spacing: 4) {
-            Text(group?.displayName ?? "Group")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(Theme.text)
-                .lineLimit(1)
+            HStack(spacing: Theme.Space.s) {
+                Text(group?.displayName ?? "Group")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Theme.text)
+                    .lineLimit(1)
+                if let group, group.approvals == .fullFreedom {
+                    Button { model.setApprovalMode(.ask, for: group, chatId: chatId) } label: {
+                        Label(ApprovalMode.fullFreedom.title, systemImage: "bolt.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.warning)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(Theme.warning.opacity(0.15)))
+                            .overlay(Capsule().strokeBorder(Theme.warning.opacity(0.4), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .fixedSize()
+                    .help("Bots in this group act without asking. Click to go back to Ask me.")
+                }
+            }
             if let group {
                 HStack(spacing: -6) {
                     ForEach(group.everyone, id: \.self) { id in
@@ -150,6 +166,11 @@ struct ConversationHeader: View {
                             model.section = .groups
                         } label: { Label("Edit Group", systemImage: "slider.horizontal.3") }
                             .help("Members, lead, rules and hand-off limit")
+                        let next: ApprovalMode = group.approvals == .fullFreedom ? .ask : .fullFreedom
+                        Button { model.setApprovalMode(next, for: group, chatId: chatId) } label: {
+                            Label("Switch to \(next.title)", systemImage: next == .fullFreedom ? "bolt.fill" : "hand.raised")
+                        }
+                        .help(next.detail)
                     } else if let bot = model.bot(chat.botId) {
                         Button { SystemActions.reveal(model.paths.botDir(bot.id)) } label: { Label("Show Folder", systemImage: "folder") }
                             .help("Show \(bot.name)'s folder in Finder")

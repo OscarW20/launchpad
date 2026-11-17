@@ -40,6 +40,9 @@ public struct GuardConfig: Equatable, Sendable {
     public var computerServers: [String] = ["computer", "computer-use", "computer_use"]
     /// The name of Launchpad's data folder, protected in any spelling.
     public var dataFolderName = ".launchpad"
+    /// The group is in "Full freedom" (`ApprovalMode`): what would ask goes through. Never, locked skills and
+    /// Launchpad's own files still say no.
+    public var fullFreedom = false
 
     public init() {}
 
@@ -57,13 +60,14 @@ public struct GuardConfig: Equatable, Sendable {
         trustedServers = json["trustedServers"] as? [String] ?? []
         computerServers = json["computerServers"] as? [String] ?? computerServers
         dataFolderName = json["dataFolderName"] as? String ?? dataFolderName
+        fullFreedom = json["fullFreedom"] as? Bool ?? false
     }
 
     public var json: [String: Any] {
         ["bot": bot, "folder": folder, "roots": roots, "rules": rules, "alwaysAllowed": alwaysAllowed,
          "locked": locked, "protected": protected, "answers": answers, "noAlwaysForWrites": noAlwaysForWrites,
          "changePatterns": changePatterns, "trustedServers": trustedServers, "computerServers": computerServers,
-         "dataFolderName": dataFolderName]
+         "dataFolderName": dataFolderName, "fullFreedom": fullFreedom]
     }
 
     /// Never always wins. "Always allow" only loosens Ask, and never for the Terminal: one command says

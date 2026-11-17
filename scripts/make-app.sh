@@ -25,6 +25,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>Launchpad</string>
   <key>CFBundleIdentifier</key><string>app.launchpad.personal</string>
   <key>CFBundleExecutable</key><string>Launchpad</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
@@ -34,6 +35,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+# App icon from the brand iconset.
+iconutil -c icns "Sources/Launchpad/Resources/Brand/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
 
 # Ad-hoc signature so macOS will run it locally.
 codesign --force --sign - "$APP" >/dev/null 2>&1 || true

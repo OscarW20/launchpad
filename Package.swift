@@ -20,7 +20,7 @@ let package = Package(
         .executableTarget(name: "launchpad-chat", dependencies: ["LaunchpadCore"]),
         // The SwiftUI app (macOS only).
         // Brand logos for the marketplace (see Resources/Logos/README.md).
-        .executableTarget(name: "Launchpad", dependencies: ["LaunchpadCore"], resources: [.copy("Resources/Logos")]),
+        .executableTarget(name: "Launchpad", dependencies: ["LaunchpadCore"], resources: [.copy("Resources/Logos"), .copy("Resources/Brand")]),
         .testTarget(name: "LaunchpadCoreTests", dependencies: ["LaunchpadCore"]),
     ]
 )

@@ -29,6 +29,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Needed when launched with `swift run` rather than from an .app bundle.
         NSApp.setActivationPolicy(.regular)
+        // The bundled .app gets its icon from AppIcon.icns; `swift run` needs it set here.
+        if Bundle.main.bundleURL.pathExtension != "app",
+           let url = Bundle.module.url(forResource: "AppIcon-1024", withExtension: "png", subdirectory: "Brand"),
+           let icon = NSImage(contentsOf: url) {
+            NSApp.applicationIconImage = icon
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 

@@ -940,3 +940,22 @@ Tests: 15 new in `ApprovalModeTests` (default, saving outside the groups folder,
 able to turn it on, one-to-one chats never free, a bot's Edit, Write and shell edits of the mode file refused, the
 typed commands, the hook letting Ask through, Never and protected files still denied, locked-down bots still asking,
 what bots are told).
+
+## Who's working and who's idle, from the members line (2026-11-17)
+
+In a group chat's header, the member avatars and the "8 members · lead: …" line are now a button. Clicking it opens
+a popover listing every member, the working ones first and the rest in the group's order: avatar, name and role, then
+a green dot with what the bot is doing and how long it's been going (amber when it's waiting on you), or a grey dot
+and "Idle". The title row counts them ("3 working · 5 idle").
+
+- **Core**: `WorkSummary.workingFirst(_:working:)` orders the members.
+- **App**: `MembersButton`, `GroupMembersStatus` and a shared `BotStatusRow` in `WorkingViews.swift`. The green
+  "working" line and its popover are unchanged and use the same row. The times refresh every 10 seconds.
+
+### Decisions
+- A member replying in another chat counts as working, with "· in <chat>" after what it's doing: the question is
+  whether the bot is free, not only whether it's busy here.
+- While the group works, the header shows the avatars (the members button) and then the "working" button; the
+  members text only shows when the group is quiet, as before.
+
+Tests: 1 new (`testWorkingMembersComeFirstInGroupOrder`). The popover was not tried in the running app.

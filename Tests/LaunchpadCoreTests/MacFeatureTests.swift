@@ -138,6 +138,16 @@ final class MacFeatureTests: XCTestCase {
 
     // MARK: Office and attention
 
+    func testWorkingMembersComeFirstInGroupOrder() {
+        let members = ["lead", "planner", "frontend", "backend", "tester"]
+        XCTAssertEqual(WorkSummary.workingFirst(members, working: ["tester", "planner"]),
+                       ["planner", "tester", "lead", "frontend", "backend"])
+        XCTAssertEqual(WorkSummary.workingFirst(members, working: []), members)
+        XCTAssertEqual(WorkSummary.workingFirst(members, working: Set(members)), members)
+        // A bot working elsewhere that isn't in the group doesn't appear.
+        XCTAssertEqual(WorkSummary.workingFirst(["lead"], working: ["stranger"]), ["lead"])
+    }
+
     func testElapsedSaysHowLongABotHasBeenGoing() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         func after(_ seconds: TimeInterval) -> String {

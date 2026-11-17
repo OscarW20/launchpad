@@ -120,24 +120,13 @@ struct ConversationHeader: View {
                 }
             }
             if let group {
-                HStack(spacing: -6) {
-                    ForEach(group.everyone, id: \.self) { id in
-                        AvatarView(bot: model.bot(id), size: 20)
-                            .background(Circle().fill(Theme.card))
-                            .help(model.bot(id)?.name ?? id)
+                HStack(spacing: Theme.Space.m) {
+                    MembersButton(group: group, chatId: chatId)
+                    if model.isRunning(chatId) {
+                        WorkingButton(chatId: chatId)
                     }
-                    Group {
-                        if model.isRunning(chatId) {
-                            WorkingButton(chatId: chatId)
-                        } else {
-                            Text("\(group.everyone.count) members · lead: \(model.bot(group.lead)?.name ?? "none") · hand-off limit \(group.handoffLimit)")
-                                .foregroundStyle(Theme.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    .font(.system(size: 12))
-                    .padding(.leading, 12)
                 }
+                .font(.system(size: 12))
             } else {
                 Text("This group was removed.").font(.system(size: 12)).foregroundStyle(Theme.secondary)
             }

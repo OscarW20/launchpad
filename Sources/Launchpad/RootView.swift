@@ -45,6 +45,8 @@ struct RootView: View {
         case .groups: GroupListView()
         case .skills: SkillListView()
         case .connectors: ConnectorListView()
+        case .tasks: TaskListView()
+        case .workflows: WorkflowListView()
         case .routines: RoutineListView()
         case .hire, .settings: SectionIntro(section: model.section)
         }
@@ -92,6 +94,18 @@ struct RootView: View {
             } else {
                 EmptyDetail(symbol: "powerplug", title: "Connectors", message: "Add an MCP server by URL or command, then turn it on for bots or groups.")
             }
+        case .tasks:
+            if let id = model.selectedTaskId, model.task(id) != nil {
+                TaskDetailView(taskId: id).id(id)
+            } else {
+                EmptyDetail(symbol: "checklist", title: "Tasks", message: "Hand a job to a bot or group, then follow it here. Workflow approvals wait here too.")
+            }
+        case .workflows:
+            if let id = model.selectedWorkflowId, model.workflows.contains(where: { $0.id == id }) {
+                WorkflowDetailView(workflowId: id).id(id)
+            } else {
+                EmptyDetail(symbol: "flowchart", title: "Workflows", message: "Steps that pass work from bot to bot: a prompt, bot jobs, checks, your OK and where the result goes.")
+            }
         case .routines:
             if let id = model.selectedRoutineId, model.routines.contains(where: { $0.id == id }) {
                 RoutineDetailView(routineId: id).id(id)
@@ -119,10 +133,14 @@ struct SidebarView: View {
                 row(.groups)
                 row(.hire)
             }
+            Section("Work") {
+                row(.tasks)
+                row(.workflows)
+                row(.routines)
+            }
             Section("Tools") {
                 row(.skills)
                 row(.connectors)
-                row(.routines)
             }
             Section {
                 row(.settings)
@@ -153,9 +171,18 @@ struct SidebarView: View {
         }
     }
 
+    private func badge(for section: SidebarSection) -> Int {
+        switch section {
+        case .bots: return model.bots.count
+        case .groups: return model.groups.count
+        case .tasks: return model.tasksNeedingYou
+        default: return 0
+        }
+    }
+
     private func row(_ section: SidebarSection) -> some View {
         Label(section.title, systemImage: section.symbol)
-            .badge(section == .bots ? model.bots.count : section == .groups ? model.groups.count : 0)
+            .badge(badge(for: section))
             .tag(section)
     }
 }
@@ -248,6 +275,11 @@ struct EmptyDetail: View {
                 case .routines:
                     Button { model.newRoutine() } label: { Label("New Routine", systemImage: "plus") }
                         .buttonStyle(.borderedProminent)
+                case .workflows:
+                    Button { model.newWorkflow() } label: { Label("New Workflow", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent)
+                case .tasks:
+                    EmptyView()
                 default:
                     Button { model.showingNewBot = true } label: { Label("New Bot", systemImage: "plus") }
                         .buttonStyle(.borderedProminent)

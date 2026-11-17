@@ -274,14 +274,30 @@ public struct ChatMessage: Codable, Identifiable, Hashable, Sendable {
     /// Questions the bot asked as tappable choices.
     public var questions: QuestionCard?
 
+    // Added with the safety guard. All optional, so chat logs written before still decode.
+
+    /// Approval cards the guard showed while this reply ran (Approve / Decline / Always allow).
+    public var liveApprovals: [LiveApproval]?
+    /// The bot folder's snapshot taken just before this reply (`Snapshots.take`), for Undo.
+    public var snapshot: String?
+    /// Files in the bot's folder this reply changed, added or deleted (relative paths).
+    public var changedFiles: [String]?
+    /// Undo was used on this reply.
+    public var undone: Bool?
+
     public init(
         id: String = UUID().uuidString.lowercased(), role: MessageRole, botId: String? = nil,
         text: String = "", steps: [Step] = [], status: MessageStatus = .done,
         failure: RunFailure? = nil, createdAt: Date = Date(), costUSD: Double? = nil,
-        approval: ApprovalRequest? = nil, noticeAction: NoticeAction? = nil
+        approval: ApprovalRequest? = nil, noticeAction: NoticeAction? = nil,
+        liveApprovals: [LiveApproval]? = nil, snapshot: String? = nil, changedFiles: [String]? = nil, undone: Bool? = nil
     ) {
         self.approval = approval
         self.noticeAction = noticeAction
+        self.liveApprovals = liveApprovals
+        self.snapshot = snapshot
+        self.changedFiles = changedFiles
+        self.undone = undone
         self.id = id
         self.role = role
         self.botId = botId
@@ -292,6 +308,46 @@ public struct ChatMessage: Codable, Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.costUSD = costUSD
     }
+}
+
+/// An approval card from the permission guard, as shown in a reply (`PendingApproval` plus your answer).
+public struct LiveApproval: Codable, Identifiable, Hashable, Sendable {
+    public enum State: String, Codable, Sendable {
+        /// Waiting for your answer while the bot's tool call waits.
+        case pending
+        case approved
+        case denied
+        /// Approved, and "Always allow" added for this tool in this category.
+        case always
+        /// Nobody answered in time, or the reply ended first.
+        case expired
+    }
+
+    public var id: String
+    /// An `ApprovalCategory` raw value.
+    public var category: String
+    public var tool: String
+    public var detail: String
+    public var state: State
+    public var offersAlways: Bool
+
+    public init(id: String, category: String, tool: String, detail: String, state: State = .pending, offersAlways: Bool = false) {
+        self.id = id
+        self.category = category
+        self.tool = tool
+        self.detail = detail
+        self.state = state
+        self.offersAlways = offersAlways
+    }
+
+    public init(_ card: PendingApproval, state: State = .pending) {
+        self.init(id: card.id, category: card.category, tool: card.tool, detail: card.detail, state: state,
+                  offersAlways: card.offersAlways)
+    }
+
+    public var kind: ApprovalCategory? { ApprovalCategory(rawValue: category) }
+    /// The "category:tool" key used by `BotRules.alwaysAllowed`.
+    public var key: String { "\(category):\(tool)" }
 }
 
 public enum NoticeAction: String, Codable, Hashable, Sendable {

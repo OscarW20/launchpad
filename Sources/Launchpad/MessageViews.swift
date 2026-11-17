@@ -95,8 +95,18 @@ struct BotMessageView: View {
                     FailureCard(failure: failure)
                 }
 
+                if let cards = message.liveApprovals {
+                    ForEach(cards) { card in
+                        LiveApprovalCardView(card: card, chatId: chatId, botId: message.botId)
+                    }
+                }
+
                 if let approval = message.approval {
                     ApprovalCard(request: approval, messageId: message.id, chatId: chatId)
+                }
+
+                if message.status != .streaming, message.snapshot != nil, !(message.changedFiles ?? []).isEmpty {
+                    ReplyChangesBar(message: message, chatId: chatId)
                 }
             }
             .padding(12)

@@ -56,10 +56,32 @@ struct SettingsView: View {
                             .foregroundStyle(Theme.warning)
                     }
                 }
+                Toggle(isOn: Binding(get: { model.alwaysForWrites }, set: { model.alwaysForWrites = $0 })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("“Always allow” for sends, deletes, spending and changes")
+                        Text("Off: bots ask every time for these, even where you picked Always allow before.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("Sandbox") {
+                    if BotSandbox.available {
+                        Label("On", systemImage: "checkmark.shield.fill").foregroundStyle(Theme.success)
+                    } else {
+                        Label("Not available on this Mac", systemImage: "exclamationmark.shield").foregroundStyle(Theme.warning)
+                    }
+                }
+                LabeledContent("Undo for replies") {
+                    if model.snapshots != nil {
+                        Label("On", systemImage: "arrow.uturn.backward.circle.fill").foregroundStyle(Theme.success)
+                    } else {
+                        Label("Needs git", systemImage: "exclamationmark.circle").foregroundStyle(Theme.warning)
+                    }
+                }
             } header: {
                 Text("Safety")
             } footer: {
-                Text("Claude Code bots can't deploy, push, send, spend or delete until you tap Approve on their card. Codex bots are asked to do the same and are kept in their sandbox.")
+                Text("Claude Code bots wait for your Approve on a card before they send, delete, spend or change shared systems (set this per bot under Permissions). Codex bots are told the same and kept in their sandbox. Bots can't touch Launchpad's own files or your Claude settings.")
             }
 
             Section {

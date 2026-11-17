@@ -271,10 +271,13 @@ final class UsageAndRoutineTests: XCTestCase {
     func testDailyAndWeekdays() {
         // 2026-11-17 is a Tuesday; 2026-11-21 a Saturday.
         let r = Routine(id: "r", name: "r", target: .group("g"), message: "standup", trigger: .daily(hour: 9, minute: 30, weekdaysOnly: true),
-                        lastRun: date("2026-11-16T09:30:00Z"))
+                        lastRun: date("2026-11-16T09:30:00Z"), createdAt: date("2026-11-01T00:00:00Z"))
         XCTAssertFalse(RoutineSchedule.isDue(r, now: date("2026-11-17T09:29:00Z"), calendar: calendar))
         XCTAssertTrue(RoutineSchedule.isDue(r, now: date("2026-11-17T09:30:00Z"), calendar: calendar))
-        XCTAssertTrue(RoutineSchedule.isDue(r, now: date("2026-11-17T15:00:00Z"), calendar: calendar), "catches up later the same day")
+        // Later the same day it's no longer "on time": it's a missed run, which an older routine (catchUp nil) catches up once.
+        XCTAssertFalse(RoutineSchedule.isDue(r, now: date("2026-11-17T15:00:00Z"), calendar: calendar))
+        XCTAssertEqual(RoutineSchedule.tick([r], now: date("2026-11-17T15:00:00Z"), calendar: calendar).events,
+                       [.catchUp("r", missed: 1, last: date("2026-11-17T09:30:00Z"))], "catches up later the same day")
         var ran = r
         ran.lastRun = date("2026-11-17T09:30:05Z")
         XCTAssertFalse(RoutineSchedule.isDue(ran, now: date("2026-11-17T15:00:00Z"), calendar: calendar))

@@ -5,21 +5,60 @@ import LaunchpadCore
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("ui.sidebarHidden") private var sidebarHidden = false
+    @AppStorage("ui.listColumnWidth") private var listWidth: Double = 320
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
-        } content: {
-            contentColumn
-                .navigationSplitViewColumnWidth(min: 260, ideal: 310, max: 420)
-        } detail: {
+        HStack(spacing: Theme.Space.m) {
+            if !sidebarHidden {
+                SidebarView()
+                    .frame(width: 228)
+                    .panel()
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+            if model.section.hasListColumn {
+                contentColumn
+                    .frame(width: CGFloat(listWidth))
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .panel()
+                    .overlay(alignment: .trailing) {
+                        ColumnResizeHandle(width: $listWidth, range: 260...460)
+                            .offset(x: Theme.Space.m)
+                    }
+            }
             detailColumn
-                .toolbar {
-                    ToolbarItem(placement: .navigation) { HistoryButtons() }
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .panel()
         }
+        .padding(.horizontal, Theme.Space.m)
+        .padding(.bottom, Theme.Space.m)
+        .padding(.top, Theme.Space.xs)
+        .background(GlowBackground())
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                HStack(spacing: Theme.Space.s) {
+                    AppLogo(size: 24)
+                    Text("Launchpad")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Theme.text)
+                }
+                .padding(.leading, Theme.Space.xs)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Launchpad")
+            }
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) { sidebarHidden.toggle() }
+                } label: {
+                    Label(sidebarHidden ? "Show Sidebar" : "Hide Sidebar", systemImage: "sidebar.left")
+                }
+                .help(sidebarHidden ? "Show the sidebar (⌃⌘S)" : "Hide the sidebar (⌃⌘S)")
+                .keyboardShortcut("s", modifiers: [.control, .command])
+            }
+            ToolbarItem(placement: .navigation) { HistoryButtons() }
+        }
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .background(WindowReader { MainWindow.window = $0 })
         .onAppear {
             MainWindow.openWindow = openWindow
@@ -140,58 +179,79 @@ struct RootView: View {
     }
 }
 
+extension SidebarSection {
+    /// Marketplace and Settings use the whole width; every other page has a list column.
+    var hasListColumn: Bool { self != .hire && self != .settings }
+}
+
+/// The gap between the list and the conversation: drag to resize the list.
+struct ColumnResizeHandle: View {
+    @Binding var width: Double
+    let range: ClosedRange<Double>
+    @State private var start: Double?
+
+    var body: some View {
+        Color.clear
+            .frame(width: Theme.Space.m)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let base = start ?? width
+                        if start == nil { start = width }
+                        width = min(range.upperBound, max(range.lowerBound, base + value.translation.width))
+                    }
+                    .onEnded { _ in start = nil }
+            )
+            .onTapGesture(count: 2) { width = 320 }
+            .help("Drag to resize")
+            .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Sidebar
 
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        List(selection: Binding(get: { Optional(model.section) }, set: { if let s = $0 { model.section = s } })) {
-            Section("Talk") {
-                row(.chats)
-                row(.office)
-            }
-            Section("Team") {
-                row(.bots)
-                row(.groups)
-                row(.hire)
-            }
-            Section("Work") {
-                row(.tasks)
-                row(.workflows)
-                row(.routines)
-            }
-            Section("Tools") {
-                row(.skills)
-                row(.connectors)
-            }
-            Section {
-                row(.settings)
-            }
-        }
-        .listStyle(.sidebar)
-        .safeAreaInset(edge: .top) {
-            HStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Theme.accent.gradient)
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .rotationEffect(.degrees(-20))
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    row(.chats)
+                    row(.office)
+                    header("Work")
+                    row(.tasks)
+                    row(.workflows)
+                    row(.routines)
+                    header("Team")
+                    row(.bots)
+                    row(.groups)
+                    row(.hire)
+                    header("Tools")
+                    row(.skills)
+                    row(.connectors)
                 }
-                .frame(width: 28, height: 28)
-                Text("Launchpad")
-                    .font(Theme.rounded(.title3, weight: .bold))
-                Spacer()
+                .padding(.horizontal, Theme.Space.m)
+                .padding(.vertical, Theme.Space.m)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .padding(.bottom, 4)
-        }
-        .safeAreaInset(edge: .bottom) {
             EngineStatusFooter()
+                .padding(.horizontal, Theme.Space.m)
+            row(.settings)
+                .padding(.horizontal, Theme.Space.m)
+                .padding(.vertical, Theme.Space.m)
         }
+    }
+
+    private func header(_ title: String) -> some View {
+        SectionHeader(title)
+            .padding(.horizontal, Theme.Space.m)
+            .padding(.top, Theme.Space.l)
+            .padding(.bottom, Theme.Space.xs)
     }
 
     private func badge(for section: SidebarSection) -> Int {
@@ -205,9 +265,43 @@ struct SidebarView: View {
     }
 
     private func row(_ section: SidebarSection) -> some View {
-        Label(section.title, systemImage: section.symbol)
-            .badge(badge(for: section))
-            .tag(section)
+        SidebarRow(section: section, selected: model.section == section, badge: badge(for: section)) {
+            model.section = section
+        }
+    }
+}
+
+struct SidebarRow: View {
+    let section: SidebarSection
+    let selected: Bool
+    let badge: Int
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Theme.Space.m) {
+                Image(systemName: section.symbol)
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 20)
+                    .foregroundStyle(selected ? Theme.accentText : Theme.secondary)
+                Text(section.title)
+                    .font(.system(size: 14, weight: selected ? .semibold : .medium))
+                    .foregroundStyle(selected ? Theme.accentText : Theme.text)
+                Spacer(minLength: 4)
+                CountBadge(count: badge)
+            }
+            .padding(.horizontal, Theme.Space.m)
+            .frame(height: 36)
+            .background(
+                Capsule().fill(selected ? Theme.accentSoft : (hover ? Theme.rowHover : Color.clear))
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityValue(badge > 0 ? "\(badge)" : "")
     }
 }
 
@@ -215,7 +309,7 @@ struct EngineStatusFooter: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
             UsageSummary()
             ForEach(shownEngines) { engine in
                 HStack(spacing: 6) {
@@ -223,17 +317,16 @@ struct EngineStatusFooter: View {
                         .fill(colour(for: engine))
                         .frame(width: 7, height: 7)
                     Text(engine.displayName)
-                        .font(.caption)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.text)
                     Spacer()
                     Text(label(for: engine))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondary)
                 }
             }
         }
-        .padding(12)
-        .background(Theme.raised.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .padding(10)
+        .card(padding: Theme.Space.l - 2, radius: 20, fill: Theme.field)
         .contentShape(Rectangle())
         .onTapGesture { model.section = .settings }
         .help("Engines Launchpad can use. Click for details.")
@@ -245,9 +338,9 @@ struct EngineStatusFooter: View {
     }
 
     private func colour(for engine: BotEngine) -> Color {
-        guard let found = model.engineLocations else { return .gray }
-        if engine == .local { return found[engine] != nil ? Theme.success : .gray }
-        return found[engine] != nil ? Theme.success : Theme.failure
+        guard let found = model.engineLocations else { return Theme.secondary }
+        if engine == .local { return found[engine] != nil ? Theme.successFill : Theme.secondary }
+        return found[engine] != nil ? Theme.successFill : Theme.failureFill
     }
 
     private func label(for engine: BotEngine) -> String {
@@ -263,17 +356,16 @@ struct SectionIntro: View {
     let section: SidebarSection
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: section.symbol)
-                .font(.system(size: 28))
-                .foregroundStyle(Theme.accent)
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            IconTile(symbol: section.symbol, size: 44)
             Text(section.title)
                 .font(Theme.rounded(.title2, weight: .bold))
+                .foregroundStyle(Theme.text)
             Text(section.blurb)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
             Spacer()
         }
-        .padding(20)
+        .padding(Theme.Space.xl)
         .frame(maxWidth: .infinity, alignment: .leading)
         .navigationTitle(section.title)
     }
@@ -286,42 +378,36 @@ struct EmptyDetail: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        ContentUnavailableView {
-            Label(title, systemImage: symbol)
-        } description: {
-            Text(message)
-        } actions: {
-            HStack {
-                switch model.section {
-                case .groups:
-                    Button { model.showingNewGroup = true } label: { Label("New Group", systemImage: "plus") }
-                        .buttonStyle(.borderedProminent)
-                    Button("Hire the Dev team") { model.section = .hire }
-                case .skills:
-                    Button { model.newSkill() } label: { Label("New Skill", systemImage: "plus") }
-                        .buttonStyle(.borderedProminent)
-                case .connectors:
-                    Button { model.addConnector() } label: { Label("Add Connector", systemImage: "plus") }
-                        .buttonStyle(.borderedProminent)
-                case .routines:
-                    Button { model.newRoutine() } label: { Label("New Routine", systemImage: "plus") }
-                        .buttonStyle(.borderedProminent)
-                case .workflows:
-                    Button { model.newWorkflow() } label: { Label("New Workflow", systemImage: "plus") }
-                        .buttonStyle(.borderedProminent)
-                case .tasks:
-                    EmptyView()
-                default:
-                    Button { model.showingNewBot = true } label: { Label("New Bot", systemImage: "plus") }
-                        .buttonStyle(.borderedProminent)
-                    if model.bots.isEmpty {
-                        Button("Hire ready-made bots") { model.section = .hire }
-                    }
+        EmptyState(symbol: symbol, title: title, message: message) {
+            switch model.section {
+            case .groups:
+                Button { model.showingNewGroup = true } label: { Label("New Group", systemImage: "plus") }
+                    .buttonStyle(PillButtonStyle())
+                Button("Hire the Dev team") { model.section = .hire }
+                    .buttonStyle(SoftButtonStyle())
+            case .skills:
+                Button { model.newSkill() } label: { Label("New Skill", systemImage: "plus") }
+                    .buttonStyle(PillButtonStyle())
+            case .connectors:
+                Button { model.addConnector() } label: { Label("Add Connector", systemImage: "plus") }
+                    .buttonStyle(PillButtonStyle())
+            case .routines:
+                Button { model.newRoutine() } label: { Label("New Routine", systemImage: "plus") }
+                    .buttonStyle(PillButtonStyle())
+            case .workflows:
+                Button { model.newWorkflow() } label: { Label("New Workflow", systemImage: "plus") }
+                    .buttonStyle(PillButtonStyle())
+            case .tasks:
+                EmptyView()
+            default:
+                Button { model.showingNewBot = true } label: { Label("New Bot", systemImage: "plus") }
+                    .buttonStyle(PillButtonStyle())
+                if model.bots.isEmpty {
+                    Button("Hire ready-made bots") { model.section = .hire }
+                        .buttonStyle(SoftButtonStyle())
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.canvas)
     }
 }
 #endif

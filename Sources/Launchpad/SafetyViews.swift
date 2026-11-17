@@ -45,7 +45,7 @@ struct LiveApprovalCardView: View {
                 }
                 .frame(maxHeight: 140)
                 .padding(8)
-                .background(Theme.canvas, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(Theme.code, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             state
         }
@@ -64,16 +64,16 @@ struct LiveApprovalCardView: View {
                 } label: {
                     Label("Approve", systemImage: "checkmark")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle())
                 Button {
                     model.answerApproval(card.id, in: chatId, .deny)
                 } label: {
                     Label("Decline", systemImage: "xmark")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SoftButtonStyle())
                 if model.canAlwaysAllow(card, botId: botId) {
                     Button("Always allow") { model.answerApproval(card.id, in: chatId, .always) }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(SoftButtonStyle())
                         .help("Approve, and let \(model.bot(botId)?.name ?? "this bot") use \(ToolNames.readable(card.tool)) for this without asking again. You can take it back in the bot's settings.")
                 }
             }
@@ -87,11 +87,11 @@ struct LiveApprovalCardView: View {
                 .font(.callout.weight(.medium))
         case .denied:
             Label("Declined", systemImage: "xmark.circle.fill")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
                 .font(.callout.weight(.medium))
         case .expired:
             Label("Nobody answered in time, so it didn't go ahead", systemImage: "clock.badge.xmark")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
                 .font(.callout.weight(.medium))
         }
     }
@@ -110,12 +110,12 @@ struct ReplyChangesBar: View {
         let files = message.changedFiles ?? []
         HStack(spacing: 10) {
             Image(systemName: message.undone == true ? "arrow.uturn.backward.circle" : "doc.badge.ellipsis")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
             Text(message.undone == true
                  ? "Undone: \(files.count) file change\(files.count == 1 ? "" : "s") put back"
                  : "Changed \(files.count) file\(files.count == 1 ? "" : "s") in its folder")
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
             Spacer()
             if message.undone != true {
                 Button {
@@ -130,7 +130,7 @@ struct ReplyChangesBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Theme.raised.opacity(0.7), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .confirmationDialog("Undo this reply's changes?", isPresented: $confirm) {
             Button("Undo Changes", role: .destructive) { model.undoReply(message.id, in: chatId) }
         } message: {
@@ -161,7 +161,7 @@ struct PermissionsSection: View {
                         Text(category.title)
                         Text(category.detail)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
@@ -187,20 +187,20 @@ struct PermissionsSection: View {
         Section {
             if bot.rules.alwaysAllowed.isEmpty {
                 Text("Nothing yet. Pick “Always allow” on an approval card to add one.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
             }
             ForEach(bot.rules.alwaysAllowed, id: \.self) { key in
                 let parts = key.split(separator: ":", maxSplits: 1).map(String.init)
                 let category = ApprovalCategory(rawValue: parts.first ?? "")
                 HStack {
                     Image(systemName: category?.symbol ?? "checkmark.seal")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .frame(width: 22)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(ToolNames.readable(parts.count > 1 ? parts[1] : key))
                         Text(category?.title ?? (parts.first ?? ""))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                     }
                     Spacer()
                     Button {
@@ -275,7 +275,7 @@ struct LockDownSection: View {
                     Text("Lock down")
                     Text("Only the websites below, no opening or scripting other apps, no startup files, and no “Always allow” for sends, deletes, spending or changes.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -286,7 +286,7 @@ struct LockDownSection: View {
                 }
                 ForEach(bot.sites, id: \.self) { site in
                     HStack {
-                        Image(systemName: "globe").foregroundStyle(.secondary)
+                        Image(systemName: "globe").foregroundStyle(Theme.secondary)
                         Text(site)
                         Spacer()
                         Button {
@@ -309,7 +309,7 @@ struct LockDownSection: View {
                 if !automatic.isEmpty {
                     LabeledContent("Added for it") {
                         Text(automatic.joined(separator: ", "))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                             .multilineTextAlignment(.trailing)
                     }
                     .help("Its engine's and its connectors' own sites, so it can still work.")

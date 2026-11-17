@@ -15,7 +15,7 @@ struct PhoneSettingsSection: View {
                     Text("Chat from your iPhone")
                     Text("Your bots keep running on this Mac. The Launchpad app on your phone finds it on the same Wi-Fi.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                 }
             }
 
@@ -53,15 +53,15 @@ struct PhoneSettingsSection: View {
                 }
 
                 if link.devices.isEmpty {
-                    Text("No phones paired yet.").foregroundStyle(.secondary)
+                    Text("No phones paired yet.").foregroundStyle(Theme.secondary)
                 } else {
                     ForEach(link.devices) { device in
                         HStack {
                             Image(systemName: "iphone")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.secondary)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(device.name)
-                                Text(seen(device)).font(.caption).foregroundStyle(.secondary)
+                                Text(seen(device)).font(.caption).foregroundStyle(Theme.secondary)
                             }
                             Spacer()
                             Button("Remove…", role: .destructive) { removing = device }

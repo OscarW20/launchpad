@@ -26,7 +26,7 @@ struct MarketplaceView: View {
                 .frame(maxWidth: 360)
                 Spacer()
                 TextField("Search", text: $search)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(PillFieldStyle())
                     .frame(width: 220)
             }
             .padding(.horizontal, 24)
@@ -46,7 +46,6 @@ struct MarketplaceView: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .background(Theme.canvas)
         .navigationTitle("Marketplace")
         .sheet(item: $installing) { preset in
             InstallAppSheet(preset: preset)
@@ -70,18 +69,18 @@ struct MarketplaceView: View {
                     Text("\(pack.emoji) \(pack.name)")
                         .font(Theme.rounded(.title2, weight: .bold))
                     Text(pack.tagline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: -8) {
                         ForEach(pack.templates) { t in
                             AvatarView(bot: t.bot, size: 32)
-                                .background(Circle().fill(Theme.surface))
+                                .background(Circle().fill(Theme.card))
                                 .help(t.name)
                         }
                     }
                     Text("#\(pack.groupId) · lead: \(HireCatalog.template(pack.lead)?.name ?? pack.lead)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                 }
                 Spacer()
                 Button {
@@ -89,7 +88,7 @@ struct MarketplaceView: View {
                 } label: {
                     Label(hired ? "Open #\(pack.groupId)" : "Add team", systemImage: hired ? "bubble.left.and.bubble.right.fill" : "person.3.fill")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle())
                 .controlSize(.large)
             }
             .padding(20)
@@ -138,7 +137,7 @@ struct MarketplaceView: View {
                             } else {
                                 Spacer()
                                 Button("Add skill") { model.installSkill(skill) }
-                                    .buttonStyle(.borderedProminent)
+                                    .buttonStyle(PillButtonStyle())
                             }
                         }
                     }
@@ -171,7 +170,7 @@ struct MarketplaceView: View {
                             } else {
                                 Spacer()
                                 Button("Add app") { installing = preset }
-                                    .buttonStyle(.borderedProminent)
+                                    .buttonStyle(PillButtonStyle())
                             }
                         }
                     }
@@ -196,7 +195,7 @@ struct AppLogo: View {
                 .frame(width: size * 0.7, height: size * 0.7)
                 .frame(width: size, height: size)
                 .background(Color.white, in: RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous).strokeBorder(Theme.border))
+                .overlay(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous).strokeBorder(Theme.line))
         } else {
             Image(systemName: symbol)
                 .font(.system(size: size * 0.45, weight: .semibold))
@@ -230,7 +229,7 @@ struct CatalogCard<Actions: View>: View {
                 AppLogo(logo: logo, symbol: symbol, tint: tint, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(Theme.rounded(.headline, weight: .bold))
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                    Text(subtitle).font(.caption).foregroundStyle(Theme.secondary)
                 }
             }
             Text(blurb)
@@ -241,8 +240,8 @@ struct CatalogCard<Actions: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.border))
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
     }
 }
 
@@ -260,7 +259,7 @@ struct InstallAppSheet: View {
                 AppLogo(logo: preset.logo, symbol: preset.symbol, tint: preset.tint, size: 48)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Add \(preset.name)").font(Theme.rounded(.title2, weight: .bold))
-                    Text(preset.blurb).foregroundStyle(.secondary)
+                    Text(preset.blurb).foregroundStyle(Theme.secondary)
                 }
             }
             .padding(20)
@@ -299,7 +298,7 @@ struct InstallAppSheet: View {
                     Text(error).foregroundStyle(Theme.failure)
                 }
             }
-            .formStyle(.grouped)
+            .themedForm()
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
@@ -314,7 +313,7 @@ struct InstallAppSheet: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle())
             }
             .padding(16)
         }

@@ -12,11 +12,17 @@ struct PopOutChat: View {
             if model.chat(chatId) != nil {
                 ConversationView(chatId: chatId, poppedOut: true)
             } else {
-                ContentUnavailableView("This chat was deleted", systemImage: "trash")
+                EmptyState(symbol: "trash", title: "This chat was deleted")
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .panel()
+        .padding(.horizontal, Theme.Space.m)
+        .padding(.bottom, Theme.Space.m)
+        .padding(.top, Theme.Space.xs)
         .frame(minWidth: 460, minHeight: 520)
-        .background(Theme.canvas)
+        .background(GlowBackground())
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .navigationTitle(model.chat(chatId)?.title ?? "Chat")
     }
 }

@@ -12,18 +12,17 @@ struct ConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             ConversationHeader(chatId: chatId, poppedOut: poppedOut)
-            Divider()
+            Rectangle().fill(Theme.line).frame(height: 1)
             PinnedBar(chatId: chatId)
             MessagesList(chatId: chatId)
             Composer(chatId: chatId)
         }
-        .background(Theme.canvas)
         .overlay {
             if dropping {
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                     .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 2, dash: [6]))
-                    .background(Theme.accent.opacity(0.06))
-                    .overlay(Label("Drop to attach", systemImage: "paperclip").font(.title3).foregroundStyle(Theme.accent))
+                    .background(Theme.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+                    .overlay(Label("Drop to attach", systemImage: "paperclip").font(.title3.weight(.semibold)).foregroundStyle(Theme.accentText))
                     .padding(8)
                     .allowsHitTesting(false)
             }
@@ -45,19 +44,19 @@ struct ConversationHeader: View {
 
     var body: some View {
         let chat = model.chat(chatId)
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Space.m) {
             if chat?.kind == .group {
                 groupInfo(model.group(chat?.groupId))
             } else {
                 botInfo(model.bot(chat?.botId))
             }
-            Spacer()
+            Spacer(minLength: Theme.Space.s)
             if let usage = model.contextByChat[chatId] {
                 HStack(spacing: 6) {
-                    ContextRing(usage: usage)
+                    ContextChip(usage: usage)
                     if usage.isNearlyFull {
                         Button("Compact") { model.compact(chatId) }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(SoftButtonStyle())
                             .controlSize(.small)
                             .disabled(model.isRunning(chatId))
                             .help("The bot's memory of this chat is nearly full. Compact keeps the messages and starts it from a recap.")
@@ -66,22 +65,23 @@ struct ConversationHeader: View {
             }
             actions(chat)
         }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(Theme.surface.opacity(0.6))
+        .padding(.horizontal, Theme.Space.l)
+        .padding(.vertical, Theme.Space.m)
     }
 
     @ViewBuilder private func botInfo(_ bot: Bot?) -> some View {
         AvatarView(bot: bot, size: 40)
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(bot?.name ?? model.chat(chatId)?.title ?? "Chat")
-                .font(Theme.rounded(.title3, weight: .bold))
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Theme.text)
+                .lineLimit(1)
             HStack(spacing: 6) {
                 if let bot {
-                    if !bot.role.isEmpty {
-                        Text(bot.role).foregroundStyle(.secondary).lineLimit(1)
+                    if model.isRunning(chatId) {
+                        WorkingStatus()
+                    } else if !bot.role.isEmpty {
+                        Text(bot.role).foregroundStyle(Theme.secondary).lineLimit(1)
                     }
                     Pill(text: bot.model.map { "\(bot.engine.displayName) · \($0)" } ?? bot.engine.displayName,
                          symbol: EngineStyle.symbol(bot.engine))
@@ -89,68 +89,93 @@ struct ConversationHeader: View {
                         Pill(text: bot.permission.displayName, symbol: permissionSymbol(bot.permission))
                     }
                 } else {
-                    Text("This chat's bot was removed.").foregroundStyle(.secondary)
+                    Text("This chat's bot was removed.").foregroundStyle(Theme.secondary)
                 }
             }
-            .font(.caption)
+            .font(.system(size: 12))
         }
     }
 
     @ViewBuilder private func groupInfo(_ group: BotGroup?) -> some View {
         GroupAvatar(group: group, size: 40)
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(group?.displayName ?? "Group")
-                .font(Theme.rounded(.title3, weight: .bold))
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Theme.text)
+                .lineLimit(1)
             if let group {
                 HStack(spacing: -6) {
                     ForEach(group.everyone, id: \.self) { id in
                         AvatarView(bot: model.bot(id), size: 20)
-                            .background(Circle().fill(Theme.surface))
+                            .background(Circle().fill(Theme.card))
                             .help(model.bot(id)?.name ?? id)
                     }
-                    Text("\(group.everyone.count) members · lead: \(model.bot(group.lead)?.name ?? "none") · hand-off limit \(group.handoffLimit)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 12)
+                    Group {
+                        if model.isRunning(chatId) {
+                            WorkingStatus()
+                        } else {
+                            Text("\(group.everyone.count) members · lead: \(model.bot(group.lead)?.name ?? "none") · hand-off limit \(group.handoffLimit)")
+                                .foregroundStyle(Theme.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .font(.system(size: 12))
+                    .padding(.leading, 12)
                 }
             } else {
-                Text("This group was removed.").font(.caption).foregroundStyle(.secondary)
+                Text("This group was removed.").font(.system(size: 12)).foregroundStyle(Theme.secondary)
             }
         }
     }
 
     @ViewBuilder private func actions(_ chat: ChatMeta?) -> some View {
         if let chat {
-            ThreadMenu(chatId: chatId)
-            if chat.kind == .group, let group = model.group(chat.groupId) {
-                Button { model.summaryGroupId = group.id } label: { Label("Group Summary", systemImage: "doc.text") }
-                    .help("Decisions, owners and open issues, kept by the lead")
-                Button { SystemActions.reveal(model.groupStore.workspace(group.id)) } label: { Label("Project Folder", systemImage: "folder") }
-                    .help("Show the group's shared project folder")
-                Button {
-                    model.selectedGroupId = group.id
-                    model.section = .groups
-                } label: { Label("Edit Group", systemImage: "slider.horizontal.3") }
-                    .help("Members, lead, rules and hand-off limit")
-            } else if let bot = model.bot(chat.botId) {
-                Button { model.newChat(with: bot) } label: { Label("New Chat", systemImage: "square.and.pencil") }
-                    .help("Start a fresh chat with \(bot.name)")
-                Button { SystemActions.reveal(model.paths.botDir(bot.id)) } label: { Label("Show Folder", systemImage: "folder") }
-                    .help("Show \(bot.name)'s folder in Finder")
-                Button {
-                    model.selectedBotId = bot.id
-                    model.section = .bots
-                } label: { Label("Edit Bot", systemImage: "slider.horizontal.3") }
-                    .help("Edit \(bot.name)")
-            }
-            Button { model.teachSkill(from: chatId) } label: { Label("Teach a Skill", systemImage: "graduationcap") }
+            HStack(spacing: Theme.Space.s) {
+                ThreadMenu(chatId: chatId)
+                if chat.kind == .group, let group = model.group(chat.groupId) {
+                    Button { model.summaryGroupId = group.id } label: { Label("Group Summary", systemImage: "doc.text") }
+                        .buttonStyle(CircleButtonStyle())
+                        .help("Decisions, owners and open issues, kept by the lead")
+                } else if let bot = model.bot(chat.botId) {
+                    Button { model.newChat(with: bot) } label: { Label("New Chat", systemImage: "square.and.pencil") }
+                        .buttonStyle(CircleButtonStyle())
+                        .help("Start a fresh chat with \(bot.name)")
+                }
+                CircleMenu(symbol: "ellipsis", help: "More") {
+                    if chat.kind == .group, let group = model.group(chat.groupId) {
+                        Button { SystemActions.reveal(model.groupStore.workspace(group.id)) } label: { Label("Project Folder", systemImage: "folder") }
+                            .help("Show the group's shared project folder")
+                        Button {
+                            model.selectedGroupId = group.id
+                            model.section = .groups
+                        } label: { Label("Edit Group", systemImage: "slider.horizontal.3") }
+                            .help("Members, lead, rules and hand-off limit")
+                    } else if let bot = model.bot(chat.botId) {
+                        Button { SystemActions.reveal(model.paths.botDir(bot.id)) } label: { Label("Show Folder", systemImage: "folder") }
+                            .help("Show \(bot.name)'s folder in Finder")
+                        Button {
+                            model.selectedBotId = bot.id
+                            model.section = .bots
+                        } label: { Label("Edit Bot", systemImage: "slider.horizontal.3") }
+                            .help("Edit \(bot.name)")
+                    }
+                    Button { model.exportChat(chatId) } label: { Label("Export", systemImage: "square.and.arrow.up") }
+                        .help("Save this chat as a Markdown file")
+                        .disabled(model.messages(for: chatId).isEmpty)
+                    if !poppedOut {
+                        OpenInWindowButton(chatId: chatId)
+                    }
+                }
+                let canTeach = !(model.messages(for: chatId).isEmpty || model.isRunning(chatId))
+                ViewThatFits(in: .horizontal) {
+                    Button { model.teachSkill(from: chatId) } label: { Label("Teach a Skill", systemImage: "graduationcap") }
+                        .buttonStyle(PillButtonStyle())
+                        .fixedSize()
+                    Button { model.teachSkill(from: chatId) } label: { Label("Teach a Skill", systemImage: "graduationcap") }
+                        .buttonStyle(CircleButtonStyle(kind: .accent))
+                }
                 .help("Turn what happened in this chat into a skill you can edit")
-                .disabled(model.messages(for: chatId).isEmpty || model.isRunning(chatId))
-            Button { model.exportChat(chatId) } label: { Label("Export", systemImage: "square.and.arrow.up") }
-                .help("Save this chat as a Markdown file")
-                .disabled(model.messages(for: chatId).isEmpty)
-            if !poppedOut {
-                OpenInWindowButton(chatId: chatId)
+                .disabled(!canTeach)
             }
         }
     }
@@ -174,18 +199,55 @@ enum EngineStyle {
     }
 }
 
+/// A small outlined chip, e.g. "Claude Code · sonnet".
 struct Pill: View {
     let text: String
     let symbol: String
 
     var body: some View {
-        Label(text, systemImage: symbol)
-            .labelStyle(.titleAndIcon)
-            .font(.caption2.weight(.medium))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(Theme.raised, in: Capsule())
-            .foregroundStyle(.secondary)
+        HStack(spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
+            Text(text).lineLimit(1)
+        }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(Theme.text)
+        .padding(.horizontal, 8)
+        .frame(height: 22)
+        .background(Capsule().fill(Theme.field))
+        .overlay(Capsule().strokeBorder(Theme.line))
+        .fixedSize()
+    }
+}
+
+/// "working" with a green dot.
+struct WorkingStatus: View {
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle().fill(Theme.successFill).frame(width: 7, height: 7)
+            Text("working").fontWeight(.medium)
+        }
+        .foregroundStyle(Theme.success)
+        .fixedSize()
+    }
+}
+
+/// The context ring with its percentage, as a chip.
+struct ContextChip: View {
+    let usage: ContextUsage
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ContextRing(usage: usage)
+            Text("\(Int((usage.fraction * 100).rounded()))% context")
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(usage.isNearlyFull ? Theme.warning : Theme.text)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
+        .background(Capsule().fill(Theme.field))
+        .overlay(Capsule().strokeBorder(Theme.line))
+        .fixedSize()
     }
 }
 
@@ -208,7 +270,7 @@ struct MessagesList: View {
                         MessageRow(message: message, chatId: chatId)
                             .id(message.id)
                             .background(highlighted == message.id ? Theme.accent.opacity(0.12) : Color.clear,
-                                        in: RoundedRectangle(cornerRadius: 18))
+                                        in: RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous))
                     }
                     ForEach(live) { run in
                         MessageRow(message: run.message, chatId: chatId, activeStep: run.builder.activeStep, isLive: true)
@@ -227,7 +289,7 @@ struct MessagesList: View {
                         Label(waiting.count == 1 ? "Your message is next." : "\(waiting.count) messages are next.",
                               systemImage: "clock")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                             .padding(.leading, 40)
                     }
                     Color.clear
@@ -291,19 +353,23 @@ struct WelcomeCard: View {
             }
             Text(isGroup ? "Post a task to \(group?.displayName ?? "the group")" : "Say hi to \(bot?.name ?? "your bot")")
                 .font(Theme.rounded(.title2, weight: .bold))
+                .foregroundStyle(Theme.text)
             Text(isGroup ? "\(model.bot(group?.lead)?.name ?? "The lead") replies first and hands work out by @mention." : (bot?.role ?? ""))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
             VStack(spacing: 8) {
                 ForEach(suggestions, id: \.self) { suggestion in
                     Button {
                         model.send(chatId: chatId, text: suggestion)
                     } label: {
                         Text(suggestion)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.text)
                             .frame(maxWidth: 400)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Theme.surface, in: Capsule())
-                            .overlay(Capsule().strokeBorder(Theme.border))
+                            .padding(.horizontal, Theme.Space.l)
+                            .padding(.vertical, 10)
+                            .background(Theme.card, in: Capsule())
+                            .overlay(Capsule().strokeBorder(Theme.line))
+                            .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -347,19 +413,20 @@ struct Composer: View {
                                 Text(url.lastPathComponent).lineLimit(1)
                                 Button { model.removeAttachment(url, from: chatId) } label: { Image(systemName: "xmark.circle.fill") }
                                     .buttonStyle(.plain)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                             }
                             .font(.callout)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Theme.raised, in: Capsule())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Theme.field, in: Capsule())
+                            .overlay(Capsule().strokeBorder(Theme.line))
                         }
                     }
                 }
-                .padding(.leading, 14)
+                .padding(.leading, 48)
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                Menu {
+            HStack(alignment: .bottom, spacing: Theme.Space.s) {
+                CircleMenu(symbol: "plus", help: "Attach files, send a GIF, start a poll, ask on the side, or use a saved prompt", size: 40) {
                     Button("Attach Files…") { model.chooseAttachments(for: chatId) }
                     Button("Send a GIF…") { showingGifs = true }
                     Button("Start a Poll…") { showingPoll = true }
@@ -368,16 +435,7 @@ struct Composer: View {
                     }
                     Divider()
                     SavedPromptsMenu(chatId: chatId)
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 30, height: 34)
                 }
-                .menuStyle(.button)
-                .buttonStyle(.borderless)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("Attach files, send a GIF, start a poll, ask on the side, or use a saved prompt")
                 .popover(isPresented: $showingGifs) { GifPicker(chatId: chatId) }
                 .sheet(isPresented: $showingPoll) { NewPollSheet(chatId: chatId) }
 
@@ -391,12 +449,14 @@ struct Composer: View {
                 .lineLimit(1...10)
                 .focused($focused)
                 .onSubmit { model.send(chatId: chatId) }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 14)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .font(.system(size: 14))
+                .padding(.vertical, 11)
+                .padding(.horizontal, Theme.Space.l)
+                .frame(minHeight: 40)
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(focused ? Theme.accent.opacity(0.6) : Theme.border)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(focused ? Theme.accent.opacity(0.6) : Theme.line, lineWidth: focused ? 1.5 : 1)
                 )
 
                 if isGroup && !running {
@@ -404,12 +464,9 @@ struct Composer: View {
                         model.askEveryone(chatId: chatId)
                     } label: {
                         Label("Huddle", systemImage: "person.3.sequence")
-                            .font(.callout.weight(.medium))
-                            .padding(.horizontal, 12)
-                            .frame(height: 34)
-                            .background(Theme.raised, in: Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SoftButtonStyle())
+                    .controlSize(.large)
                     .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .help("A huddle: every member gives a short view on your message, then the lead sums up")
                 }
@@ -418,26 +475,18 @@ struct Composer: View {
                     Button {
                         model.stop(chatId)
                     } label: {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 13, weight: .bold))
-                            .frame(width: 34, height: 34)
-                            .background(Theme.failure, in: Circle())
-                            .foregroundStyle(.white)
+                        Label("Stop", systemImage: "stop.fill")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(CircleButtonStyle(kind: .destructive, size: 40))
                     .keyboardShortcut(.cancelAction)
                     .help("Stop (Esc)")
                 }
                 Button {
                     model.send(chatId: chatId)
                 } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 15, weight: .bold))
-                        .frame(width: 34, height: 34)
-                        .background(empty ? Color.gray.opacity(0.35) : Theme.accent, in: Circle())
-                        .foregroundStyle(.white)
+                    Label("Send", systemImage: "arrow.up")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(CircleButtonStyle(kind: .accent, size: 40))
                 .disabled(empty)
                 .help(running ? (isGroup ? "Send: the group picks it up when it's free" : "Send: \(name) stops and carries on with your new message") : "Send (Return)")
             }
@@ -445,13 +494,13 @@ struct Composer: View {
                  ? (isGroup ? "\(name) are working. You can still write; they pick it up next. Esc stops."
                             : "\(name) is working. Writing now steers it; Esc stops.")
                  : "Return to send · ⌥Return for a new line · drop files to attach")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 52)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.secondary)
+                .padding(.leading, 56)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.horizontal, Theme.Space.l)
+        .padding(.top, Theme.Space.s)
+        .padding(.bottom, Theme.Space.m)
         .onAppear { focused = true }
     }
 }
@@ -492,22 +541,21 @@ struct SideQuestionBar: View {
     var body: some View {
         let busy = model.isAskingSide(chatId)
         HStack(spacing: 8) {
-            Image(systemName: "bubble.left.and.text.bubble.right").foregroundStyle(Theme.accent)
+            Image(systemName: "bubble.left.and.text.bubble.right").foregroundStyle(Theme.accentText)
             TextField("Ask \(name) on the side (it keeps working on the main task)…", text: $text)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(PillFieldStyle())
                 .onSubmit(ask)
                 .disabled(busy)
             if busy {
                 ProgressView().controlSize(.small)
             } else {
                 Button("Ask", action: ask)
+                    .buttonStyle(SoftButtonStyle())
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            Button { close() } label: { Image(systemName: "xmark") }
-                .buttonStyle(.borderless)
-                .help("Close")
+            CircleIconButton(symbol: "xmark", help: "Close", size: 28) { close() }
         }
-        .padding(.leading, 14)
+        .padding(.leading, 48)
     }
 
     private func ask() {
@@ -526,21 +574,19 @@ struct TeachSkillSheet: View {
         let teach = model.teach
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Image(systemName: "graduationcap.fill")
-                    .font(.title2)
-                    .foregroundStyle(Theme.accent)
+                IconTile(symbol: "graduationcap.fill", size: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Teach a skill from this chat")
                         .font(Theme.rounded(.title3, weight: .bold))
                     Text("A SKILL.md draft of what happened here. Edit it, then save it to your library.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                 }
             }
             switch teach?.phase {
             case .drafting:
                 HStack {
                     ProgressView().controlSize(.small)
-                    Text("Writing a draft…").foregroundStyle(.secondary)
+                    Text("Writing a draft…").foregroundStyle(Theme.secondary)
                 }
                 ScrollView {
                     Text(teach?.draft ?? "")
@@ -556,8 +602,9 @@ struct TeachSkillSheet: View {
                 TextEditor(text: $text)
                     .font(.system(.body, design: .monospaced))
                     .scrollContentBackground(.hidden)
-                    .padding(6)
-                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(Theme.Space.s)
+                    .background(Theme.field, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).strokeBorder(Theme.line))
             case nil:
                 Spacer()
             }
@@ -567,12 +614,13 @@ struct TeachSkillSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Button("Save Skill") { model.saveTaughtSkill(text) }
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PillButtonStyle())
                     .disabled(teach?.phase != .ready || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .padding(20)
+        .padding(Theme.Space.xl)
         .frame(width: 680, height: 600)
+        .sheetBackground()
         .onChange(of: model.teach?.phase) {
             if model.teach?.phase == .ready { text = model.teach?.draft ?? "" }
         }
@@ -599,8 +647,9 @@ struct GroupSummarySheet: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
+        .padding(Theme.Space.xl)
         .frame(width: 620, height: 560)
+        .sheetBackground()
     }
 }
 #endif

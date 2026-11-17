@@ -16,7 +16,7 @@ struct LaunchpadApp: App {
                 .tint(Theme.accent)
                 .frame(minWidth: 1000, minHeight: 620)
         }
-        .windowToolbarStyle(.unified)
+        .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             CommandGroup(after: .newItem) {
                 Button("New Bot…") { model.showingNewBot = true }

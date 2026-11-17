@@ -60,7 +60,7 @@ struct MenuBarContent: View {
 
             sectionTitle("Recent chats") { EmptyView() }
             if model.chats.isEmpty {
-                Text("No chats yet.").font(.callout).foregroundStyle(.secondary).padding(.horizontal, 14)
+                Text("No chats yet.").font(.callout).foregroundStyle(Theme.secondary).padding(.horizontal, 14)
             }
             ForEach(Array(model.chats.prefix(6))) { chat in
                 MenuRow(title: chat.title, detail: chat.lastPreview ?? "No messages yet", avatar: avatar(chat),
@@ -80,7 +80,7 @@ struct MenuBarContent: View {
                 Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
                     .help("Quit Launchpad")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(SoftButtonStyle())
             .controlSize(.small)
             .padding(.horizontal, 10)
             .padding(.bottom, 10)
@@ -100,7 +100,7 @@ struct MenuBarContent: View {
                     Circle().fill(working == 0 ? Theme.success : Theme.accent).frame(width: 6, height: 6)
                     Text(status(working: working))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .lineLimit(1)
                 }
             }
@@ -127,13 +127,13 @@ struct MenuBarContent: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "sparkle").foregroundStyle(Theme.accent)
-                Text("Ask your team anything…").foregroundStyle(.secondary)
+                Text("Ask your team anything…").foregroundStyle(Theme.secondary)
                 Spacer()
-                Text("⌃⌥B").font(.caption).foregroundStyle(.secondary)
+                Text("⌃⌥B").font(.caption).foregroundStyle(Theme.secondary)
             }
             .padding(.horizontal, 12)
             .frame(height: 34)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.raised))
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.field))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -141,7 +141,7 @@ struct MenuBarContent: View {
 
     private func sectionTitle<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
             Spacer()
             trailing()
         }
@@ -212,11 +212,11 @@ private struct MenuRow<Accessory: View>: View {
                         HStack {
                             Text(title).font(.callout.weight(.medium)).lineLimit(1)
                             Spacer(minLength: 4)
-                            if let trailing { Text(trailing).font(.caption2).foregroundStyle(.secondary) }
+                            if let trailing { Text(trailing).font(.caption2).foregroundStyle(Theme.secondary) }
                         }
                         Text(detail.replacingOccurrences(of: "\n", with: " "))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                             .lineLimit(1)
                     }
                 }
@@ -227,7 +227,7 @@ private struct MenuRow<Accessory: View>: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hover ? Theme.raised : .clear))
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hover ? Theme.field : .clear))
         .onHover { hover = $0 }
     }
 }

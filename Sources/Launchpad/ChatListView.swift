@@ -19,25 +19,27 @@ struct ChatListView: View {
 
     var body: some View {
         @Bindable var model = model
-        VStack(spacing: 0) {
-            Picker("Show", selection: $model.chatFilter) {
-                ForEach(ChatFilter.allCases) { filter in
-                    Text(filter.title).tag(filter)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Theme.Space.s) {
+                SearchField(text: $model.chatSearch, prompt: "Search chats")
+                NewChatMenu(circle: true)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, Theme.Space.l)
+            .padding(.top, Theme.Space.l)
+
+            PillTabs(selection: $model.chatFilter, options: ChatFilter.allCases.map { ($0.title, $0) })
+                .padding(.horizontal, Theme.Space.l)
+                .padding(.top, Theme.Space.m)
+                .padding(.bottom, Theme.Space.s)
 
             let chats = model.filteredChats
             if chats.isEmpty {
                 emptyState
             } else {
-                List(selection: $model.selectedChatId) {
+                PanelList(selection: $model.selectedChatId) {
                     ForEach(chats) { chat in
                         ChatRow(chat: chat)
-                            .tag(chat.id)
+                            .selectableRow(chat.id)
                             .contextMenu {
                                 if let bot = model.bot(chat.botId) {
                                     Button("New Chat with \(bot.name)") { model.newChat(with: bot) }
@@ -49,12 +51,8 @@ struct ChatListView: View {
                             }
                     }
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
             }
         }
-        .background(Theme.canvas)
-        .searchable(text: $model.chatSearch, prompt: "Search chats")
         .navigationTitle("Chats")
         .toolbar {
             ToolbarItem {
@@ -64,34 +62,32 @@ struct ChatListView: View {
                 Button { model.showingSavedMessages = true } label: { Label("Saved Messages", systemImage: "bookmark") }
                     .help("Messages you saved for later (⇧⌘S)")
             }
-            ToolbarItem {
-                NewChatMenu()
-            }
         }
     }
 
     @ViewBuilder private var emptyState: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: Theme.Space.m) {
             Spacer()
             if model.chatFilter == .groups && model.chatSearch.isEmpty {
                 Text("No group chats yet.")
-                    .font(Theme.rounded(.headline))
+                    .font(.system(size: 15, weight: .semibold))
                 Button("New Group") { model.showingNewGroup = true }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PillButtonStyle())
                 Button("Hire the Dev team") { model.section = .hire }
+                    .buttonStyle(SoftButtonStyle())
             } else if !model.chatSearch.isEmpty {
                 Text("No chats match “\(model.chatSearch)”.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
             } else if model.bots.isEmpty {
                 Text("No chats yet.")
-                    .font(Theme.rounded(.headline))
+                    .font(.system(size: 15, weight: .semibold))
                 Text("Create a bot to start your first chat.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                 Button("New Bot") { model.showingNewBot = true }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PillButtonStyle())
             } else {
                 Text("No chats yet.")
-                    .font(Theme.rounded(.headline))
+                    .font(.system(size: 15, weight: .semibold))
                 NewChatMenu()
                     .fixedSize()
             }
@@ -105,9 +101,21 @@ struct ChatListView: View {
 
 struct NewChatMenu: View {
     @Environment(AppModel.self) private var model
+    /// Drawn as the round compose button next to the search field.
+    var circle = false
 
     var body: some View {
-        Menu {
+        if circle {
+            CircleMenu(symbol: "square.and.pencil", help: "Start a new chat", size: 36) { items }
+        } else {
+            Menu { items } label: {
+                Label("New Chat", systemImage: "square.and.pencil")
+            }
+            .help("Start a new chat")
+        }
+    }
+
+    @ViewBuilder private var items: some View {
             if !model.bots.isEmpty {
                 Section("Chat with") {
                     ForEach(model.bots) { bot in
@@ -125,10 +133,6 @@ struct NewChatMenu: View {
             Divider()
             Button("New Bot…") { model.showingNewBot = true }
             Button("New Group…") { model.showingNewGroup = true }
-        } label: {
-            Label("New Chat", systemImage: "square.and.pencil")
-        }
-        .help("Start a new chat")
     }
 }
 
@@ -137,30 +141,41 @@ struct ChatRow: View {
     let chat: ChatMeta
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        let bot = model.bot(chat.botId)
+        HStack(alignment: .center, spacing: Theme.Space.m) {
             if chat.kind == .group {
-                GroupAvatar(group: model.group(chat.groupId), size: 36)
+                GroupAvatar(group: model.group(chat.groupId), size: 40)
             } else {
-                AvatarView(bot: model.bot(chat.botId), size: 36)
+                AvatarView(bot: bot, size: 40)
             }
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(chat.title)
-                        .font(Theme.rounded(.body, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.text)
                         .lineLimit(1)
+                    if chat.kind == .group {
+                        RoleTag(text: "Group")
+                    } else if let role = bot?.role, !role.isEmpty {
+                        RoleTag(text: role)
+                            .layoutPriority(-1)
+                    }
                     Spacer(minLength: 4)
                     Text(TimeLabel.short(chat.updatedAt))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondary)
                 }
                 if model.isRunning(chat.id) {
-                    Label("working…", systemImage: "ellipsis")
-                        .font(.callout)
-                        .foregroundStyle(Theme.accent)
+                    HStack(spacing: 5) {
+                        Circle().fill(Theme.successFill).frame(width: 6, height: 6)
+                        Text("working…")
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.success)
                 } else {
                     Text(previewText)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.secondary)
                         .lineLimit(2)
                 }
             }
@@ -171,7 +186,6 @@ struct ChatRow: View {
     private var previewText: String {
         let p = (chat.lastPreview ?? "").replacingOccurrences(of: "\n", with: " ")
         if !p.isEmpty { return p }
-        if let role = model.bot(chat.botId)?.role, !role.isEmpty { return role }
         if let group = model.group(chat.groupId) { return "\(group.everyone.count) members" }
         return "Say hello"
     }

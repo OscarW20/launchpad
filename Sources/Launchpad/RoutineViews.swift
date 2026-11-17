@@ -10,7 +10,7 @@ struct RoutineListView: View {
 
     var body: some View {
         @Bindable var model = model
-        List(selection: $model.selectedRoutineId) {
+        PanelList(selection: $model.selectedRoutineId) {
             ForEach(model.routines) { r in
                 HStack(spacing: 10) {
                     Image(systemName: RoutineListView.icon(r))
@@ -20,7 +20,7 @@ struct RoutineListView: View {
                         Text(r.name).font(Theme.rounded(.body, weight: .semibold))
                         Text("\(r.summary) → \(model.targetName(r.target))")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                             .lineLimit(1)
                         if r.missedPending != nil {
                             Label("Missed \(r.missedCount ?? 1) run\((r.missedCount ?? 1) == 1 ? "" : "s")", systemImage: "exclamationmark.circle.fill")
@@ -37,21 +37,16 @@ struct RoutineListView: View {
                         }
                     }
                     Spacer()
-                    if !r.enabled { Text("Off").font(.caption).foregroundStyle(.secondary) }
+                    if !r.enabled { Text("Off").font(.caption).foregroundStyle(Theme.secondary) }
                 }
                 .padding(.vertical, 3)
-                .tag(r.id)
+                .selectableRow(r.id)
             }
         }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
-        .background(Theme.canvas)
         .navigationTitle("Routines")
-        .toolbar {
-            ToolbarItem {
-                Button { model.newRoutine() } label: { Label("New Routine", systemImage: "plus") }
-                    .help("Create a routine")
-            }
+        .columnHeader("Routines") {
+            Button { model.newRoutine() } label: { Label("New Routine", systemImage: "plus") }
+                .help("Create a routine")
         }
     }
 
@@ -134,7 +129,7 @@ struct RoutineDetailView: View {
                                 Text("Each run in its own chat")
                                 Text("Keeps the newest \(RoutineRuns.kept) run chats; older ones are deleted.")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                             }
                         }
                     } header: {
@@ -154,12 +149,11 @@ struct RoutineDetailView: View {
                         }
                     }
                 }
-                .formStyle(.grouped)
+                .themedForm()
             } else {
                 ContentUnavailableView("Routine not found", systemImage: "questionmark.circle")
             }
         }
-        .background(Theme.canvas)
         .navigationTitle(draft?.name ?? "Routine")
         .toolbar {
             ToolbarItem {
@@ -327,10 +321,10 @@ struct MissedRunsBanner: View {
                     .font(.callout.weight(.medium))
                 Text("Your Mac was asleep or Launchpad was closed.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                 HStack {
                     Button("Run Now") { model.runRoutineNow(routine.id) }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PillButtonStyle())
                     Button("Skip") { model.skipMissed(routine.id) }
                 }
                 .controlSize(.small)
@@ -382,7 +376,7 @@ struct WebhookSection: View {
                     HStack {
                         Text("Try it from Terminal")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                         Spacer()
                         CopyButton(text: WebhookAuth.curl(for: routineId, token: token))
                     }
@@ -391,7 +385,7 @@ struct WebhookSection: View {
                         .textSelection(.enabled)
                         .padding(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Theme.canvas, in: RoundedRectangle(cornerRadius: 8))
+                        .background(Theme.code, in: RoundedRectangle(cornerRadius: 8))
                 }
                 Button("New Secret…") { confirmNew = true }
             } else if tried {

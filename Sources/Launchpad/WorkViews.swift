@@ -77,45 +77,44 @@ struct TaskListView: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
                 TargetPicker(title: "For", target: $target)
-                HStack {
+                HStack(alignment: .bottom, spacing: Theme.Space.s) {
                     TextField("What needs doing?", text: $text, axis: .vertical)
+                        .textFieldStyle(PillFieldStyle())
                         .lineLimit(1...4)
                         .onSubmit(send)
-                    Button(action: send) { Image(systemName: "paperplane.fill") }
-                        .buttonStyle(.borderedProminent)
+                    Button(action: send) { Label("Send the task", systemImage: "paperplane.fill") }
+                        .buttonStyle(CircleButtonStyle(kind: .accent, size: 34))
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || target == nil)
                         .help("Send the task")
                 }
             }
-            .padding(12)
-            .background(Theme.surface.opacity(0.6))
-            Divider()
+            .card(padding: Theme.Space.m, radius: 20)
+            .padding(.horizontal, Theme.Space.m)
+            .padding(.bottom, Theme.Space.s)
             if model.visibleTasks.isEmpty {
                 VStack(spacing: 8) {
                     Text("No tasks yet.").font(Theme.rounded(.headline))
                     Text("Hand a job to a bot or group above. Workflow approvals show up here too.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: $model.selectedTaskId) {
+                PanelList(selection: $model.selectedTaskId) {
                     ForEach(model.visibleTasks) { task in
-                        TaskRow(task: task).tag(task.id)
+                        TaskRow(task: task).selectableRow(task.id)
                             .contextMenu {
                                 Button("Dismiss") { model.dismissTask(task.id) }
                             }
                     }
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
             }
         }
-        .background(Theme.canvas)
         .navigationTitle("Tasks")
+        .columnHeader("Tasks") { EmptyView() }
         .onAppear {
             model.loadTaskChats()
             if target == nil { target = model.bots.first.map { .bot($0.id) } ?? model.groups.first.map { .group($0.id) } }
@@ -140,14 +139,14 @@ struct TaskRow: View {
                 Spacer()
                 Text(TimeLabel.short(task.createdAt))
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.secondary)
             }
             Text(task.text)
                 .font(Theme.rounded(.body, weight: .medium))
                 .lineLimit(2)
             Text(subtitle)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
                 .lineLimit(1)
         }
         .padding(.vertical, 4)
@@ -187,7 +186,7 @@ struct TaskDetailView: View {
                         let replies = TaskStatus.replies(after: msgId, in: model.messages(for: chatId))
                         if replies.isEmpty {
                             Text(status == .working ? "Working on it…" : "No reply yet.")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.secondary)
                         }
                         ForEach(replies) { m in
                             MessageRow(message: m, chatId: chatId)
@@ -200,7 +199,6 @@ struct TaskDetailView: View {
                 .padding(20)
                 .frame(maxWidth: 860, alignment: .leading)
             }
-            .background(Theme.canvas)
             .navigationTitle("Task")
             .onAppear { model.loadTaskChats() }
         } else {
@@ -225,7 +223,7 @@ struct TaskDetailView: View {
                     } label: {
                         Label("Approve", systemImage: "checkmark")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PillButtonStyle())
                     Button {
                         model.answerWorkflowApproval(task, approve: false)
                     } label: {
@@ -235,9 +233,9 @@ struct TaskDetailView: View {
             } else if run?.approved == true {
                 Label("Approved", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.success)
             } else if run?.approved == false {
-                Label("Declined", systemImage: "xmark.circle.fill").foregroundStyle(.secondary)
+                Label("Declined", systemImage: "xmark.circle.fill").foregroundStyle(Theme.secondary)
             } else {
-                Text(run?.note ?? "This run isn't waiting any more.").foregroundStyle(.secondary)
+                Text(run?.note ?? "This run isn't waiting any more.").foregroundStyle(Theme.secondary)
             }
         }
         .padding(12)
@@ -258,15 +256,15 @@ struct WorkflowListView: View {
                 VStack(spacing: 10) {
                     Text("No workflows yet.").font(Theme.rounded(.headline))
                     Text("Chain steps: a prompt, bots doing jobs, a check, your OK, and where the result goes.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .multilineTextAlignment(.center)
                     Button("New Workflow") { model.newWorkflow() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PillButtonStyle())
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: $model.selectedWorkflowId) {
+                PanelList(selection: $model.selectedWorkflowId) {
                     ForEach(model.workflows) { wf in
                         HStack(spacing: 10) {
                             Image(systemName: model.workflowEngine.isRunning(wf.id) ? "play.circle.fill" : "flowchart")
@@ -276,11 +274,11 @@ struct WorkflowListView: View {
                                 Text(wf.name).font(Theme.rounded(.body, weight: .semibold))
                                 Text("\(wf.steps.count) step\(wf.steps.count == 1 ? "" : "s") · \(wf.scheduleSummary)")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                             }
                         }
                         .padding(.vertical, 3)
-                        .tag(wf.id)
+                        .selectableRow(wf.id)
                         .contextMenu {
                             Button("Run") { model.startWorkflow(wf.id) }
                             Button("Show File in Finder") { SystemActions.reveal(model.paths.workflowFile(wf.id)) }
@@ -288,17 +286,12 @@ struct WorkflowListView: View {
                         }
                     }
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
             }
         }
-        .background(Theme.canvas)
         .navigationTitle("Workflows")
-        .toolbar {
-            ToolbarItem {
-                Button { model.newWorkflow() } label: { Label("New Workflow", systemImage: "plus") }
-                    .help("Create a workflow")
-            }
+        .columnHeader("Workflows") {
+            Button { model.newWorkflow() } label: { Label("New Workflow", systemImage: "plus") }
+                .help("Create a workflow")
         }
     }
 }
@@ -340,7 +333,6 @@ struct WorkflowDetailView: View {
                 RunHistoryView()
             }
         }
-        .background(Theme.canvas)
         .navigationTitle(draft?.name ?? "Workflow")
         .toolbar {
             ToolbarItemGroup {
@@ -376,7 +368,7 @@ struct WorkflowDetailView: View {
                 Text(draft?.name ?? workflowId)
                     .font(Theme.rounded(.title2, weight: .bold))
                 Text(subtitle(live))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
             }
             Spacer()
             Button { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
@@ -390,7 +382,7 @@ struct WorkflowDetailView: View {
                 } label: {
                     Label("Run", systemImage: "play.fill")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle())
                 .disabled((draft?.steps ?? []).isEmpty)
             }
         }
@@ -424,7 +416,7 @@ struct ResumeBanner: View {
                 Text("A run stopped when Launchpad quit, at step \((run.resumeFrom ?? 0) + 1).")
                 Spacer()
                 Button("Resume") { Task { await model.workflowEngine.resume(run.id) } }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PillButtonStyle())
                 Button("Discard") { model.workflowEngine.discardResume(run.id) }
             }
             .controlSize(.small)
@@ -476,7 +468,7 @@ struct WorkflowEditor: View {
                 }
             }
         }
-        .formStyle(.grouped)
+        .themedForm()
     }
 
     @ViewBuilder private var scheduleFields: some View {
@@ -599,7 +591,7 @@ struct StepEditor: View {
         } header: {
             HStack {
                 Label("\(index + 1). \(step.kind.title)", systemImage: step.kind.symbol)
-                Text(step.kind.blurb).font(.caption).foregroundStyle(.secondary)
+                Text(step.kind.blurb).font(.caption).foregroundStyle(Theme.secondary)
                 Spacer()
                 Button { move(-1) } label: { Image(systemName: "chevron.up") }
                     .disabled(index == 0)
@@ -625,7 +617,7 @@ struct WorkflowRunsView: View {
         let steps = model.workflowEngine.workflow(workflowId)?.steps ?? []
         List {
             if runs.isEmpty {
-                Text("No runs yet. Press Run to start one.").foregroundStyle(.secondary)
+                Text("No runs yet. Press Run to start one.").foregroundStyle(Theme.secondary)
             }
             ForEach(Array(runs)) { run in
                 DisclosureGroup {
@@ -636,7 +628,7 @@ struct WorkflowRunsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(steps.indices.contains(result.step) ? "\(result.step + 1). \(steps[result.step].kind.title)" : "Step \(result.step + 1)")
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                                 Text(result.text)
                                     .font(.callout)
                                     .lineLimit(8)
@@ -644,7 +636,7 @@ struct WorkflowRunsView: View {
                             }
                         }
                     }
-                    if let note = run.note { Text(note).font(.callout).foregroundStyle(.secondary) }
+                    if let note = run.note { Text(note).font(.callout).foregroundStyle(Theme.secondary) }
                     if let chat = run.waitingChat, model.chat(chat) != nil {
                         Button("Open Chat") { model.show(chat: chat) }
                     }
@@ -652,9 +644,9 @@ struct WorkflowRunsView: View {
                     HStack {
                         Image(systemName: symbol(run.status)).foregroundStyle(colour(run.status))
                         Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
-                        Text("· \(run.trigger)").foregroundStyle(.secondary)
+                        Text("· \(run.trigger)").foregroundStyle(Theme.secondary)
                         Spacer()
-                        Text(title(run.status)).font(.caption).foregroundStyle(.secondary)
+                        Text(title(run.status)).font(.caption).foregroundStyle(Theme.secondary)
                         if run.isLive {
                             Button("Stop") { model.workflowEngine.stop(run.id) }.controlSize(.small)
                         }
@@ -662,8 +654,6 @@ struct WorkflowRunsView: View {
                 }
             }
         }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
     }
 
     private func symbol(_ s: WorkflowRun.Status) -> String {
@@ -705,7 +695,7 @@ struct RunHistoryView: View {
         let log = Array(model.runLog.suffix(300).reversed())
         List {
             if log.isEmpty {
-                Text("Nothing has run yet.").foregroundStyle(.secondary)
+                Text("Nothing has run yet.").foregroundStyle(Theme.secondary)
             }
             ForEach(log) { entry in
                 HStack(spacing: 10) {
@@ -717,11 +707,11 @@ struct RunHistoryView: View {
                         Text([kindTitle(entry.kind), entry.target.map { model.targetName($0) }, entry.date.formatted(date: .abbreviated, time: .shortened)]
                                 .compactMap { $0 }.joined(separator: " · "))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                     }
                     Spacer()
                     if entry.kind == .workflow {
-                        Text(outcome(entry.outcome)).font(.caption).foregroundStyle(.secondary)
+                        Text(outcome(entry.outcome)).font(.caption).foregroundStyle(Theme.secondary)
                     }
                     if let chat = entry.chatId, model.chat(chat) != nil {
                         Button("Open") { model.show(chat: chat) }.controlSize(.small)
@@ -729,8 +719,6 @@ struct RunHistoryView: View {
                 }
             }
         }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
     }
 
     private func symbol(_ k: RunLogEntry.Kind) -> String {

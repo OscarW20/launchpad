@@ -34,15 +34,15 @@ struct BotListView: View {
                     Text("No bots yet.")
                         .font(Theme.rounded(.headline))
                     Text("Each bot is a folder in ~/Launchpad/bots. Make one here, or drop a folder in.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .multilineTextAlignment(.center)
                     Button("New Bot") { model.showingNewBot = true }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PillButtonStyle())
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: $model.selectedBotId) {
+                PanelList(selection: $model.selectedBotId) {
                     ForEach(model.bots) { bot in
                         HStack(spacing: 10) {
                             AvatarView(bot: bot, size: 34)
@@ -51,33 +51,28 @@ struct BotListView: View {
                                     .font(Theme.rounded(.body, weight: .semibold))
                                 Text(bot.role.isEmpty ? bot.engine.displayName : bot.role)
                                     .font(.callout)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                                     .lineLimit(1)
                             }
                         }
                         .padding(.vertical, 3)
-                        .tag(bot.id)
+                        .selectableRow(bot.id)
                         .contextMenu {
                             Button("Message \(bot.name)") { model.openChat(with: bot) }
                             Button("Show in Finder") { SystemActions.reveal(model.paths.botDir(bot.id)) }
                         }
                     }
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
             }
         }
-        .background(Theme.canvas)
         .navigationTitle("Bots")
-        .toolbar {
-            ToolbarItem {
-                Button {
-                    model.showingNewBot = true
-                } label: {
-                    Label("New Bot", systemImage: "plus")
-                }
-                .help("Create a bot")
+        .columnHeader("Bots") {
+            Button {
+                model.showingNewBot = true
+            } label: {
+                Label("New Bot", systemImage: "plus")
             }
+            .help("Create a bot")
         }
     }
 }
@@ -161,7 +156,7 @@ struct LocalServerFields: View {
             set: { baseURL = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
         ), prompt: Text(LocalModel.defaultBaseURL))
         HStack {
-            Text("Preset").foregroundStyle(.secondary)
+            Text("Preset").foregroundStyle(Theme.secondary)
             Spacer()
             Button("Ollama") { baseURL = nil }
             Button("LM Studio") { baseURL = LocalModel.lmStudioBaseURL }
@@ -233,7 +228,7 @@ struct EmojiPicker: View {
             HStack(spacing: 6) {
                 Text("or type one")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                 TextField("", text: Binding(
                     get: { selection },
                     set: { if let first = $0.last { selection = String(first) } }
@@ -290,7 +285,7 @@ struct NewBotSheet: View {
                     Text(bot.name.isEmpty ? "New bot" : bot.name)
                         .font(Theme.rounded(.title2, weight: .bold))
                     Text("A new teammate with its own folder, memory and workspace.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                 }
                 Spacer()
             }
@@ -328,7 +323,7 @@ struct NewBotSheet: View {
                     Text("Leave empty for the standard instructions. You can change them any time.")
                 }
             }
-            .formStyle(.grouped)
+            .themedForm()
 
             HStack {
                 Spacer()
@@ -342,7 +337,7 @@ struct NewBotSheet: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle())
                 .disabled(bot.name.trimmingCharacters(in: .whitespaces).isEmpty || (bot.engine == .local && bot.model == nil))
             }
             .padding(16)
@@ -392,7 +387,7 @@ struct MemorySection: View {
                 ForEach(outline) { t in
                     if !t.entries.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(t.title ?? "Intro").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            Text(t.title ?? "Intro").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
                             ForEach(t.entries) { e in
                                 HStack(alignment: .top) {
                                     Text(e.text).fixedSize(horizontal: false, vertical: true)
@@ -425,7 +420,7 @@ struct MemorySection: View {
                     .foregroundStyle(Theme.warning)
             }
             if let message {
-                Text(message).font(.caption).foregroundStyle(.secondary)
+                Text(message).font(.caption).foregroundStyle(Theme.secondary)
             }
             HStack {
                 Button("Open MEMORY.md") { SystemActions.open(model.paths.memoryMD(botId)) }
@@ -494,7 +489,7 @@ struct BotDetailView: View {
                         if bot.engine.isAgent {
                         Section {
                             if model.skills.isEmpty {
-                                Text("No skills yet. Add some on the Skills page.").foregroundStyle(.secondary)
+                                Text("No skills yet. Add some on the Skills page.").foregroundStyle(Theme.secondary)
                             }
                             ForEach(model.skills) { skill in
                                 Toggle(isOn: Binding(
@@ -503,7 +498,7 @@ struct BotDetailView: View {
                                 )) {
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(skill.name)
-                                        Text(skill.description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                        Text(skill.description).font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
                                     }
                                 }
                             }
@@ -511,7 +506,7 @@ struct BotDetailView: View {
                             ForEach(inherited, id: \.1) { pair in
                                 Label("\(pair.1) (from \(pair.0.displayName))", systemImage: "person.3")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                             }
                         } header: {
                             Text("Skills")
@@ -520,7 +515,7 @@ struct BotDetailView: View {
                         }
                         Section {
                             if model.connectors.isEmpty {
-                                Text("No connectors yet. Add MCP servers on the Connectors page.").foregroundStyle(.secondary)
+                                Text("No connectors yet. Add MCP servers on the Connectors page.").foregroundStyle(Theme.secondary)
                             }
                             ForEach(model.connectors) { c in
                                 Toggle(c.name, isOn: Binding(
@@ -542,13 +537,12 @@ struct BotDetailView: View {
                             Button("Move Bot to Trash…", role: .destructive) { confirmDelete = true }
                         }
                     }
-                    .formStyle(.grouped)
+                    .themedForm()
                 }
             } else {
                 ContentUnavailableView("Bot not found", systemImage: "questionmark.circle")
             }
         }
-        .background(Theme.canvas)
         .navigationTitle(draft?.name ?? "Bot")
         .toolbar {
             ToolbarItemGroup {
@@ -580,7 +574,7 @@ struct BotDetailView: View {
                     .font(Theme.rounded(.title2, weight: .bold))
                 Text("~/Launchpad/bots/\(botId)")
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
             }
             Spacer()
             Button {
@@ -593,7 +587,7 @@ struct BotDetailView: View {
             } label: {
                 Label("Message", systemImage: "bubble.left.fill")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PillButtonStyle())
         }
         .padding(20)
     }

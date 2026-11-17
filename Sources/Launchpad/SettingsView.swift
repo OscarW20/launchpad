@@ -53,7 +53,7 @@ struct SettingsView: View {
                                 .foregroundStyle(Theme.success)
                                 .textSelection(.enabled)
                         } else {
-                            Text("Not found (optional)").foregroundStyle(.secondary)
+                            Text("Not found (optional)").foregroundStyle(Theme.secondary)
                         }
                     } else {
                         ProgressView().controlSize(.small)
@@ -110,7 +110,7 @@ struct SettingsView: View {
                         Text("“Always allow” for sends, deletes, spending and changes")
                         Text("Off: bots ask every time for these, even where you picked Always allow before.")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                     }
                 }
                 LabeledContent("Sandbox") {
@@ -139,8 +139,7 @@ struct SettingsView: View {
                 Button("Check again") { model.refreshEngines() }
             }
         }
-        .formStyle(.grouped)
-        .background(Theme.canvas)
+        .themedForm()
         .navigationTitle("Settings")
     }
 }

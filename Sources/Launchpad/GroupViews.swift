@@ -31,14 +31,14 @@ struct GroupListView: View {
                     Text("No groups yet.")
                         .font(Theme.rounded(.headline))
                     Button("New Group") { model.showingNewGroup = true }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PillButtonStyle())
                         .disabled(model.bots.isEmpty)
                     Button("Hire the Dev team") { model.section = .hire }
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(selection: $model.selectedGroupId) {
+                PanelList(selection: $model.selectedGroupId) {
                     ForEach(model.groups) { group in
                         HStack(spacing: 10) {
                             GroupAvatar(group: group, size: 34)
@@ -47,29 +47,24 @@ struct GroupListView: View {
                                     .font(Theme.rounded(.body, weight: .semibold))
                                 Text("\(group.everyone.count) members · lead: \(model.bot(group.lead)?.name ?? "none")")
                                     .font(.callout)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.secondary)
                                     .lineLimit(1)
                             }
                         }
                         .padding(.vertical, 3)
-                        .tag(group.id)
+                        .selectableRow(group.id)
                         .contextMenu {
                             Button("Open Chat") { model.openChat(with: group) }
                         }
                     }
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
             }
         }
-        .background(Theme.canvas)
         .navigationTitle("Groups")
-        .toolbar {
-            ToolbarItem {
-                Button { model.showingNewGroup = true } label: { Label("New Group", systemImage: "plus") }
-                    .help("Create a group")
-                    .disabled(model.bots.isEmpty)
-            }
+        .columnHeader("Groups") {
+            Button { model.showingNewGroup = true } label: { Label("New Group", systemImage: "plus") }
+                .help("Create a group")
+                .disabled(model.bots.isEmpty)
         }
     }
 }
@@ -99,7 +94,7 @@ struct GroupFormSections: View {
                     HStack(spacing: 8) {
                         AvatarView(bot: bot, size: 22)
                         Text(bot.name)
-                        if !bot.role.isEmpty { Text(bot.role).foregroundStyle(.secondary).lineLimit(1) }
+                        if !bot.role.isEmpty { Text(bot.role).foregroundStyle(Theme.secondary).lineLimit(1) }
                     }
                 }
             }
@@ -139,7 +134,7 @@ struct NewGroupSheet: View {
                     Text(group.name.isEmpty ? "New group" : "#\(group.name)")
                         .font(Theme.rounded(.title2, weight: .bold))
                     Text("Bots that work together, with a lead.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                 }
                 Spacer()
             }
@@ -147,7 +142,7 @@ struct NewGroupSheet: View {
             Form {
                 GroupFormSections(group: $group)
             }
-            .formStyle(.grouped)
+            .themedForm()
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
@@ -160,7 +155,7 @@ struct NewGroupSheet: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle())
                 .disabled(group.name.trimmingCharacters(in: .whitespaces).isEmpty || group.members.isEmpty)
             }
             .padding(16)
@@ -187,7 +182,7 @@ struct GroupDetailView: View {
                                 .font(Theme.rounded(.title2, weight: .bold))
                             Text("~/Launchpad/groups/\(groupId)")
                                 .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.secondary)
                         }
                         Spacer()
                         Button { model.summaryGroupId = groupId } label: { Label("Summary", systemImage: "doc.text") }
@@ -195,7 +190,7 @@ struct GroupDetailView: View {
                         Button {
                             if let g = model.group(groupId) { model.openChat(with: g) }
                         } label: { Label("Open Chat", systemImage: "bubble.left.and.bubble.right.fill") }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(PillButtonStyle())
                     }
                     .padding(20)
                     Form {
@@ -216,7 +211,7 @@ struct GroupDetailView: View {
                         }
                         Section("Connectors for the whole group") {
                             if model.connectors.isEmpty {
-                                Text("No connectors yet.").foregroundStyle(.secondary)
+                                Text("No connectors yet.").foregroundStyle(Theme.secondary)
                             }
                             ForEach(model.connectors) { c in
                                 Toggle(c.name, isOn: Binding(
@@ -231,13 +226,12 @@ struct GroupDetailView: View {
                             Button("Move Group to Trash…", role: .destructive) { confirmDelete = true }
                         }
                     }
-                    .formStyle(.grouped)
+                    .themedForm()
                 }
             } else {
                 ContentUnavailableView("Group not found", systemImage: "questionmark.circle")
             }
         }
-        .background(Theme.canvas)
         .navigationTitle(draft?.displayName ?? "Group")
         .toolbar {
             ToolbarItemGroup {

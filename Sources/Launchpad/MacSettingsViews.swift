@@ -16,7 +16,7 @@ struct MacSettingsSection: View {
             Toggle(isOn: $quickAsk) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Quick Ask with ⌃⌥B")
-                    Text("A floating bar to message any bot from any app.").font(.caption).foregroundStyle(.secondary)
+                    Text("A floating bar to message any bot from any app.").font(.caption).foregroundStyle(Theme.secondary)
                 }
             }
             .onChange(of: quickAsk) { _, on in QuickAsk.shared.setEnabled(on) }
@@ -24,14 +24,14 @@ struct MacSettingsSection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Show in the menu bar")
                     Text("Who's working, recent chats and Stop. With it on, closing the window keeps Launchpad running.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(Theme.secondary)
                 }
             }
             Toggle(isOn: $keepAwake) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Keep the Mac awake while bots work")
                     Text("The screen can still dim and lock; the Mac just doesn't go to sleep mid-job.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(Theme.secondary)
                 }
             }
             .onChange(of: keepAwake) { _, _ in
@@ -44,7 +44,7 @@ struct MacSettingsSection: View {
                     Text(Notifier.available
                          ? "Only while Launchpad is in the background. Reply right from the notification."
                          : "Notifications need the app bundle: build it with scripts/make-app.sh.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(Theme.secondary)
                 }
             }
             .onChange(of: notify) { _, on in if on { Notifier.shared.requestPermission() } }
@@ -87,7 +87,7 @@ struct ComputerUseSection: View {
             if cu.driverPath == nil {
                 Text("Runs the official installer in Terminal, so you see what it does: \(ComputerUse.installCommand)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                     .textSelection(.enabled)
             }
             LabeledContent("Accessibility") {
@@ -98,7 +98,7 @@ struct ComputerUseSection: View {
             }
             LabeledContent("Driver") {
                 HStack {
-                    Text(cu.daemonRunning ? "Running" : "Starts when a bot needs it").foregroundStyle(.secondary)
+                    Text(cu.daemonRunning ? "Running" : "Starts when a bot needs it").foregroundStyle(Theme.secondary)
                     if cu.daemonRunning {
                         Button("Stop") { cu.stopDaemon() }
                     }
@@ -115,7 +115,7 @@ struct ComputerUseSection: View {
             }
             let users = model.bots.filter(\.useComputer)
             LabeledContent("Bots that may use this Mac") {
-                Text(users.isEmpty ? "None yet" : users.map(\.name).joined(separator: ", ")).foregroundStyle(.secondary)
+                Text(users.isEmpty ? "None yet" : users.map(\.name).joined(separator: ", ")).foregroundStyle(Theme.secondary)
             }
             HStack {
                 Button("Check Again") { cu.checkAgain() }
@@ -154,7 +154,7 @@ struct ComputerUseBotSection: View {
                     Text("Use this Mac")
                     Text("Click and type in your Mac's apps in the background (computer use). Each action asks you first, as set under Permissions › Use your Mac.")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

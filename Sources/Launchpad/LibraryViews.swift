@@ -9,14 +9,14 @@ struct SkillListView: View {
 
     var body: some View {
         @Bindable var model = model
-        List(selection: $model.selectedSkillId) {
+        PanelList(selection: $model.selectedSkillId) {
             ForEach(model.skills) { skill in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(skill.name)
                         .font(Theme.rounded(.body, weight: .semibold))
                     Text(skill.description.isEmpty ? "No description" : skill.description)
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .lineLimit(2)
                     let users = model.bots.filter { $0.skills.contains(skill.id) }.count + model.groups.filter { $0.skills.contains(skill.id) }.count
                     if users > 0 {
@@ -26,27 +26,19 @@ struct SkillListView: View {
                     }
                 }
                 .padding(.vertical, 3)
-                .tag(skill.id)
+                .selectableRow(skill.id)
                 .contextMenu {
                     Button("Duplicate") { model.duplicateSkill(skill.id) }
                     Button("Delete", role: .destructive) { model.deleteSkill(skill.id) }
                 }
             }
         }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
-        .background(Theme.canvas)
         .navigationTitle("Skills")
-        .toolbar {
-            ToolbarItem {
-                Menu {
-                    Button("New Skill") { model.newSkill() }
-                    Divider()
-                    Button(model.skill(Graphify.skillId) == nil ? "Add Graphify (code knowledge graph)" : "Update Graphify Skill") { model.addGraphify() }
-                } label: {
-                    Label("New Skill", systemImage: "plus")
-                }
-                .help("Create a skill, or add Graphify")
+        .columnHeader("Skills") {
+            CircleMenu(symbol: "plus", help: "Create a skill, or add Graphify") {
+                Button("New Skill") { model.newSkill() }
+                Divider()
+                Button(model.skill(Graphify.skillId) == nil ? "Add Graphify (code knowledge graph)" : "Update Graphify Skill") { model.addGraphify() }
             }
         }
     }
@@ -76,7 +68,7 @@ struct SkillDetailView: View {
                     Text(parsed.name ?? skillId)
                         .font(Theme.rounded(.title2, weight: .bold))
                     Text(parsed.description ?? "Add a description: it tells bots when to use this skill.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .lineLimit(2)
                 }
                 Spacer()
@@ -96,7 +88,7 @@ struct SkillDetailView: View {
                         .font(.system(.body, design: .monospaced))
                         .scrollContentBackground(.hidden)
                         .padding(10)
-                        .background(Theme.surface)
+                        .background(Theme.card)
                 }
                 if mode == .split { Divider() }
                 if mode != .edit {
@@ -107,11 +99,10 @@ struct SkillDetailView: View {
                     .background(Theme.canvas)
                 }
             }
-            .overlay(Rectangle().strokeBorder(Theme.border).allowsHitTesting(false))
+            .overlay(Rectangle().strokeBorder(Theme.line).allowsHitTesting(false))
 
             GiveSkillBar(skillId: skillId)
         }
-        .background(Theme.canvas)
         .navigationTitle(parsed.name ?? "Skill")
         .toolbar {
             ToolbarItemGroup {
@@ -154,7 +145,7 @@ struct GiveSkillBar: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Give to")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(model.groups) { g in
@@ -168,14 +159,14 @@ struct GiveSkillBar: View {
                         }
                     }
                     if model.bots.isEmpty && model.groups.isEmpty {
-                        Text("No bots or groups yet.").foregroundStyle(.secondary)
+                        Text("No bots or groups yet.").foregroundStyle(Theme.secondary)
                     }
                 }
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(Theme.surface.opacity(0.6))
+        .background(Theme.card.opacity(0.6))
     }
 
     private func chip(title: String, emoji: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -187,8 +178,8 @@ struct GiveSkillBar: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(on ? Theme.accent.opacity(0.2) : Theme.raised, in: Capsule())
-            .overlay(Capsule().strokeBorder(on ? Theme.accent.opacity(0.6) : Theme.border))
+            .background(on ? Theme.accent.opacity(0.2) : Theme.field, in: Capsule())
+            .overlay(Capsule().strokeBorder(on ? Theme.accent.opacity(0.6) : Theme.line))
         }
         .buttonStyle(.plain)
     }
@@ -210,7 +201,7 @@ struct TemplateCard: View {
                         .font(Theme.rounded(.headline, weight: .bold))
                     Text(template.role)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondary)
                         .lineLimit(2)
                 }
             }
@@ -233,14 +224,14 @@ struct TemplateCard: View {
                 } else {
                     Spacer()
                     Button("Hire") { model.hire(template) }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PillButtonStyle())
                 }
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 210, alignment: .topLeading)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.border))
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
     }
 }
 
@@ -251,7 +242,7 @@ struct ConnectorListView: View {
 
     var body: some View {
         @Bindable var model = model
-        List(selection: $model.selectedConnectorId) {
+        PanelList(selection: $model.selectedConnectorId) {
             ForEach(model.connectors) { c in
                 HStack(spacing: 10) {
                     Image(systemName: c.kind == .http ? "globe" : "terminal")
@@ -261,23 +252,18 @@ struct ConnectorListView: View {
                         Text(c.name).font(Theme.rounded(.body, weight: .semibold))
                         Text(c.kind == .http ? (c.url ?? "") : ([c.command ?? ""] + c.args).joined(separator: " "))
                             .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondary)
                             .lineLimit(1)
                     }
                 }
                 .padding(.vertical, 3)
-                .tag(c.id)
+                .selectableRow(c.id)
             }
         }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
-        .background(Theme.canvas)
         .navigationTitle("Connectors")
-        .toolbar {
-            ToolbarItem {
-                Button { model.addConnector() } label: { Label("Add Connector", systemImage: "plus") }
-                    .help("Add an MCP server")
-            }
+        .columnHeader("Connectors") {
+            Button { model.addConnector() } label: { Label("Add Connector", systemImage: "plus") }
+                .help("Add an MCP server")
         }
     }
 }
@@ -372,12 +358,11 @@ struct ConnectorDetailView: View {
                         Button("Remove Connector…", role: .destructive) { confirmDelete = true }
                     }
                 }
-                .formStyle(.grouped)
+                .themedForm()
             } else {
                 ContentUnavailableView("Connector not found", systemImage: "questionmark.circle")
             }
         }
-        .background(Theme.canvas)
         .navigationTitle(draft?.name ?? "Connector")
         .toolbar {
             ToolbarItem {
@@ -469,17 +454,17 @@ struct UsageSummary: View {
 
     var body: some View {
         let u = model.usage
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Usage")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Text("Plan usage")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.text)
             windows("Claude", u.claudeWindows, empty: "no data yet")
             if let codex = u.codexWindows, !codex.isEmpty {
                 windows("ChatGPT", codex, empty: "")
             } else {
                 row("ChatGPT", detail: u.codexTokensToday > 0 && u.codexDay == todayKey ? "\(formatTokens(u.codexTokensToday)) tokens today" : "no data yet")
             }
-            Divider().padding(.vertical, 2)
+            Divider().overlay(Theme.line).padding(.vertical, 2)
         }
     }
 
@@ -488,15 +473,26 @@ struct UsageSummary: View {
             row(plan, detail: empty)
         } else {
             ForEach(list, id: \.name) { w in
-                VStack(alignment: .leading, spacing: 2) {
+                let fraction = min(1, max(0, w.utilization))
+                VStack(alignment: .leading, spacing: 5) {
                     HStack {
-                        Text("\(plan) · \(w.label)").font(.caption)
+                        Text("\(plan) · \(w.label)").font(.system(size: 12)).foregroundStyle(Theme.text)
                         Spacer()
-                        Text("\(Int((w.utilization * 100).rounded()))%").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                        Text("\(Int((w.utilization * 100).rounded()))%")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(Theme.secondary)
                     }
-                    ProgressView(value: min(1, max(0, w.utilization)))
-                        .tint(w.utilization > 0.8 ? Theme.failure : Theme.accent)
-                        .controlSize(.mini)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Theme.line)
+                            Capsule().fill(w.utilization > 0.8 ? Theme.failureFill : Theme.accent)
+                                .frame(width: max(4, geo.size.width * fraction))
+                        }
+                    }
+                    .frame(height: 4)
+                    .accessibilityElement()
+                    .accessibilityLabel("\(plan) \(w.label)")
+                    .accessibilityValue("\(Int((w.utilization * 100).rounded())) percent")
                 }
                 .help(w.resetsAt.map { "Resets \($0.formatted(date: .omitted, time: .shortened))" } ?? "")
             }
@@ -511,9 +507,9 @@ struct UsageSummary: View {
 
     private func row(_ title: String, detail: String) -> some View {
         HStack {
-            Text(title).font(.caption)
+            Text(title).font(.system(size: 12)).foregroundStyle(Theme.text)
             Spacer()
-            Text(detail).font(.caption2).foregroundStyle(.secondary)
+            Text(detail).font(.system(size: 11)).foregroundStyle(Theme.secondary)
         }
     }
 

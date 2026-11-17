@@ -119,7 +119,7 @@ private struct QuickAskView: View {
             HStack {
                 Text("⌃⌥B to open or close · Return to send · Esc to close")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                 Spacer()
                 if let sent {
                     Button("Open Chat") {
@@ -136,7 +136,7 @@ private struct QuickAskView: View {
         .frame(width: 640)
         .fixedSize(horizontal: false, vertical: true)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.canvas))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.border))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.25), radius: 24, y: 10)
         .padding(30)
@@ -197,14 +197,14 @@ private struct QuickAskView: View {
                 if working && replies.allSatisfy({ $0.text.isEmpty }) {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text(WorkSummary.line(for: replies.last)).foregroundStyle(.secondary)
+                        Text(WorkSummary.line(for: replies.last)).foregroundStyle(Theme.secondary)
                     }
                 }
                 ForEach(replies) { r in
                     if !r.text.isEmpty || r.failure != nil {
                         VStack(alignment: .leading, spacing: 4) {
                             if replies.count > 1 || model.chat(s.chatId)?.kind == .group {
-                                Text(model.authorName(r)).font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                                Text(model.authorName(r)).font(.caption.weight(.bold)).foregroundStyle(Theme.secondary)
                             }
                             Text(markdown(r.text.isEmpty ? (r.failure?.message ?? "") : r.text))
                                 .foregroundStyle(r.status == .failed ? Theme.failure : Color.primary)

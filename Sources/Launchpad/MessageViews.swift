@@ -31,18 +31,28 @@ struct MessageRow: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     if let from = message.forwardedFrom {
                         Label("Forwarded from \(from)", systemImage: "arrowshape.turn.up.right")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.caption).foregroundStyle(Theme.secondary)
                     }
                     if message.deleted == true {
                         DeletedBubble()
                     } else {
                         if !message.text.isEmpty {
-                            Text(message.text)
-                                .textSelection(.enabled)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(message.isSide == true ? Theme.raised : Theme.userBubble,
-                                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            if message.isSide == true {
+                                Text(message.text)
+                                    .textSelection(.enabled)
+                                    .foregroundStyle(Theme.text)
+                                    .padding(.horizontal, Theme.Space.l)
+                                    .padding(.vertical, 10)
+                                    .background(Theme.accentSoft, in: UserBubbleShape())
+                            } else {
+                                Text(message.text)
+                                    .textSelection(.enabled)
+                                    .foregroundStyle(.white)
+                                    .tint(.white)
+                                    .padding(.horizontal, Theme.Space.l)
+                                    .padding(.vertical, 10)
+                                    .background(Theme.bubbleGradient, in: UserBubbleShape())
+                            }
                         }
                         if let gif = message.gif { GifView(gif: gif) }
                         if let poll = message.poll { PollView(poll: poll, messageId: message.id, chatId: chatId) }
@@ -59,20 +69,24 @@ struct MessageRow: View {
                 Spacer()
                 VStack(spacing: 6) {
                     Label(message.text, systemImage: "info.circle")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.secondary)
                         .multilineTextAlignment(.center)
+                        .padding(.horizontal, Theme.Space.m)
+                        .padding(.vertical, 6)
+                        .background(Theme.field, in: Capsule())
                     if let action = message.noticeAction {
                         switch action {
                         case .continueGroup:
                             if message.id == model.messages(for: chatId).last?.id {
                                 Button("Keep going") { model.perform(action, chatId: chatId) }
-                                    .buttonStyle(.borderedProminent)
+                                    .buttonStyle(PillButtonStyle())
                                     .controlSize(.small)
                                     .disabled(model.isRunning(chatId))
                             }
                         case .undoMemory:
                             Button("Undo") { model.undoMemoryUpdate(noticeId: message.id, chatId: chatId) }
+                                .buttonStyle(SoftButtonStyle())
                                 .controlSize(.small)
                         }
                     }
@@ -85,14 +99,44 @@ struct MessageRow: View {
     }
 }
 
+/// Your bubble: big rounded corners, a small one bottom-right where it points at you.
+struct UserBubbleShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        UnevenRoundedRectangle(
+            topLeadingRadius: Theme.Radius.bubble,
+            bottomLeadingRadius: Theme.Radius.bubble,
+            bottomTrailingRadius: 6,
+            topTrailingRadius: Theme.Radius.bubble,
+            style: .continuous
+        ).path(in: rect)
+    }
+}
+
+/// A bot's bubble: the small corner is top-left, next to its avatar.
+struct BotBubbleShape: InsettableShape {
+    var inset: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        UnevenRoundedRectangle(
+            topLeadingRadius: 6,
+            bottomLeadingRadius: Theme.Radius.bubble,
+            bottomTrailingRadius: Theme.Radius.bubble,
+            topTrailingRadius: Theme.Radius.bubble,
+            style: .continuous
+        ).path(in: rect.insetBy(dx: inset, dy: inset))
+    }
+
+    func inset(by amount: CGFloat) -> BotBubbleShape { BotBubbleShape(inset: inset + amount) }
+}
+
 struct DeletedBubble: View {
     var body: some View {
         Label("This message was deleted", systemImage: "trash")
             .font(.callout.italic())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.secondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 1, dash: [4])))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous).strokeBorder(Theme.line, style: StrokeStyle(lineWidth: 1, dash: [4])))
     }
 }
 
@@ -109,8 +153,8 @@ struct MessageMeta: View {
             Text(TimeLabel.clock(message.createdAt))
             if ChatOps.isEdited(message) { Text("· edited") }
         }
-        .font(.caption2)
-        .foregroundStyle(.tertiary)
+        .font(.system(size: 11))
+        .foregroundStyle(Theme.secondary)
     }
 }
 
@@ -128,7 +172,8 @@ struct BotMessageView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Text(bot?.name ?? "Bot")
-                        .font(Theme.rounded(.subheadline, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.text)
                     MessageMeta(message: message)
                     if message.status == .stopped {
                         Pill(text: "Stopped", symbol: "stop.circle")
@@ -183,10 +228,9 @@ struct BotMessageView: View {
                     ReactionsBar(message: message, chatId: chatId)
                 }
             }
-            .padding(12)
-            .background(message.isSide == true ? Theme.raised.opacity(0.5) : Theme.surface,
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.border))
+            .padding(Theme.Space.l)
+            .background(message.isSide == true ? Theme.accentSoft : Theme.card, in: BotBubbleShape())
+            .overlay(BotBubbleShape().strokeBorder(Theme.line, lineWidth: 1))
             Spacer(minLength: 40)
         }
     }
@@ -216,14 +260,14 @@ struct StepsView: View {
                         .controlSize(.mini)
                 }
             }
-            .font(.callout.weight(.medium))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.secondary)
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(.snappy) { expanded.toggle() } }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, Theme.Space.m)
         .padding(.vertical, 6)
-        .background(Theme.raised.opacity(0.7), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Theme.field, in: RoundedRectangle(cornerRadius: expanded ? Theme.Radius.small : 16, style: .continuous))
     }
 
     private var summary: String {
@@ -270,7 +314,7 @@ struct StepRow: View {
             statusIcon
                 .frame(width: 14)
             Image(systemName: described.icon)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
                 .frame(width: 16)
             InlineText(described.text)
                 .lineLimit(1)
@@ -289,7 +333,7 @@ struct StepRow: View {
         case .failed:
             Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.failure)
         case .stopped:
-            Image(systemName: "stop.circle").foregroundStyle(.secondary)
+            Image(systemName: "stop.circle").foregroundStyle(Theme.secondary)
         }
     }
 
@@ -303,7 +347,7 @@ struct StepTextBox: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondary)
             ScrollView {
                 Text(text)
                     .font(.system(.caption, design: .monospaced))
@@ -311,8 +355,8 @@ struct StepTextBox: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxHeight: 160)
-            .padding(8)
-            .background(Theme.canvas, in: RoundedRectangle(cornerRadius: 6))
+            .padding(Theme.Space.s)
+            .background(Theme.code, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
 }
@@ -337,7 +381,7 @@ struct TypingIndicator: View {
             if let label {
                 InlineText(label)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                     .lineLimit(1)
             }
         }
@@ -357,13 +401,13 @@ struct ApprovalCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "hand.raised.fill")
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.warning)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Needs your OK")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.text)
                     InlineText(request.action)
-                        .font(.body.weight(.medium))
+                        .foregroundStyle(Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -375,15 +419,15 @@ struct ApprovalCard: View {
                     } label: {
                         Label("Approve", systemImage: "checkmark")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(PillButtonStyle())
                     Button {
                         model.respond(to: messageId, in: chatId, approve: false)
                     } label: {
                         Label("Decline", systemImage: "xmark")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(SoftButtonStyle())
                 }
-                .controlSize(.regular)
+                .controlSize(.large)
                 .disabled(model.isRunning(chatId))
             case .approved:
                 Label("Approved", systemImage: "checkmark.circle.fill")
@@ -391,14 +435,12 @@ struct ApprovalCard: View {
                     .font(.callout.weight(.medium))
             case .declined:
                 Label("Declined", systemImage: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                     .font(.callout.weight(.medium))
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.accent.opacity(0.35)))
+        .card(padding: Theme.Space.l, radius: 22)
     }
 }
 
@@ -434,7 +476,7 @@ struct FailureCard: View {
             HStack(spacing: 12) {
                 if let action = failure.action {
                     Button(action.label) { model.perform(action) }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PillButtonStyle())
                         .controlSize(.small)
                 }
                 if failure.detail != nil {
@@ -446,13 +488,14 @@ struct FailureCard: View {
             if showDetail, let detail = failure.detail {
                 Text(detail)
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                     .textSelection(.enabled)
             }
         }
-        .padding(10)
+        .padding(Theme.Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Theme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.warning.opacity(0.35)))
     }
 
     private var icon: String {
@@ -510,7 +553,7 @@ struct MarkdownBlockView: View {
                         } else {
                             Text(item.marker)
                                 .monospacedDigit()
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.secondary)
                         }
                         InlineText(item.text)
                             .fixedSize(horizontal: false, vertical: true)
@@ -524,7 +567,7 @@ struct MarkdownBlockView: View {
                     .fill(Theme.accent.opacity(0.5))
                     .frame(width: 3)
                 InlineText(text)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -545,9 +588,10 @@ struct MarkdownBlockView: View {
                         }
                     }
                 }
-                .padding(10)
+                .padding(Theme.Space.m)
             }
-            .background(Theme.raised.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            .background(Theme.field, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).strokeBorder(Theme.line))
         case .rule:
             Divider()
         }
@@ -594,7 +638,7 @@ struct CodeBlockView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .foregroundStyle(Theme.codeMuted)
+            .foregroundStyle(Theme.secondary)
             .padding(.horizontal, 12)
             .padding(.top, 8)
             .padding(.bottom, 4)
@@ -602,13 +646,14 @@ struct CodeBlockView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
                     .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(Theme.codeText)
+                    .foregroundStyle(Theme.text)
                     .textSelection(.enabled)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
             }
         }
-        .background(Theme.codeBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Theme.code, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).strokeBorder(Theme.line))
     }
 }
 #endif

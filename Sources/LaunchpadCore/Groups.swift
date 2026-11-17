@@ -11,14 +11,12 @@ public struct BotGroup: Codable, Identifiable, Hashable, Sendable {
     public var handoffLimit: Int
     public var skills: [String]
     public var connectors: [String]
-    /// "Ask me" (the default) or "Full freedom": see `ApprovalMode`.
-    public var approvals: ApprovalMode
     public var createdAt: Date
 
     public init(
         id: String, name: String, emoji: String = "👥", members: [String] = [], lead: String? = nil,
         rules: String = "", handoffLimit: Int = 3, skills: [String] = [], connectors: [String] = [],
-        approvals: ApprovalMode = .ask, createdAt: Date = Date()
+        createdAt: Date = Date()
     ) {
         self.id = id
         self.name = name
@@ -29,12 +27,11 @@ public struct BotGroup: Codable, Identifiable, Hashable, Sendable {
         self.handoffLimit = handoffLimit
         self.skills = skills
         self.connectors = connectors
-        self.approvals = approvals
         self.createdAt = createdAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, emoji, members, lead, rules, handoffLimit, skills, connectors, approvals, createdAt
+        case id, name, emoji, members, lead, rules, handoffLimit, skills, connectors, createdAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -49,8 +46,6 @@ public struct BotGroup: Codable, Identifiable, Hashable, Sendable {
         handoffLimit = max(1, (try? c.decodeIfPresent(Int.self, forKey: .handoffLimit)) ?? 3)
         skills = try c.decodeIfPresent([String].self, forKey: .skills) ?? []
         connectors = try c.decodeIfPresent([String].self, forKey: .connectors) ?? []
-        // Anything unreadable means Ask me.
-        approvals = (try? c.decodeIfPresent(ApprovalMode.self, forKey: .approvals)) ?? .ask
         createdAt = (try? c.decodeIfPresent(Date.self, forKey: .createdAt)) ?? Date()
     }
 

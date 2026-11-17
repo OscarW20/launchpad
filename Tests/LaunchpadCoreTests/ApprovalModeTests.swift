@@ -33,21 +33,76 @@ final class ApprovalModeTests: XCTestCase {
 
     // MARK: The group setting
 
-    func testGroupsDefaultToAskMe() throws {
-        XCTAssertEqual(BotGroup(id: "g", name: "G").approvals, .ask)
-        let old = Data(#"{"id":"g","name":"G","members":["scout"]}"#.utf8)
-        XCTAssertEqual(try JSONCoding.decoder().decode(BotGroup.self, from: old).approvals, .ask, "groups saved before the setting existed")
-        let odd = Data(#"{"id":"g","name":"G","approvals":"yolo"}"#.utf8)
-        XCTAssertEqual(try JSONCoding.decoder().decode(BotGroup.self, from: odd).approvals, .ask, "anything unreadable means Ask me")
+    func testGroupsDefaultToAskMe() {
+        let modes = ApprovalModes(paths: paths)
+        XCTAssertEqual(modes.load(), [])
+        XCTAssertEqual(modes.mode(groupId: "build"), .ask)
+        XCTAssertEqual(modes.mode(groupId: nil), .ask)
     }
 
-    func testTheSettingIsSavedWithTheGroup() throws {
+    func testTheSettingIsSavedOutsideTheGroupsFolder() throws {
+        let modes = ApprovalModes(paths: paths)
+        try modes.set(.fullFreedom, groupId: "build")
+        XCTAssertEqual(modes.mode(groupId: "build"), .fullFreedom)
+        XCTAssertEqual(modes.mode(groupId: "other"), .ask)
+        XCTAssertTrue(modes.file.path.hasPrefix(paths.launchpadData.path + "/"))
+        XCTAssertFalse(modes.file.path.hasPrefix(paths.groups.path + "/"))
+        try modes.set(.ask, groupId: "build")
+        XCTAssertEqual(modes.load(), [])
+    }
+
+    func testAnUnreadableFileMeansAskMe() throws {
+        let modes = ApprovalModes(paths: paths)
+        try FileManager.default.createDirectory(at: paths.launchpadData, withIntermediateDirectories: true)
+        try Data("{ not a list".utf8).write(to: modes.file)
+        XCTAssertEqual(modes.mode(groupId: "build"), .ask)
+    }
+
+    func testGroupJsonCannotTurnItOn() throws {
+        // group.json is in a folder the group's bots may write, so nothing in it switches the mode.
         let store = GroupStore(paths: paths)
-        var group = try store.create(name: "Build", members: ["scout"], lead: "scout")
-        XCTAssertEqual(group.approvals, .ask)
-        group.approvals = .fullFreedom
-        try store.save(group)
-        XCTAssertEqual(try store.load(id: group.id).approvals, .fullFreedom)
+        let group = try store.create(name: "Build", members: ["scout"], lead: "scout")
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: store.json(group.id))) as? [String: Any])
+        json["approvals"] = "fullFreedom"
+        try JSONSerialization.data(withJSONObject: json).write(to: store.json(group.id))
+        XCTAssertEqual(try store.load(id: group.id).id, group.id)
+        XCTAssertEqual(ApprovalModes(paths: paths).mode(groupId: group.id), .ask)
+    }
+
+    func testAOneToOneChatNeverGetsFullFreedom() {
+        let free: Set<String> = ["build"]
+        XCTAssertEqual(ApprovalModes.mode(for: ChatMeta(title: "#build", kind: .group, groupId: "build"), free: free), .fullFreedom)
+        XCTAssertEqual(ApprovalModes.mode(for: ChatMeta(title: "#other", kind: .group, groupId: "other"), free: free), .ask)
+        XCTAssertEqual(ApprovalModes.mode(for: ChatMeta(title: "Scout", kind: .bot, botId: "scout"), free: free), .ask)
+        // Even one that somehow carries a Full freedom group's id.
+        XCTAssertEqual(ApprovalModes.mode(for: ChatMeta(title: "Scout", kind: .bot, botId: "scout", groupId: "build"), free: free), .ask)
+    }
+
+    func testABotCannotSwitchTheModeItself() throws {
+        // In Ask me, working in its group's folder: every way of editing the mode file is refused, not asked about.
+        let modes = ApprovalModes(paths: paths)
+        let groupDir = GroupStore(paths: paths).dir("build")
+        let config = GuardRulesFile.config(for: Bot(id: "scout", name: "Scout"), paths: paths, extraRoots: [groupDir])
+        let ask = try GuardRulesFile.write(config, botId: "scout", paths: paths).path
+        for tool in ["Edit", "Write"] {
+            let r = GuardHook.run(input: call(tool, ["file_path": modes.file.path]), rulesPath: ask, askBase: nil, grants: nil)
+            XCTAssertEqual(r.exitCode, 2, tool)
+            XCTAssertEqual(r.stderr, GuardEngine.protectedReason, tool)
+        }
+        let data = paths.launchpadData.lastPathComponent, name = modes.file.lastPathComponent
+        let shell = [
+            "sed -i '' 's/x/build/' \(modes.file.path)",
+            "echo '[\"build\"]' > \(modes.file.path)",
+            "cd \(paths.root.path) && echo '[\"build\"]' > \(data)/\(name)",
+            "python3 -c \"open('\(modes.file.path)','w').write('[]')\"",
+            "mv /tmp/modes.json \(modes.file.path)",
+        ]
+        for command in shell {
+            let r = run(command, rules: ask)
+            XCTAssertEqual(r.exitCode, 2, command)
+            XCTAssertEqual(r.stderr, GuardEngine.protectedReason, command)
+        }
+        XCTAssertEqual(modes.load(), [])
     }
 
     func testALockedDownBotKeepsAsking() {

@@ -228,6 +228,8 @@ final class AppModel {
     // Safety
     /// Skills locked so bots can't change them.
     var lockedSkills: Set<String> = []
+    /// Groups in "Full freedom" (`ApprovalModes`).
+    var fullFreedomGroups: Set<String> = []
     /// Settings: let "Always allow" cover sends, deletes, spending and changes.
     var alwaysForWrites: Bool = UserDefaults.standard.object(forKey: "alwaysForWrites") as? Bool ?? true {
         didSet {
@@ -286,6 +288,7 @@ final class AppModel {
         }
         skillStore.seedStarterSkillsIfNeeded()
         lockedSkills = SkillLocks(paths: paths).load()
+        fullFreedomGroups = ApprovalModes(paths: paths).load()
         _ = try? TeamNotes.ensure(paths: paths)
         savedPrompts = savedPromptsStore.load()
         reloadAll()
@@ -565,15 +568,22 @@ final class AppModel {
     /// Switches a group between "Ask me" and "Full freedom", and says so in its chats. Bots already working pick it
     /// up from their next reply.
     func setApprovalMode(_ mode: ApprovalMode, for group: BotGroup, chatId: String? = nil) {
-        var g = group
-        g.approvals = mode
-        saveGroup(g)
-        guard self.group(g.id)?.approvals == mode else { return }
-        let ids = chatId.map { [$0] } ?? chats.filter { $0.kind == .group && $0.groupId == g.id }.map(\.id)
+        guard approvalMode(for: group.id) != mode else { return }
+        let store = ApprovalModes(paths: paths)
+        do { try store.set(mode, groupId: group.id) } catch {
+            alertMessage = "Couldn't change approvals for \(group.displayName): \(error.localizedDescription)"
+            return
+        }
+        fullFreedomGroups = store.load()
+        let ids = chatId.map { [$0] } ?? chats.filter { $0.kind == .group && $0.groupId == group.id }.map(\.id)
         for id in ids {
             loadMessagesIfNeeded(id)
             append(ChatMessage(role: .notice, text: mode.notice), to: id)
         }
+    }
+
+    func approvalMode(for groupId: String?) -> ApprovalMode {
+        ApprovalModes.mode(groupId: groupId, free: fullFreedomGroups)
     }
 
     func saveGroup(_ group: BotGroup) {
@@ -594,6 +604,10 @@ final class AppModel {
     func deleteGroup(_ id: String) {
         for chat in chats where chat.groupId == id { stop(chat.id) }
         do { try groupStore.delete(id: id) } catch { alertMessage = "Couldn't move that group to the Trash: \(error.localizedDescription)" }
+        // A later group with the same id starts in Ask me.
+        if fullFreedomGroups.contains(id), (try? ApprovalModes(paths: paths).set(.ask, groupId: id)) != nil {
+            fullFreedomGroups.remove(id)
+        }
         reloadGroups()
         relinkSkills()
     }
@@ -1204,7 +1218,7 @@ final class AppModel {
         }
 
         // "Full freedom" is a group setting: what this bot's rules would ask about goes through without a card.
-        let free = chat.kind == .group && (group(chat.groupId)?.approvals ?? .ask).skipsApprovals(for: bot)
+        let free = ApprovalModes.mode(for: chat, free: fullFreedomGroups).skipsApprovals(for: bot)
         var liveApprovals = false
         if bot.engine == .claude {
             if let guardURL = guardExecutable, let rules = writeGuardRules(for: bot, fullFreedom: free) {

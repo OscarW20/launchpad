@@ -104,7 +104,7 @@ struct ConversationHeader: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
-                if let group, group.approvals == .fullFreedom {
+                if let group, model.approvalMode(for: group.id) == .fullFreedom {
                     Button { model.setApprovalMode(.ask, for: group, chatId: chatId) } label: {
                         Label(ApprovalMode.fullFreedom.title, systemImage: "bolt.fill")
                             .font(.system(size: 11, weight: .semibold))
@@ -166,7 +166,7 @@ struct ConversationHeader: View {
                             model.section = .groups
                         } label: { Label("Edit Group", systemImage: "slider.horizontal.3") }
                             .help("Members, lead, rules and hand-off limit")
-                        let next: ApprovalMode = group.approvals == .fullFreedom ? .ask : .fullFreedom
+                        let next: ApprovalMode = model.approvalMode(for: group.id) == .fullFreedom ? .ask : .fullFreedom
                         Button { model.setApprovalMode(next, for: group, chatId: chatId) } label: {
                             Label("Switch to \(next.title)", systemImage: next == .fullFreedom ? "bolt.fill" : "hand.raised")
                         }

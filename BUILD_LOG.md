@@ -747,3 +747,50 @@ Tests: 11 new in `MacFeatureTests` (useComputer round trip, driver lookup, conne
 asks and Never blocks, allowed tools, blockers, claims read/release/expiry, attention, desk state and work line,
 back/forward history, notification text). 386 on Linux (387 on macOS), all passing. The app is built, tested and
 bundled by the macOS CI (run 18 onwards).
+
+## Restyle: blue and black
+
+The look the user approved (mockup `style/mock.html`, Biscuit Bots' layout and feel) in blue and black. Visual only:
+every page, action and keyboard path works as before.
+
+### What changed
+- **Tokens** (`Theme.swift`): background `#06070A` / `#EDF0F5` with a faint blue glow top-right, frosted panels
+  (`#111318` / white, slightly see-through over a material), cards `#171A21` / white, lines, text, secondary text,
+  accent `#3B82FF` / `#1F6BFF` (gradient to `#1E5EEA` / `#0B4FD6`), soft accent `#16233F` / `#E6EEFF`, fields, code
+  boxes, success, red and amber. Spacing 4/8/12/16/24/32; radii 18 control, 20 bubble, 24 card.
+- **Reusable pieces**: `PillButtonStyle` (primary, soft, plain, destructive), `SoftButtonStyle`, `CircleButtonStyle`,
+  `CircleIconButton`, `CircleMenu`, `PillTabs`, `SearchField`, `PillFieldStyle`, `CountBadge`, `RoleTag`,
+  `SectionHeader`, `IconTile`, `ColumnHeader` / `.columnHeader`, `EmptyState`, `.panel()`, `.card()`,
+  `.themedForm()`, `.sheetBackground()`, `GlowBackground`, `BrandMark` (the app icon, small and rounded) and
+  `PanelList` with `.selectableRow(id)` (click to select, ↑ ↓ move, context menus kept).
+- **Window**: `NavigationSplitView` replaced by three floating rounded panels on the glow (sidebar 228 pt, list
+  column 260–460 pt, drag the gap to resize, double-click it to reset; the conversation fills the rest). The title is
+  hidden and the toolbar is transparent with the Launchpad mark and name top-left, a sidebar toggle (⌃⌘S) and
+  back / forward. Marketplace and Settings use the full width (no list column).
+- **Sidebar**: Chats and Office, then Work, Team and Tools with small-caps headers; the selected row is a soft blue
+  pill with blue text; counts are blue pills; the plan usage card (with thin usage bars and engine dots) and Settings
+  sit at the bottom.
+- **Chat list**: round search field and round compose button (the New Chat menu), pill filter tabs, round avatars on
+  soft tints, role tags as grey pills, the selected chat as a card.
+- **Conversation**: header with avatar, name, a green "working" status line, engine / permission chips and a
+  context chip; round buttons (thread menu, new chat or group summary, a "more" menu with folder, edit, export and
+  open in window) and a blue "Teach a Skill" pill (a round button when narrow). Your bubbles are a blue gradient with
+  white text and a small tail corner; bot replies are cards with a thin border; the step summary is a soft pill;
+  approval, live approval, plan, question and poll cards are 22 pt cards with pill buttons (primary solid blue,
+  secondary soft blue); the composer is a round +, a pill field and a round blue send (red stop while working).
+- **Everywhere else**: Office desks and team notes as 24 pt cards, the live feed column, Marketplace with pill tabs
+  and cards, Bots / Groups / Skills / Connectors / Routines / Workflows / Tasks lists on `PanelList`, grouped forms
+  on the panels (no grey page behind, switches for toggles, soft pill buttons), sheets on the solid panel colour with
+  the glow, the menu bar panel and the Quick Ask bar restyled, pop-out chat windows as one panel on the glow, empty
+  states with a soft icon tile. `.tint(Theme.accent)` stays on every scene.
+
+### Decisions
+- Contrast: accent-coloured text uses `accentText` (`#6AA5FF` dark / `#0B4FD6` light) so it reads at 4.5:1 or more on
+  panels and soft-blue fills; small white-on-blue badges use `accentStrong`. Success, red and amber text use darker
+  shades in light mode (`#0B7F4B`, `#C62F36`, `#A14A06`); the exact palette colours are kept for dots, bars and fills.
+- Grouped `Form`s keep the system section cards (now on the panel colour) rather than a hand-made form, so labels,
+  pickers and fields keep their native alignment and accessibility.
+- Lists moved from `List(selection:)` to `PanelList`, because the system selection highlight can't be restyled.
+- System fonts only: SF Pro for interface text, SF Pro Rounded for big titles.
+
+Tests: no core changes; `swift build` and `swift test` still pass on Linux, and the macOS CI builds the app.

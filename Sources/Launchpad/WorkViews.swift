@@ -58,7 +58,7 @@ struct StatusPill: View {
 
     private var colour: Color {
         switch status {
-        case .queued: return .secondary
+        case .queued: return Theme.secondary
         case .working: return Theme.accent
         case .needsYou: return Theme.warning
         case .done: return Theme.success

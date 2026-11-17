@@ -387,7 +387,7 @@ struct WebhookSection: View {
                         .textSelection(.enabled)
                         .padding(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Theme.code, in: RoundedRectangle(cornerRadius: 8))
+                        .background(Theme.code, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
                 }
                 Button("New Secret…") { confirmNew = true }
             } else if tried {

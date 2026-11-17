@@ -92,13 +92,7 @@ struct MarketplaceView: View {
                 .controlSize(.large)
             }
             .padding(Theme.Space.xl)
-            .background(
-                ZStack {
-                    Theme.card
-                    LinearGradient(colors: [Theme.accent.opacity(0.16), Theme.accent.opacity(0.02)], startPoint: .topTrailing, endPoint: .bottomLeading)
-                },
-                in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-            )
+            .background { TeamCardBackground() }
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.line))
         }
     }
@@ -182,6 +176,19 @@ struct MarketplaceView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// A card with a faint blue wash from the top-right.
+private struct TeamCardBackground: View {
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+        let wash = LinearGradient(colors: [Theme.accent.opacity(0.16), Theme.accent.opacity(0.02)],
+                                  startPoint: .topTrailing, endPoint: .bottomLeading)
+        ZStack {
+            shape.fill(Theme.card)
+            shape.fill(wash)
         }
     }
 }

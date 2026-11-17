@@ -277,7 +277,7 @@ final class ChatToolsTests: XCTestCase {
         let bot = Bot(id: "planner", name: "Planner", permission: .editWorkspace)
         let inv = ChatToolsSetup.allowingChatTools(EngineCommand.invocation(for: bot, prompt: "hi", botDirectory: paths.botDir("planner"), sessionId: nil, options: o))
         let i = try XCTUnwrap(inv.arguments.firstIndex(of: "--allowedTools"))
-        XCTAssertEqual(inv.arguments[i + 1], "mcp__launchpad_chat")
+        XCTAssertEqual(inv.arguments[i + 1], "mcp__notion,mcp__launchpad_chat", "the bot's apps and the chat tools are pre-approved")
         let mcp = inv.arguments[try XCTUnwrap(inv.arguments.firstIndex(of: "--mcp-config")) + 1]
         XCTAssertTrue(mcp.contains("launchpad_chat") && mcp.contains("notion"))
 
@@ -286,7 +286,7 @@ final class ChatToolsTests: XCTestCase {
         let roInv = ChatToolsSetup.allowingChatTools(ChatToolsSetup.allowingChatTools(
             EngineCommand.invocation(for: ro, prompt: "hi", botDirectory: paths.botDir("r"), sessionId: nil, options: o)))
         XCTAssertEqual(roInv.arguments.filter { $0 == "--allowedTools" }.count, 1)
-        XCTAssertTrue(roInv.arguments[roInv.arguments.firstIndex(of: "--allowedTools")! + 1].hasSuffix(",TodoWrite,mcp__launchpad_chat"))
+        XCTAssertTrue(roInv.arguments[roInv.arguments.firstIndex(of: "--allowedTools")! + 1].hasSuffix(",TodoWrite,mcp__notion,mcp__launchpad_chat"))
         // Codex is untouched.
         let cx = Bot(id: "c", name: "C", engine: .codex)
         let cxInv = EngineCommand.invocation(for: cx, prompt: "hi", botDirectory: paths.botDir("c"), sessionId: nil, options: o)

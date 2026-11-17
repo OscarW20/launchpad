@@ -137,13 +137,22 @@ public enum EngineCommand {
         if options.ephemeral { args.append("--no-session-persistence") }
         if let model, !model.isEmpty { args += ["--model", model] }
         if options.quiet { args += ["--tools", ""] }
+        // A run has no one to click "Allow", so Claude Code refuses any tool that isn't pre-approved.
+        // The bot's connected apps are pre-approved here; Launchpad's guard still asks you before anything
+        // that sends, deletes, spends or changes shared systems, per the bot's rules.
+        let appTools = options.connectors.map { "mcp__\($0.serverKey)" }
         switch permission {
         case .readOnly:
             args += ["--permission-mode", "default",
-                     "--allowedTools", claudeReadOnlyTools.joined(separator: ","),
+                     "--allowedTools", (claudeReadOnlyTools + appTools).joined(separator: ","),
                      "--disallowedTools", claudeWriteTools.joined(separator: ",")]
         case .editWorkspace:
             args += ["--permission-mode", "acceptEdits"]
+            // With the live guard on, commands are allowed too: the guard lets work inside the bot's own
+            // folders through and asks you about anything outside them or anything risky.
+            var allowed = appTools
+            if options.guardHook != nil { allowed.insert("Bash", at: 0) }
+            if !allowed.isEmpty { args += ["--allowedTools", allowed.joined(separator: ",")] }
         case .fullAccess:
             args += ["--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"]
         }

@@ -91,3 +91,34 @@ final class ErrorClassifierTests: XCTestCase {
         XCTAssertEqual(f.detail, "Weird thing\nstack trace")
     }
 }
+
+final class AppToolPermissionTests: XCTestCase {
+    let dir = URL(fileURLWithPath: "/b")
+    let vercel = Connector(id: "vercel", name: "Vercel", kind: .http, url: "https://mcp.vercel.com")
+
+    private func args(_ permission: PermissionLevel, connectors: [Connector], guardOn: Bool) -> [String] {
+        var o = RunOptions()
+        o.manageConnectors = true
+        o.connectors = connectors
+        if guardOn { o.guardHook = GuardHookSetup(helper: "/g", rulesFile: "/r", askBase: "/a", approvalsDir: "/d") }
+        return EngineCommand.invocation(for: Bot(id: "b", name: "B", permission: permission), prompt: "x",
+                                        botDirectory: dir, sessionId: "s", options: o).arguments
+    }
+
+    private func allowed(_ a: [String]) -> [String] {
+        guard let i = a.firstIndex(of: "--allowedTools") else { return [] }
+        return a[i + 1].split(separator: ",").map(String.init)
+    }
+
+    func testWorkspaceBotsCanUseTheirConnectedApps() {
+        // Without this, a -p run silently refuses every MCP tool ("2 didn't work").
+        XCTAssertTrue(allowed(args(.editWorkspace, connectors: [vercel], guardOn: false)).contains("mcp__vercel"))
+        XCTAssertTrue(allowed(args(.readOnly, connectors: [vercel], guardOn: true)).contains("mcp__vercel"))
+    }
+
+    func testWorkspaceBotsRunCommandsOnlyWithTheLiveGuard() {
+        XCTAssertTrue(allowed(args(.editWorkspace, connectors: [], guardOn: true)).contains("Bash"))
+        XCTAssertFalse(allowed(args(.editWorkspace, connectors: [], guardOn: false)).contains("Bash"))
+        XCTAssertFalse(allowed(args(.readOnly, connectors: [], guardOn: true)).contains("Bash"))
+    }
+}

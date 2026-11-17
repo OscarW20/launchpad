@@ -61,7 +61,7 @@ public enum PermissionLevel: String, Codable, CaseIterable, Identifiable, Sendab
     public var explanation: String {
         switch self {
         case .readOnly: return "Can look at files and search the web, but can't change anything."
-        case .editWorkspace: return "Can create and edit files in its own folder. Can't run commands."
+        case .editWorkspace: return "Can create and edit files and run commands in its own folder. Asks you before anything outside it or anything risky."
         case .fullAccess: return "Can run any command and edit any file. Only for bots you trust."
         }
     }

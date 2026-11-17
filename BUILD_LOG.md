@@ -844,3 +844,27 @@ Release plan step 1. Every build used to say `0.1.0 (1)`, so nobody could tell w
   fetch full history.
 
 Tests: 5 new in `AppVersionTests`.
+
+## Developer ID signing (2026-11-17)
+
+Release plan step 2. The app was always ad-hoc signed, so every build had a new identity (macOS can re-ask for
+Keychain and privacy permissions after each update), and `codesign ... || true` hid signing failures.
+
+- **`scripts/make-app.sh`**: with `SIGN_IDENTITY` set, the two helpers (`launchpad-guard`, `launchpad-chat`) and then
+  the app are signed with that certificate, the hardened runtime and a timestamp, which is what notarisation needs.
+  Without it the app is ad-hoc signed as before. Either way a signing failure now stops the build, and the result is
+  checked with `codesign --verify --strict`.
+- **`scripts/Launchpad.entitlements`**: one entitlement, Apple Events, with a matching usage description in
+  Info.plist. Bots run as Launchpad's child processes, so macOS asks on Launchpad's behalf when one scripts another
+  app.
+- README: how to sign.
+
+### Decisions
+- Entitlements start minimal. Launchpad loads no third-party code itself, and the engines (`claude`, `codex`) are
+  separate programs with their own signatures, so no JIT or library-validation exceptions until a signed build shows
+  one is needed.
+- The helpers get their own identifiers (`app.launchpad.personal.guard`, `.chat`) rather than the file name.
+
+Tests: no Swift changes. Built three ways: ad-hoc (as before); `SIGN_IDENTITY=-` (hardened runtime with an ad-hoc
+identity: the app started on an empty home folder and the guard helper ran); and a missing identity (build stops,
+exit 1). Not yet tried with a real Developer ID certificate.

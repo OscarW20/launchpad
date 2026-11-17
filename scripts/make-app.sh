@@ -47,6 +47,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>$BUILD</string>
   <key>LaunchpadGitDescribe</key><string>$DESCRIBE</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>NSAppleEventsUsageDescription</key><string>A bot working in Launchpad wants to control another app.</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
@@ -56,9 +57,22 @@ PLIST
 # App icon from the brand iconset.
 iconutil -c icns "Sources/Launchpad/Resources/Brand/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
 
-# Ad-hoc signature so macOS will run it locally.
-codesign --force --sign - "$APP" >/dev/null 2>&1 || true
-echo "Built $APP $VERSION ($BUILD)"
+# Signing. With SIGN_IDENTITY set (the name or hash of a "Developer ID Application" certificate in your keychain)
+# the helpers and then the app are signed with the hardened runtime and a timestamp, ready to notarise. Without it
+# the app gets an ad-hoc signature, which runs on this Mac only. A signing failure stops the build.
+SIGN_IDENTITY="${SIGN_IDENTITY:-}"
+if [[ -n "$SIGN_IDENTITY" ]]; then
+  SIGN=(--force --options runtime --timestamp --sign "$SIGN_IDENTITY")
+  codesign "${SIGN[@]}" --identifier app.launchpad.personal.guard "$APP/Contents/MacOS/launchpad-guard"
+  codesign "${SIGN[@]}" --identifier app.launchpad.personal.chat "$APP/Contents/MacOS/launchpad-chat"
+  codesign "${SIGN[@]}" --entitlements scripts/Launchpad.entitlements "$APP"
+  SIGNED="signed as $SIGN_IDENTITY"
+else
+  codesign --force --sign - "$APP"
+  SIGNED="ad-hoc signed"
+fi
+codesign --verify --strict "$APP"
+echo "Built $APP $VERSION ($BUILD), $SIGNED"
 
 case "${1:-}" in
   --open)

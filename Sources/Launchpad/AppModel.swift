@@ -162,8 +162,8 @@ final class AppModel {
     var routines: [Routine] = []
     var chats: [ChatMeta] = []
     var usage = UsageSnapshot()
-    private(set) var messages: [String: [ChatMessage]] = [:]
-    private(set) var live: [String: [LiveRun]] = [:]
+    var messages: [String: [ChatMessage]] = [:]
+    var live: [String: [LiveRun]] = [:]
     private(set) var busyChats: Set<String> = []
     private(set) var engineLocations: [BotEngine: String]? = nil
 

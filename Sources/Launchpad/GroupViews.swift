@@ -8,10 +8,10 @@ struct GroupAvatar: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-                .fill(Theme.accent.opacity(0.18))
-            RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-                .strokeBorder(Theme.accent.opacity(0.45), lineWidth: max(1, size / 24))
+            Circle()
+                .fill(Theme.accentSoft)
+            Circle()
+                .strokeBorder(Theme.accent.opacity(0.25), lineWidth: 1)
             Text(group?.emoji ?? "👥")
                 .font(.system(size: size * 0.5))
         }

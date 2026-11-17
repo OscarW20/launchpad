@@ -140,6 +140,7 @@ struct SettingsView: View {
             }
         }
         .themedForm()
+        .columnHeader("Settings") { EmptyView() }
         .navigationTitle("Settings")
     }
 }

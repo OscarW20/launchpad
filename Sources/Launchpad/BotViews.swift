@@ -10,9 +10,9 @@ struct AvatarView: View {
         let colour = Color(hex: bot?.colour ?? "#B5A698")
         ZStack {
             Circle()
-                .fill(colour.opacity(0.22))
+                .fill(colour.opacity(0.20))
             Circle()
-                .strokeBorder(colour.opacity(0.55), lineWidth: max(1, size / 24))
+                .strokeBorder(colour.opacity(0.25), lineWidth: 1)
             Text(bot?.emoji ?? "?")
                 .font(.system(size: size * 0.52))
         }
@@ -219,7 +219,7 @@ struct EmojiPicker: View {
                             .frame(width: 26, height: 26)
                             .background(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(selection == emoji ? Theme.accent.opacity(0.25) : Color.clear)
+                                    .fill(selection == emoji ? Theme.accentSoft : Color.clear)
                             )
                     }
                     .buttonStyle(.plain)
@@ -254,7 +254,7 @@ struct ColourPicker: View {
                         .frame(width: 20, height: 20)
                         .overlay(
                             Circle()
-                                .strokeBorder(Color.primary.opacity(selection.uppercased() == hex.uppercased() ? 0.7 : 0), lineWidth: 2)
+                                .strokeBorder(Theme.accent.opacity(selection.uppercased() == hex.uppercased() ? 1 : 0), lineWidth: 2)
                                 .padding(-3)
                         )
                 }

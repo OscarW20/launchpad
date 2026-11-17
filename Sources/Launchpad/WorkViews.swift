@@ -271,9 +271,11 @@ struct WorkflowListView: View {
                 PanelList(selection: $model.selectedWorkflowId) {
                     ForEach(model.workflows) { wf in
                         HStack(spacing: 10) {
-                            Image(systemName: model.workflowEngine.isRunning(wf.id) ? "play.circle.fill" : "flowchart")
-                                .foregroundStyle(wf.enabled ? Theme.accent : .secondary)
-                                .frame(width: 22)
+                            Image(systemName: model.workflowEngine.isRunning(wf.id) ? "play.fill" : "flowchart")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(wf.enabled ? Theme.accentText : Theme.secondary)
+                                .frame(width: 34, height: 34)
+                                .background(Circle().fill(wf.enabled ? Theme.accentSoft : Theme.field))
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(wf.name).font(Theme.rounded(.body, weight: .semibold))
                                 Text("\(wf.steps.count) step\(wf.steps.count == 1 ? "" : "s") · \(wf.scheduleSummary)")

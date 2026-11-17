@@ -14,8 +14,10 @@ struct RoutineListView: View {
             ForEach(model.routines) { r in
                 HStack(spacing: 10) {
                     Image(systemName: RoutineListView.icon(r))
-                        .foregroundStyle(r.enabled ? Theme.accent : .secondary)
-                        .frame(width: 22)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(r.enabled ? Theme.accentText : Theme.secondary)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(r.enabled ? Theme.accentSoft : Theme.field))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(r.name).font(Theme.rounded(.body, weight: .semibold))
                         Text("\(r.summary) → \(model.targetName(r.target))")
@@ -37,7 +39,7 @@ struct RoutineListView: View {
                         }
                     }
                     Spacer()
-                    if !r.enabled { Text("Off").font(.caption).foregroundStyle(Theme.secondary) }
+                    if !r.enabled { RoleTag(text: "Off") }
                 }
                 .padding(.vertical, 3)
                 .selectableRow(r.id)

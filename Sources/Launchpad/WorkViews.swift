@@ -193,7 +193,7 @@ struct TaskDetailView: View {
                             MessageRow(message: m, chatId: chatId)
                         }
                         ForEach(model.liveRuns(for: chatId)) { run in
-                            MessageRow(message: run.message, chatId: chatId, activeStep: run.builder.activeStep)
+                            MessageRow(message: run.message, chatId: chatId, activeStep: run.builder.activeStep, isLive: true)
                         }
                     }
                 }

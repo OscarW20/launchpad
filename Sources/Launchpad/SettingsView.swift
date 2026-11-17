@@ -62,7 +62,7 @@ struct SettingsView: View {
                 LabeledContent("Default address") {
                     Text(LocalModel.defaultBaseURL).font(.system(.body, design: .monospaced)).textSelection(.enabled)
                 }
-                SecretField(title: "API key", account: LocalModelKey.account,
+                KeychainField(title: "API key", account: LocalModelKey.account,
                             prompt: "Only if your server asks for one")
                 HStack {
                     Button("Start Ollama") { model.perform(.openTerminal(command: BotEngine.local.signInCommand)) }
@@ -81,7 +81,7 @@ struct SettingsView: View {
                         Text(PlanWait.title(seconds)).tag(seconds)
                     }
                 }
-                SecretField(title: "GIPHY API key", account: GiphySearch.keyAccount, prompt: "For GIFs (free at developers.giphy.com)")
+                KeychainField(title: "GIPHY API key", account: GiphySearch.keyAccount, prompt: "For GIFs (free at developers.giphy.com)")
             } header: {
                 Text("Chat")
             } footer: {
@@ -140,7 +140,7 @@ struct SettingsView: View {
 }
 
 /// A secret kept in your Keychain: shows whether it's set, and lets you save or remove it. Never shows the value.
-struct SecretField: View {
+struct KeychainField: View {
     @Environment(AppModel.self) private var model
     let title: String
     let account: String

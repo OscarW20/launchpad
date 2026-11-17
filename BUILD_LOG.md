@@ -496,3 +496,82 @@ The macOS app now uses the safety, routines and work cores. New files: `SafetyVi
 
 Tests: 2 new (old chat lines decode and the safety fields round-trip; routine runs recorded through the engine
 survive its saves). 276 in total, all passing on Linux. The app is built and bundled by the macOS CI.
+
+### App integration: chat tools, chat features and runners
+The macOS app now uses the Phase 8 and Phase 9 cores. New files: `AppModel+Chat.swift` (chat tool actions, cards,
+message operations, attachments, export, ⌘K, drafter, team notes, threads, side questions, Codex usage) and
+`ChatFeatureViews.swift` (reactions, GIFs, plan / question / poll cards, file chips with Quick Look, to-do list,
+message menu, pinned bar, saved messages, quick switcher, context ring, thread menu, past threads, activity feed).
+
+**How a reply runs now** (`AppModel.runBotTurn`, split into `prepareRun`, `streamRun` and `finalMessage`)
+- `prepareRun`: agent bots get a `ChatToolsRun` for the reply (actions file prepared, `launchpad-chat` added to their
+  connectors when it's bundled next to the app, `ChatToolsSetup.allowingChatTools` on Claude's `--allowedTools`), the
+  chat tools instructions, `TeamNotes.teamLine` and `paths.shared` as an extra folder. The guard rules file now has
+  `trustedServers: ["launchpad_chat"]` and `Shared/` as a root, so react / send_gif / share_plan and TEAM.md edits
+  don't ask. Codex runs get `CodexHome().environment()`. Local bots get the chat as `history`, bot names, and an
+  optional API key from the Keychain (`local-model-api-key`), and no guard, sandbox, chat tools or undo snapshot.
+- `streamRun`: one poller every 0.5 s collects approval cards and reads the actions file (`ChatActionReader`), applied
+  with `ChatActionApplier`: reactions / votes on earlier messages are saved, GIF searches go to GIPHY (first result),
+  `create_routine` requests are saved for this chat's bot or group with a notice, and the reply's cards show live.
+  A plan whose countdown runs out shows as started. The `.context` event fills the header's context ring.
+- `finalMessage`: approval cards expire, the to-do list is saved on the reply (`ChatMessage.todos`), the text
+  fallback (`ChatTokens`) is applied, extras are merged and the run's files are cleaned up.
+- 1:1 chats: every agent turn goes through `ConversationRecap.prompt` (no session → recent chat in front; missed
+  messages after a backup turn → just those), and a finished turn clears `unseenAfter`. The session-lost retry gets
+  the recap the same way. Local bots never get a recap (they get the whole chat as history).
+- Backup brain: after a usage-limit failure, `BackupPolicy.retryBrain` → notice, one turn on `bot.running(on:)` with no
+  session and `BackupPolicy.prompt`; its session is never saved; the main session gets an `unseenAfter` mark.
+- Replies in 1:1 chats are paced with `TextPacing.splitIntoTexts` (a typing indicator between parts). Group replies
+  aren't split, so hand-off and summary text stays in one message.
+- After a Codex turn, `CodexSessionLogs.context(threadId:)` (off the main thread) updates the ring, and usage is
+  refreshed; a timer also refreshes Codex usage every 2 minutes. The sidebar shows `codexWindows` like Claude's.
+
+**Steering and queueing** (`TurnQueue` per 1:1 chat)
+- Send stays enabled while a bot works. In a 1:1 chat, writing to the busy bot steers it: its run is cancelled (Stop
+  keeps the session), the cut-short reply is kept with `settleInterrupted` (or dropped if empty), and the next turn
+  carries on with your words. Messages written while a teammate or reviewer is answering wait and are merged.
+  In a group, a message written while the group works is saved and the group runs again when it's free.
+  Routines, workflows and buttons still wait for a free chat. Stop clears the queue.
+- `startSolo` loops: the bot's turn, then 1:1 hand-offs (`DirectHandOff`: notice, helper turn, answer back to the chat's
+  bot, hop limit; skipped when you've written meanwhile), then the next queued turn.
+
+**Chat features (UI)**
+- Cards: plan (Start / Cancel, countdown from Settings → Chat → Plan cards; Start on a reply that has ended sends
+  "Go ahead with the plan."), questions (tappable options, multi-select, your own words; group answers @mention the
+  asker), polls (vote, counts, voters, bots' reasons; voting in a bot's poll tells it), GIFs (animated via NSImageView).
+- Right-click a message: React, Pin, Save for Later, Copy Text, Edit (your messages; earlier versions kept), Forward to
+  any chat (that chat's bot or group answers), Ask for Review (another bot, same chat, no hand-offs), Branch from Here,
+  Delete ("This message was deleted"). Reactions show under messages; click one to add or remove yours.
+- Pinned bar above the messages (click to jump), Saved messages sheet (chat list toolbar, ⇧⌘S), ⌘K quick switcher
+  (chats, bots, groups, pages, actions and message text, arrow keys + Return).
+- Composer + menu: Attach Files, Send a GIF (GIPHY key in Settings), Start a Poll, Ask on the Side (1:1), Saved
+  Prompts (use / save what's typed / remove). Files can also be dropped anywhere on the chat; they're copied into the
+  Inbox and listed in your message. Huddle replaces "Ask everyone" in groups (`Huddle.message` + started notice).
+- Header: Thread menu (New Thread, Compact, Branch from Here, Past Threads… with reopen / delete and a read-only peek),
+  context ring with a Compact button when it's nearly full, Export (Markdown via a save panel).
+- Bot replies: to-do list above the steps, steps labelled with `StepLabel`, mentioned files as chips (Quick Look),
+  side questions and answers marked "Side question". Activity popover in the chat list toolbar (`ActivityFeed`).
+- Bot editor: engine picker with Local model (server address with Ollama / LM Studio presets; model required), Backup
+  brain (engine, model, address), and agent-only sections (permission, skills, connectors, permissions, lock-down)
+  hidden for local bots. New Bot sheet: "Describe your bot" → `BotDrafter` (an agent engine you have) fills name,
+  role, emoji, colour and instructions. Settings: Local model (Ollama status, Start Ollama, API key), Chat (plan
+  wait, GIPHY key), Team notes editor (TEAM.md, created from the template at launch). Sidebar: the local engine row
+  only shows once a bot uses it ("Ollama found" / "server needed").
+
+**Core changes**
+- `ChatMessage.todos: [TodoItem]?` and `ChatMessage.isSide: Bool?` (optional; old JSONL still decodes, test added).
+- `GroupPrompts` uses `ChatOps.contextText`, so group bots see GIFs, polls, files and forwards.
+
+**Decisions**
+- The chat-tools instructions are added even when the server isn't bundled (`swift run`), since the text fallback
+  (`[react: 🎉]` …) still works there.
+- Side questions run as live runs flagged `isSide`: they show in the chat and get approval cards, but don't make the
+  chat busy, never save a session and have no chat tools.
+- The plan-wait setting is app-wide (UserDefaults `planWait`), as in the core notes.
+
+**Not done / left out**
+- Answering a question card while the bot is still running sends your answers as a new message (which steers it).
+- GIFs a bot asks for need the GIPHY key; without it they're skipped quietly.
+
+Tests: 1 new (to-do list and side flag round-trip; old lines decode). 360 in total on Linux, all passing. The app is
+built and bundled by the macOS CI.

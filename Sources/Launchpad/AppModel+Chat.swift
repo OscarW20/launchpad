@@ -456,9 +456,12 @@ extension AppModel {
             append(m, to: chatId)
             return
         }
+        var options = setup.options
+        // A local model gets the chat as history: as it was before the question, so it isn't sent twice.
+        if !bot.engine.isAgent { options.history = history }
         let invocation = SideQuestion.invocation(for: bot, question: question, botDirectory: paths.botDir(bot.id),
                                                  sessionId: meta.sessions[bot.id], history: history, names: botNames,
-                                                 options: setup.options)
+                                                 options: options)
         let run = await streamRun(invocation, chatId: chatId, runId: runId, bot: bot, setup: setup, isSide: true)
         var m = run.builder.message
         let cards = run.approvals.map { card -> LiveApproval in

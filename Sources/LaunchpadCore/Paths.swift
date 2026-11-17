@@ -1,0 +1,95 @@
+import Foundation
+
+/// The on-disk layout of ~/Launchpad. Everything the app knows lives here.
+public struct LaunchpadPaths: Sendable {
+    public let root: URL
+
+    public init(root: URL) {
+        self.root = root
+    }
+
+    public static var `default`: LaunchpadPaths {
+        if let override = ProcessInfo.processInfo.environment["LAUNCHPAD_HOME"], !override.isEmpty {
+            return LaunchpadPaths(root: URL(fileURLWithPath: override, isDirectory: true))
+        }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        return LaunchpadPaths(root: home.appendingPathComponent("Launchpad", isDirectory: true))
+    }
+
+    public var bots: URL { root.appendingPathComponent("bots", isDirectory: true) }
+    public var groups: URL { root.appendingPathComponent("groups", isDirectory: true) }
+    public var skills: URL { root.appendingPathComponent("skills", isDirectory: true) }
+    public var chats: URL { root.appendingPathComponent("chats", isDirectory: true) }
+    public var connectorsFile: URL { root.appendingPathComponent("connectors.json") }
+
+    public func botDir(_ id: String) -> URL { bots.appendingPathComponent(id, isDirectory: true) }
+    public func botJSON(_ id: String) -> URL { botDir(id).appendingPathComponent("bot.json") }
+    public func claudeMD(_ id: String) -> URL { botDir(id).appendingPathComponent("CLAUDE.md") }
+    public func agentsMD(_ id: String) -> URL { botDir(id).appendingPathComponent("AGENTS.md") }
+    public func notesMD(_ id: String) -> URL { botDir(id).appendingPathComponent("notes.md") }
+    public func workspace(_ id: String) -> URL { botDir(id).appendingPathComponent("workspace", isDirectory: true) }
+
+    public func chatMeta(_ id: String) -> URL { chats.appendingPathComponent("\(id).json") }
+    public func chatLog(_ id: String) -> URL { chats.appendingPathComponent("\(id).jsonl") }
+
+    /// Creates the top-level folders and an empty connectors.json if missing.
+    public func ensureStructure(fileManager fm: FileManager = .default) throws {
+        for dir in [root, bots, groups, skills, chats] {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        if !fm.fileExists(atPath: connectorsFile.path) {
+            try Data("{\n  \"servers\": []\n}\n".utf8).write(to: connectorsFile, options: .atomic)
+        }
+    }
+}
+
+enum JSONCoding {
+    static func encoder() -> JSONEncoder {
+        let e = JSONEncoder()
+        e.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        e.dateEncodingStrategy = .iso8601
+        return e
+    }
+
+    static func lineEncoder() -> JSONEncoder {
+        let e = JSONEncoder()
+        e.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        e.dateEncodingStrategy = .iso8601
+        return e
+    }
+
+    static func decoder() -> JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }
+}
+
+public enum Slug {
+    /// "Frontend Dev!" -> "frontend-dev"
+    public static func make(_ name: String) -> String {
+        let lowered = name.lowercased().folding(options: .diacriticInsensitive, locale: .current)
+        var out = ""
+        var lastDash = false
+        for scalar in lowered.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar) && scalar.isASCII {
+                out.unicodeScalars.append(scalar)
+                lastDash = false
+            } else if !lastDash && !out.isEmpty {
+                out.append("-")
+                lastDash = true
+            }
+        }
+        while out.hasSuffix("-") { out.removeLast() }
+        return out.isEmpty ? "bot" : String(out.prefix(40))
+    }
+
+    /// A slug that isn't in `taken`: "lead", "lead-2", "lead-3"…
+    public static func unique(_ name: String, taken: Set<String>) -> String {
+        let base = make(name)
+        if !taken.contains(base) { return base }
+        var n = 2
+        while taken.contains("\(base)-\(n)") { n += 1 }
+        return "\(base)-\(n)"
+    }
+}

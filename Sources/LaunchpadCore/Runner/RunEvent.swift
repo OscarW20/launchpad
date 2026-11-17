@@ -11,6 +11,8 @@ public enum RunEvent: Equatable, Sendable {
     case stepStarted(id: String, tool: String, title: String, detail: String?)
     case stepFinished(id: String, output: String?, failed: Bool)
     case cost(Double)
+    /// Plan usage the engine reported (Claude: share of the 5-hour and weekly limits; Codex: tokens).
+    case usage(UsageReport)
     /// The run finished. `resultText` is the engine's final answer, if it reports one.
     case finished(resultText: String?)
     /// Raw error text reported by the engine. The runner turns this into `.failed`.
@@ -19,6 +21,41 @@ public enum RunEvent: Equatable, Sendable {
     case failed(RunFailure)
     /// You pressed Stop.
     case stopped
+}
+
+public struct UsageWindow: Codable, Hashable, Sendable {
+    /// "five_hour", "seven_day", …
+    public var name: String
+    /// 0…1
+    public var utilization: Double
+    public var resetsAt: Date?
+
+    public init(name: String, utilization: Double, resetsAt: Date?) {
+        self.name = name
+        self.utilization = utilization
+        self.resetsAt = resetsAt
+    }
+
+    public var label: String {
+        switch name {
+        case "five_hour": return "5-hour"
+        case "seven_day": return "Week"
+        case "seven_day_opus": return "Week (Opus)"
+        default: return name.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+}
+
+public struct UsageReport: Equatable, Sendable {
+    public var engine: BotEngine
+    public var windows: [UsageWindow]
+    public var tokens: Int?
+
+    public init(engine: BotEngine, windows: [UsageWindow] = [], tokens: Int? = nil) {
+        self.engine = engine
+        self.windows = windows
+        self.tokens = tokens
+    }
 }
 
 /// Plain-English titles for tool calls, shared by both engines.

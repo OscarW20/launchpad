@@ -71,6 +71,7 @@ final class CodexStreamParserTests: XCTestCase {
             .stepStarted(id: "item_2", tool: "Edit", title: "Edited app.js", detail: "add: /tmp/bot/workspace/app.js"),
             .stepFinished(id: "item_2", output: nil, failed: false),
             .text("I made **app.js**."),
+            .usage(UsageReport(engine: .codex, tokens: 120)),
             .finished(resultText: nil),
         ])
         XCTAssertTrue(p.isComplete)

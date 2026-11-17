@@ -16,8 +16,13 @@ public final class CLILocator: @unchecked Sendable {
 
     public func locate(_ engine: BotEngine) -> URL? {
         if let o = overrides[engine] { return fm.isExecutableFile(atPath: o) ? URL(fileURLWithPath: o) : nil }
+        return locate(command: engine.executableName)
+    }
+
+    /// Finds any command-line tool the way your Terminal would (e.g. `graphify`).
+    public func locate(command: String) -> URL? {
         for dir in searchDirectories() {
-            let candidate = (dir as NSString).appendingPathComponent(engine.executableName)
+            let candidate = (dir as NSString).appendingPathComponent(command)
             if fm.isExecutableFile(atPath: candidate) { return URL(fileURLWithPath: candidate) }
         }
         return nil

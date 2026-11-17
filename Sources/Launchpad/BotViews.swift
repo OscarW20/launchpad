@@ -269,6 +269,47 @@ struct BotDetailView: View {
                             Text("Saved to CLAUDE.md and AGENTS.md in the bot's folder, so both engines read the same thing.")
                         }
                         Section {
+                            if model.skills.isEmpty {
+                                Text("No skills yet. Add some on the Skills page.").foregroundStyle(.secondary)
+                            }
+                            ForEach(model.skills) { skill in
+                                Toggle(isOn: Binding(
+                                    get: { model.bot(botId)?.skills.contains(skill.id) ?? false },
+                                    set: { _ in model.toggle(skill: skill.id, for: botId) }
+                                )) {
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(skill.name)
+                                        Text(skill.description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                }
+                            }
+                            let inherited = model.groups(containing: botId).flatMap { g in g.skills.map { (g, $0) } }
+                            ForEach(inherited, id: \.1) { pair in
+                                Label("\(pair.1) (from \(pair.0.displayName))", systemImage: "person.3")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } header: {
+                            Text("Skills")
+                        } footer: {
+                            Text("Linked into the bot's folder (.claude/skills and .agents/skills) so Claude Code and Codex pick them up.")
+                        }
+                        Section {
+                            if model.connectors.isEmpty {
+                                Text("No connectors yet. Add MCP servers on the Connectors page.").foregroundStyle(.secondary)
+                            }
+                            ForEach(model.connectors) { c in
+                                Toggle(c.name, isOn: Binding(
+                                    get: { model.bot(botId)?.connectors.contains(c.id) ?? false },
+                                    set: { _ in model.toggle(connector: c.id, for: botId) }
+                                ))
+                            }
+                        } header: {
+                            Text("Connectors")
+                        } footer: {
+                            Text("Only the connectors turned on here (or for its groups) are available to this bot.")
+                        }
+                        Section {
                             Button("Open notes.md (the bot's memory)") {
                                 SystemActions.open(model.paths.notesMD(botId))
                             }

@@ -51,6 +51,9 @@ public struct MessageBuilder: Sendable {
         case .cost(let usd):
             message.costUSD = usd
 
+        case .usage:
+            break
+
         case .finished(let resultText):
             if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let resultText {
                 message.text = resultText

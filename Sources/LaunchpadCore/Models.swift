@@ -197,12 +197,19 @@ public struct ChatMessage: Codable, Identifiable, Hashable, Sendable {
     public var failure: RunFailure?
     public var createdAt: Date
     public var costUSD: Double?
+    /// An Approve / Decline card the bot asked for.
+    public var approval: ApprovalRequest?
+    /// For notices that offer a next step (e.g. "Keep going" after the hand-off limit).
+    public var noticeAction: NoticeAction?
 
     public init(
         id: String = UUID().uuidString.lowercased(), role: MessageRole, botId: String? = nil,
         text: String = "", steps: [Step] = [], status: MessageStatus = .done,
-        failure: RunFailure? = nil, createdAt: Date = Date(), costUSD: Double? = nil
+        failure: RunFailure? = nil, createdAt: Date = Date(), costUSD: Double? = nil,
+        approval: ApprovalRequest? = nil, noticeAction: NoticeAction? = nil
     ) {
+        self.approval = approval
+        self.noticeAction = noticeAction
         self.id = id
         self.role = role
         self.botId = botId
@@ -213,6 +220,11 @@ public struct ChatMessage: Codable, Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.costUSD = costUSD
     }
+}
+
+public enum NoticeAction: String, Codable, Hashable, Sendable {
+    /// The group hit its hand-off limit: let it carry on.
+    case continueGroup
 }
 
 // MARK: - Failures (plain English)

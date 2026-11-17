@@ -19,6 +19,15 @@ struct RootView: View {
         .sheet(isPresented: $model.showingNewBot) {
             NewBotSheet()
         }
+        .sheet(isPresented: $model.showingNewGroup) {
+            NewGroupSheet()
+        }
+        .sheet(isPresented: Binding(get: { model.teach != nil }, set: { if !$0 { model.cancelTeach() } })) {
+            TeachSkillSheet()
+        }
+        .sheet(isPresented: Binding(get: { model.summaryGroupId != nil }, set: { if !$0 { model.summaryGroupId = nil } })) {
+            if let id = model.summaryGroupId { GroupSummarySheet(groupId: id) }
+        }
         .alert(
             "Something went wrong",
             isPresented: Binding(get: { model.alertMessage != nil }, set: { if !$0 { model.alertMessage = nil } })
@@ -33,7 +42,11 @@ struct RootView: View {
         switch model.section {
         case .chats: ChatListView()
         case .bots: BotListView()
-        default: SectionIntro(section: model.section)
+        case .groups: GroupListView()
+        case .skills: SkillListView()
+        case .connectors: ConnectorListView()
+        case .routines: RoutineListView()
+        case .hire, .settings: SectionIntro(section: model.section)
         }
     }
 
@@ -58,10 +71,35 @@ struct RootView: View {
                 EmptyDetail(symbol: "face.smiling", title: "Your bots",
                             message: "Select a bot to edit its profile and instructions, or create a new one.")
             }
+        case .groups:
+            if let id = model.selectedGroupId, model.group(id) != nil {
+                GroupDetailView(groupId: id).id(id)
+            } else {
+                EmptyDetail(symbol: "person.3", title: "Groups",
+                            message: "Put bots together with a lead. Make one, or add the Dev team from Hire.")
+            }
+        case .hire:
+            HireView()
+        case .skills:
+            if let id = model.selectedSkillId, model.skill(id) != nil {
+                SkillDetailView(skillId: id).id(id)
+            } else {
+                EmptyDetail(symbol: "sparkles", title: "Skills", message: "Pick a skill to edit it, or make a new one.")
+            }
+        case .connectors:
+            if let id = model.selectedConnectorId, model.connectors.contains(where: { $0.id == id }) {
+                ConnectorDetailView(connectorId: id).id(id)
+            } else {
+                EmptyDetail(symbol: "powerplug", title: "Connectors", message: "Add an MCP server by URL or command, then turn it on for bots or groups.")
+            }
+        case .routines:
+            if let id = model.selectedRoutineId, model.routines.contains(where: { $0.id == id }) {
+                RoutineDetailView(routineId: id).id(id)
+            } else {
+                EmptyDetail(symbol: "clock.arrow.circlepath", title: "Routines", message: "Send a message to a bot or group on a schedule, or when a file lands in a folder.")
+            }
         case .settings:
             SettingsView()
-        default:
-            ComingSoonView(section: model.section)
         }
     }
 }
@@ -79,8 +117,12 @@ struct SidebarView: View {
             Section("Team") {
                 row(.bots)
                 row(.groups)
+                row(.hire)
+            }
+            Section("Tools") {
                 row(.skills)
                 row(.connectors)
+                row(.routines)
             }
             Section {
                 row(.settings)
@@ -113,7 +155,7 @@ struct SidebarView: View {
 
     private func row(_ section: SidebarSection) -> some View {
         Label(section.title, systemImage: section.symbol)
-            .badge(section == .bots ? model.bots.count : 0)
+            .badge(section == .bots ? model.bots.count : section == .groups ? model.groups.count : 0)
             .tag(section)
     }
 }
@@ -123,6 +165,7 @@ struct EngineStatusFooter: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            UsageSummary()
             ForEach(BotEngine.allCases) { engine in
                 HStack(spacing: 6) {
                     Circle()
@@ -178,19 +221,6 @@ struct SectionIntro: View {
     }
 }
 
-struct ComingSoonView: View {
-    let section: SidebarSection
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(section.title, systemImage: section.symbol)
-        } description: {
-            Text(section.blurb + (section.comingInPhase.map { "\nComing in phase \($0)." } ?? ""))
-        }
-        .background(Theme.canvas)
-    }
-}
-
 struct EmptyDetail: View {
     let symbol: String
     let title: String
@@ -203,12 +233,29 @@ struct EmptyDetail: View {
         } description: {
             Text(message)
         } actions: {
-            Button {
-                model.showingNewBot = true
-            } label: {
-                Label("New Bot", systemImage: "plus")
+            HStack {
+                switch model.section {
+                case .groups:
+                    Button { model.showingNewGroup = true } label: { Label("New Group", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent)
+                    Button("Hire the Dev team") { model.section = .hire }
+                case .skills:
+                    Button { model.newSkill() } label: { Label("New Skill", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent)
+                case .connectors:
+                    Button { model.addConnector() } label: { Label("Add Connector", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent)
+                case .routines:
+                    Button { model.newRoutine() } label: { Label("New Routine", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent)
+                default:
+                    Button { model.showingNewBot = true } label: { Label("New Bot", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent)
+                    if model.bots.isEmpty {
+                        Button("Hire ready-made bots") { model.section = .hire }
+                    }
+                }
             }
-            .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.canvas)

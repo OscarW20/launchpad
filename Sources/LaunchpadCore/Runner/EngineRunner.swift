@@ -64,7 +64,7 @@ public final class EngineRunner: @unchecked Sendable {
         process.executableURL = executable
         process.arguments = inv.arguments
         process.currentDirectoryURL = inv.workingDirectory
-        process.environment = locator.environment()
+        process.environment = locator.environment().merging(inv.environment) { _, new in new }
         let stdout = Pipe(), stderr = Pipe(), stdin = Pipe()
         process.standardOutput = stdout
         process.standardError = stderr

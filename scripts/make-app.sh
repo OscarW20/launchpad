@@ -4,12 +4,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 swift build -c release --product Launchpad
-BIN="$(swift build -c release --show-bin-path)/Launchpad"
+swift build -c release --product launchpad-guard
+BINDIR="$(swift build -c release --show-bin-path)"
+BIN="$BINDIR/Launchpad"
 
 APP="dist/Launchpad.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Launchpad"
+cp "$BINDIR/launchpad-guard" "$APP/Contents/MacOS/launchpad-guard"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

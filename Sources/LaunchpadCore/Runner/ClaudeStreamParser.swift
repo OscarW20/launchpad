@@ -84,6 +84,21 @@ public final class ClaudeStreamParser: StreamParser {
                 return .stepFinished(id: id, output: ToolSummary.clip(Self.resultText(block["content"])), failed: failed)
             }
 
+        case "rate_limit_event":
+            guard let info = obj["rate_limit_info"] as? [String: Any] else { return [] }
+            var windows: [UsageWindow] = []
+            if let unified = info["unifiedWindows"] as? [String: Any] {
+                for (name, value) in unified.sorted(by: { $0.key < $1.key }) {
+                    guard let w = value as? [String: Any], let u = (w["utilization"] as? NSNumber)?.doubleValue else { continue }
+                    let resets = (w["resetsAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
+                    windows.append(UsageWindow(name: name, utilization: u, resetsAt: resets))
+                }
+            } else if let name = info["rateLimitType"] as? String, let u = (info["utilization"] as? NSNumber)?.doubleValue {
+                let resets = (info["resetsAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
+                windows.append(UsageWindow(name: name, utilization: u, resetsAt: resets))
+            }
+            return windows.isEmpty ? [] : [.usage(UsageReport(engine: .claude, windows: windows))]
+
         case "result":
             isComplete = true
             var events: [RunEvent] = []

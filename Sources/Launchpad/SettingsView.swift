@@ -46,6 +46,23 @@ struct SettingsView: View {
             }
 
             Section {
+                LabeledContent("Approval guard") {
+                    if let url = model.guardExecutable {
+                        Label("Active", systemImage: "checkmark.shield.fill")
+                            .foregroundStyle(Theme.success)
+                            .help(url.path)
+                    } else {
+                        Label("Missing: build with scripts/make-app.sh", systemImage: "exclamationmark.shield")
+                            .foregroundStyle(Theme.warning)
+                    }
+                }
+            } header: {
+                Text("Safety")
+            } footer: {
+                Text("Claude Code bots can't deploy, push, send, spend or delete until you tap Approve on their card. Codex bots are asked to do the same and are kept in their sandbox.")
+            }
+
+            Section {
                 Button("Check again") { model.refreshEngines() }
             }
         }

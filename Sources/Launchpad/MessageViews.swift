@@ -5,7 +5,9 @@ import Combine
 import LaunchpadCore
 
 struct MessageRow: View {
+    @Environment(AppModel.self) private var model
     let message: ChatMessage
+    let chatId: String
     var activeStep: Step? = nil
 
     var body: some View {
@@ -27,13 +29,25 @@ struct MessageRow: View {
         case .notice:
             HStack {
                 Spacer()
-                Label(message.text, systemImage: "info.circle")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                VStack(spacing: 6) {
+                    Label(message.text, systemImage: "info.circle")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    if let action = message.noticeAction, message.id == model.messages(for: chatId).last?.id {
+                        switch action {
+                        case .continueGroup:
+                            Button("Keep going") { model.perform(action, chatId: chatId) }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                .disabled(model.isRunning(chatId))
+                        }
+                    }
+                }
                 Spacer()
             }
         case .bot:
-            BotMessageView(message: message, activeStep: activeStep)
+            BotMessageView(message: message, chatId: chatId, activeStep: activeStep)
         }
     }
 }
@@ -41,6 +55,7 @@ struct MessageRow: View {
 struct BotMessageView: View {
     @Environment(AppModel.self) private var model
     let message: ChatMessage
+    let chatId: String
     let activeStep: Step?
 
     var body: some View {
@@ -73,6 +88,10 @@ struct BotMessageView: View {
 
                 if let failure = message.failure {
                     FailureCard(failure: failure)
+                }
+
+                if let approval = message.approval {
+                    ApprovalCard(request: approval, messageId: message.id, chatId: chatId)
                 }
             }
             .padding(12)
@@ -244,6 +263,63 @@ struct TypingIndicator: View {
             }
         }
         .onReceive(timer) { _ in phase = (phase + 1) % 3 }
+    }
+}
+
+// MARK: - Approval card
+
+struct ApprovalCard: View {
+    @Environment(AppModel.self) private var model
+    let request: ApprovalRequest
+    let messageId: String
+    let chatId: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "hand.raised.fill")
+                    .foregroundStyle(Theme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Needs your OK")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    InlineText(request.action)
+                        .font(.body.weight(.medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            switch request.status {
+            case .pending:
+                HStack(spacing: 10) {
+                    Button {
+                        model.respond(to: messageId, in: chatId, approve: true)
+                    } label: {
+                        Label("Approve", systemImage: "checkmark")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button {
+                        model.respond(to: messageId, in: chatId, approve: false)
+                    } label: {
+                        Label("Decline", systemImage: "xmark")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .controlSize(.regular)
+                .disabled(model.isRunning(chatId))
+            case .approved:
+                Label("Approved", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(Theme.success)
+                    .font(.callout.weight(.medium))
+            case .declined:
+                Label("Declined", systemImage: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .font(.callout.weight(.medium))
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.accent.opacity(0.35)))
     }
 }
 

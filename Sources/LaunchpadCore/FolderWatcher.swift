@@ -7,7 +7,7 @@ import Foundation
 /// such as node_modules cost nothing.
 public final class FolderWatcher: @unchecked Sendable {
     public enum Area: String, CaseIterable, Sendable {
-        case bots, groups, skills, connectors, chats
+        case bots, groups, skills, connectors, chats, routines
     }
 
     private let paths: LaunchpadPaths
@@ -64,6 +64,8 @@ public final class FolderWatcher: @unchecked Sendable {
         result[.skills] = stamps(in: paths.skills, files: ["SKILL.md"])
         result[.groups] = stamps(in: paths.groups, files: ["group.json"])
         result[.connectors] = stamp(paths.connectorsFile).map { [paths.connectorsFile.path: $0] } ?? [:]
+        let routines = paths.root.appendingPathComponent("routines.json")
+        result[.routines] = stamp(routines).map { [routines.path: $0] } ?? [:]
         var chats: [String: Date] = [:]
         if let names = try? fm.contentsOfDirectory(atPath: paths.chats.path) {
             for name in names where name.hasSuffix(".json") {

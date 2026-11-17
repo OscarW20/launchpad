@@ -32,3 +32,22 @@ final class LiveEngineTests: XCTestCase {
         XCTAssertTrue(second.message.text.uppercased().contains("PINEAPPLE"), second.message.text)
     }
 }
+
+/// Imports the real Graphify skill. Run with `LAUNCHPAD_GRAPHIFY=$(command -v graphify) swift test --filter LiveGraphifyTests`.
+final class LiveGraphifyTests: XCTestCase {
+    func testImportRealGraphifySkill() throws {
+        let path = try XCTUnwrap(ProcessInfo.processInfo.environment["LAUNCHPAD_GRAPHIFY"].flatMap { $0.isEmpty ? nil : $0 },
+                                 "set LAUNCHPAD_GRAPHIFY to run")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("lp-live-gf-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let paths = LaunchpadPaths(root: root)
+        try Graphify.importSkill(executable: URL(fileURLWithPath: path), paths: paths, environment: ProcessInfo.processInfo.environment)
+        let skill = try XCTUnwrap(SkillStore(paths: paths).load(id: "graphify"))
+        XCTAssertEqual(skill.name, "graphify")
+        XCTAssertFalse(skill.description.isEmpty)
+    }
+
+    override func setUpWithError() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["LAUNCHPAD_GRAPHIFY"] != nil, "live tests are opt-in")
+    }
+}

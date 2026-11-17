@@ -28,7 +28,13 @@ public final class CodexStreamParser: StreamParser {
             return complete(item)
         case "turn.completed":
             isComplete = true
-            return [.finished(resultText: nil)]
+            var events: [RunEvent] = []
+            if let usage = obj["usage"] as? [String: Any] {
+                let tokens = ((usage["input_tokens"] as? Int) ?? 0) + ((usage["output_tokens"] as? Int) ?? 0)
+                if tokens > 0 { events.append(.usage(UsageReport(engine: .codex, tokens: tokens))) }
+            }
+            events.append(.finished(resultText: nil))
+            return events
         case "turn.failed":
             isComplete = true
             let message = ((obj["error"] as? [String: Any])?["message"] as? String) ?? lastError ?? "Codex couldn't finish this turn."

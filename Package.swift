@@ -7,11 +7,14 @@ let package = Package(
     products: [
         .executable(name: "Launchpad", targets: ["Launchpad"]),
         .library(name: "LaunchpadCore", targets: ["LaunchpadCore"]),
+        .executable(name: "launchpad-guard", targets: ["launchpad-guard"]),
     ],
     targets: [
         // Everything that isn't UI: bot folders, chat history, the engine runner,
         // stream parsers and error handling. Builds and tests on Linux too.
         .target(name: "LaunchpadCore"),
+        // The approval hook Claude Code runs before shell commands and MCP tools.
+        .executableTarget(name: "launchpad-guard", dependencies: ["LaunchpadCore"]),
         // The SwiftUI app (macOS only).
         .executableTarget(name: "Launchpad", dependencies: ["LaunchpadCore"]),
         .testTarget(name: "LaunchpadCoreTests", dependencies: ["LaunchpadCore"]),

@@ -30,6 +30,7 @@ struct ChatListView: View {
                                 if let bot = model.bot(chat.botId) {
                                     Button("New Chat with \(bot.name)") { model.newChat(with: bot) }
                                 }
+                                Button("Teach a Skill from This Chat") { model.teachSkill(from: chat.id) }
                                 Divider()
                                 Button("Delete Chat", role: .destructive) { model.deleteChat(chat.id) }
                             }
@@ -52,9 +53,12 @@ struct ChatListView: View {
     @ViewBuilder private var emptyState: some View {
         VStack(spacing: 10) {
             Spacer()
-            if model.chatFilter == .groups {
-                Text("Groups arrive in phase 3.")
-                    .foregroundStyle(.secondary)
+            if model.chatFilter == .groups && model.chatSearch.isEmpty {
+                Text("No group chats yet.")
+                    .font(Theme.rounded(.headline))
+                Button("New Group") { model.showingNewGroup = true }
+                    .buttonStyle(.borderedProminent)
+                Button("Hire the Dev team") { model.section = .hire }
             } else if !model.chatSearch.isEmpty {
                 Text("No chats match “\(model.chatSearch)”.")
                     .foregroundStyle(.secondary)
@@ -91,7 +95,16 @@ struct NewChatMenu: View {
                     }
                 }
             }
+            if !model.groups.isEmpty {
+                Section("Groups") {
+                    ForEach(model.groups) { group in
+                        Button("\(group.emoji)  \(group.displayName)") { model.openChat(with: group) }
+                    }
+                }
+            }
+            Divider()
             Button("New Bot…") { model.showingNewBot = true }
+            Button("New Group…") { model.showingNewGroup = true }
         } label: {
             Label("New Chat", systemImage: "square.and.pencil")
         }
@@ -105,7 +118,11 @@ struct ChatRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            AvatarView(bot: model.bot(chat.botId), size: 36)
+            if chat.kind == .group {
+                GroupAvatar(group: model.group(chat.groupId), size: 36)
+            } else {
+                AvatarView(bot: model.bot(chat.botId), size: 36)
+            }
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(chat.title)
@@ -135,6 +152,7 @@ struct ChatRow: View {
         let p = (chat.lastPreview ?? "").replacingOccurrences(of: "\n", with: " ")
         if !p.isEmpty { return p }
         if let role = model.bot(chat.botId)?.role, !role.isEmpty { return role }
+        if let group = model.group(chat.groupId) { return "\(group.everyone.count) members" }
         return "Say hello"
     }
 }

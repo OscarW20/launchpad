@@ -68,11 +68,20 @@ struct LiveRun: Identifiable {
     var builder: MessageBuilder
     /// Approval cards the guard raised during this reply.
     var approvals: [LiveApproval] = []
+    /// Cards and media the bot's chat tools added so far (GIF, poll, plan, questions).
+    var extras = ChatReplyExtras()
+    /// A side question's answer (doesn't make the chat busy).
+    var isSide = false
+    /// This reply's chat tools (plan answers go through it).
+    var tools: ChatToolsRun?
 
-    /// The reply so far, with its approval cards.
+    /// The reply so far, with its approval cards, chat cards and to-do list.
     var message: ChatMessage {
         var m = builder.message
         m.liveApprovals = approvals.isEmpty ? nil : approvals
+        extras.merge(into: &m)
+        m.todos = builder.todos.isEmpty ? nil : builder.todos
+        if isSide { m.isSide = true }
         return m
     }
 }
@@ -86,6 +95,23 @@ struct RunSetup {
     var gatewayToken: String?
     /// Why the bot mustn't run (shown instead of a reply).
     var refusal: String?
+    /// The launchpad-chat server for this reply (nil when it isn't bundled, or for local models).
+    var tools: ChatToolsRun?
+}
+
+/// How one bot turn runs.
+struct TurnContext {
+    /// The queued turn it answers (1:1 chats), so steering can put it back.
+    var turn: Turn?
+    /// Running on the bot's backup brain for this one turn.
+    var backup: BotBrain?
+}
+
+/// Scroll a chat to a message (pinned bar, saved messages, ⌘K).
+struct JumpRequest: Equatable {
+    var chatId: String
+    var messageId: String
+    var id = UUID()
 }
 
 /// Drafting a SKILL.md from a chat.
@@ -136,8 +162,8 @@ final class AppModel {
     var routines: [Routine] = []
     var chats: [ChatMeta] = []
     var usage = UsageSnapshot()
-    private(set) var messages: [String: [ChatMessage]] = [:]
-    private(set) var live: [String: [LiveRun]] = [:]
+    var messages: [String: [ChatMessage]] = [:]
+    var live: [String: [LiveRun]] = [:]
     private(set) var busyChats: Set<String> = []
     private(set) var engineLocations: [BotEngine: String]? = nil
 
@@ -158,6 +184,33 @@ final class AppModel {
     var alertMessage: String?
     var selectedTaskId: String?
     var selectedWorkflowId: String?
+
+    // Chat features
+    let threads: ThreadStore
+    let savedPromptsStore: SavedPromptsStore
+    var savedPrompts: [String] = []
+    /// Files dropped on a chat, waiting to go with your next message.
+    var pendingAttachments: [String: [URL]] = [:]
+    var jump: JumpRequest?
+    var showingQuickSwitcher = false
+    var showingSavedMessages = false
+    var pastThreadsChatId: String?
+    /// How full the context window is, per chat (the last reply's report).
+    var contextByChat: [String: ContextUsage] = [:]
+    /// Waiting messages per 1:1 chat (steering and batching).
+    var queues: [String: TurnQueue] = [:]
+    /// A bot is "typing" the next part of a paced reply.
+    var typing: [String: String] = [:]
+    var activity = ActivityFeed()
+    /// Bumped when past threads change, so the thread list refreshes.
+    var threadsRevision = 0
+    /// Settings: how long a plan card waits before it starts by itself (0 = wait for your OK).
+    var planWait: Int = UserDefaults.standard.integer(forKey: "planWait") {
+        didSet { UserDefaults.standard.set(planWait, forKey: "planWait") }
+    }
+    /// Group chats that got a message while busy: run the group again when it's free.
+    @ObservationIgnored var pendingGroupRun: Set<String> = []
+    @ObservationIgnored var usageTimer: Timer?
 
     // Safety
     /// Skills locked so bots can't change them.
@@ -186,9 +239,9 @@ final class AppModel {
     @ObservationIgnored var webhookTokens: [String: String] = [:]
     @ObservationIgnored var webhookLimiter = WebhookLimiter()
 
-    @ObservationIgnored private var handles: [String: RunHandle] = [:]
-    @ObservationIgnored private var runChats: [String: String] = [:]
-    @ObservationIgnored private var chatTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored var handles: [String: RunHandle] = [:]
+    @ObservationIgnored var runChats: [String: String] = [:]
+    @ObservationIgnored var chatTasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var teachHandle: RunHandle?
     @ObservationIgnored private var watcher: FolderWatcher?
     @ObservationIgnored private var routineTimer: Timer?
@@ -211,6 +264,8 @@ final class AppModel {
         reviewer = MemoryReviewer(paths: paths, store: memory, engine: MemoryReviewer.engine(using: runner))
         inbox = ApprovalInbox(paths: paths)
         workflowEngine = WorkflowEngine(store: WorkStore(paths: paths))
+        threads = ThreadStore(paths: paths, chatStore: chatStore)
+        savedPromptsStore = SavedPromptsStore(paths: paths)
         do {
             try paths.ensureStructure()
         } catch {
@@ -218,6 +273,8 @@ final class AppModel {
         }
         skillStore.seedStarterSkillsIfNeeded()
         lockedSkills = SkillLocks(paths: paths).load()
+        try? TeamNotes.ensure(paths: paths)
+        savedPrompts = savedPromptsStore.load()
         reloadAll()
         usage = usageStore.load()
         selectedChatId = chats.first?.id
@@ -239,6 +296,7 @@ final class AppModel {
         startRoutines()
         refreshEngines()
         rewriteAllGuardRules()
+        startCodexUsage()
         // Finding git can take a moment (it may read your login shell's PATH), so it's done off the main thread.
         let p = paths
         Task.detached(priority: .utility) {
@@ -395,7 +453,14 @@ final class AppModel {
         }
     }
 
-    func isRunning(_ chatId: String) -> Bool { busyChats.contains(chatId) || !(live[chatId]?.isEmpty ?? true) }
+    /// A reply (not a side question) is under way in the chat.
+    func isRunning(_ chatId: String) -> Bool { busyChats.contains(chatId) || live[chatId]?.contains { !$0.isSide } == true }
+
+    /// A side question is being answered in the chat.
+    func isAskingSide(_ chatId: String) -> Bool { live[chatId]?.contains { $0.isSide } == true }
+
+    /// Bot id -> name, for recaps and local models' history.
+    var botNames: [String: String] { Dictionary(bots.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a }) }
 
     // MARK: - Bots
 
@@ -406,9 +471,11 @@ final class AppModel {
                 name: draft.name, emoji: draft.emoji, colour: draft.colour, role: draft.role,
                 engine: draft.engine, model: draft.model, permission: draft.permission, instructions: instructions
             )
-            if !draft.skills.isEmpty || !draft.connectors.isEmpty {
+            if !draft.skills.isEmpty || !draft.connectors.isEmpty || draft.localBaseURL != nil || draft.backup != nil {
                 bot.skills = draft.skills
                 bot.connectors = draft.connectors
+                bot.localBaseURL = draft.localBaseURL
+                bot.backup = draft.backup
                 try botStore.save(bot)
             }
             reloadBots()
@@ -783,37 +850,101 @@ final class AppModel {
         stop(id)
         reviewer.forget(chatId: id)
         try? chatStore.delete(chatId: id)
+        threads.deleteAll(id)
         messages[id] = nil
         drafts[id] = nil
+        queues[id] = nil
+        contextByChat[id] = nil
+        pendingAttachments[id] = nil
         reloadChats()
     }
 
+    /// Your message from the composer (or `text` from a routine, workflow or button), with any dropped files.
+    /// Writing to a busy 1:1 bot steers it; in a busy group it waits for the group to finish.
     func send(chatId: String, text override: String? = nil) {
         let text = (override ?? drafts[chatId] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isRunning(chatId), let meta = chat(chatId) else { return }
+        let files = override == nil ? (pendingAttachments[chatId] ?? []) : []
+        guard !text.isEmpty || !files.isEmpty, let meta = chat(chatId) else { return }
+        // Routines, workflows and buttons still wait for a free chat.
+        if override != nil && isRunning(chatId) { return }
         loadMessagesIfNeeded(chatId)
-        if override == nil { drafts[chatId] = "" }
-        append(ChatMessage(role: .user, text: text), to: chatId)
+        if override == nil {
+            drafts[chatId] = ""
+            pendingAttachments[chatId] = nil
+        }
+        var message = ChatMessage(role: .user, text: text)
+        var prompt = text
+        if !files.isEmpty, let inbox = Attachments.inbox(for: meta, paths: paths) {
+            let copied = Attachments.copy(files, into: inbox)
+            if !copied.isEmpty {
+                message.attachments = copied.map(\.path)
+                prompt = (prompt + Attachments.note(copied)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if copied.count < files.count {
+                alertMessage = "Couldn't copy \(files.count - copied.count) of the files into the chat's Inbox folder."
+            }
+        }
+        guard !prompt.isEmpty else { return }
+        submit(message, prompt: prompt, to: chatId)
+    }
+
+    /// Puts your message in the chat and gets it answered: now, by steering the busy bot, or after the current run.
+    func submit(_ message: ChatMessage, prompt: String, to chatId: String) {
+        guard let meta = chat(chatId) else { return }
+        loadMessagesIfNeeded(chatId)
+        append(message, to: chatId)
         if meta.kind == .group {
-            startGroup(chatId) { await $0.runTask() }
-        } else if let bot = bot(meta.botId) {
-            startSolo(chatId, bot: bot, prompt: text)
-        } else {
+            if isRunning(chatId) {
+                pendingGroupRun.insert(chatId)
+            } else {
+                startGroup(chatId) { await $0.runTask() }
+            }
+            return
+        }
+        guard let bot = bot(meta.botId) else {
             append(ChatMessage(role: .notice, text: "This chat's bot isn't in your Launchpad folder any more."), to: chatId)
+            return
+        }
+        let running = isRunning(chatId)
+        let runningBot = running ? (live[chatId]?.last { !$0.isSide }?.botId ?? bot.id) : nil
+        var queue = queues[chatId] ?? TurnQueue()
+        let decision = queue.submit(QueuedMessage(id: message.id, botId: bot.id, text: prompt), runningBotId: runningBot,
+                                    allowSteering: meta.kind == .bot)
+        queues[chatId] = queue
+        switch decision {
+        case .startNow:
+            if let turn = queues[chatId]?.next(for: bot.id) {
+                startSolo(chatId, bot: bot, prompt: turn.text, turn: turn)
+            }
+        case .steer:
+            steer(chatId, botId: bot.id)
+        case .queue:
+            break
         }
     }
 
-    /// "Ask everyone": every member gives a short view, then the lead sums up.
+    /// Stops the bot's current reply (keeping its session) so its next turn carries on with your new words.
+    private func steer(_ chatId: String, botId: String) {
+        let runs = live[chatId]?.filter { $0.botId == botId && !$0.isSide }.map(\.id) ?? []
+        for id in runs { handles[id]?.cancel() }
+    }
+
+    /// A huddle: every member gives a short view on your topic, then the lead sums up.
     func askEveryone(chatId: String) {
         let text = (drafts[chatId] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isRunning(chatId) else { return }
+        guard !isRunning(chatId), let meta = chat(chatId), let group = group(meta.groupId),
+              let message = Huddle.message(text) else { return }
         loadMessagesIfNeeded(chatId)
         drafts[chatId] = ""
-        append(ChatMessage(role: .user, text: "🙋 Ask everyone: \(text)"), to: chatId)
+        append(message, to: chatId)
+        let byId = Dictionary(bots.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        append(ChatMessage(role: .notice, text: Huddle.startedNotice(group: group, bots: byId)), to: chatId)
         startGroup(chatId) { await $0.askEveryone() }
     }
 
     func stop(_ chatId: String) {
+        queues[chatId]?.clear()
+        pendingGroupRun.remove(chatId)
         chatTasks[chatId]?.cancel()
         for (runId, chat) in runChats where chat == chatId { handles[runId]?.cancel() }
     }
@@ -823,16 +954,45 @@ final class AppModel {
         for handle in handles.values { handle.cancel() }
     }
 
+    /// Runs a bot in a chat, then any teammates it asks (1:1 chats), then whatever you wrote meanwhile.
     @discardableResult
-    func startSolo(_ chatId: String, bot: Bot, prompt: String) -> Task<Void, Never> {
+    func startSolo(_ chatId: String, bot: Bot, prompt: String, turn: Turn? = nil, handOffs: Bool = true) -> Task<Void, Never> {
         busyChats.insert(chatId)
         let task = Task { @MainActor [weak self] in
-            _ = await self?.runBotTurn(chatId: chatId, bot: bot, prompt: prompt)
+            var prompt = prompt
+            var turn = turn
+            while let self, !Task.isCancelled {
+                let speaker = self.bot(bot.id) ?? bot
+                let reply = await self.runBotTurn(chatId: chatId, bot: speaker, prompt: prompt, context: TurnContext(turn: turn))
+                let waiting = !(self.queues[chatId]?.waiting(for: speaker.id).isEmpty ?? true)
+                if handOffs, !waiting, !Task.isCancelled { await self.runHandOffs(chatId: chatId, after: reply, owner: speaker) }
+                guard !Task.isCancelled, let next = self.queues[chatId]?.next(for: speaker.id) else { break }
+                prompt = next.text
+                turn = next
+            }
             self?.chatTasks[chatId] = nil
             self?.busyChats.remove(chatId)
+            self?.typing[chatId] = nil
         }
         chatTasks[chatId] = task
         return task
+    }
+
+    /// 1:1 hand-offs: the chat's bot asks a teammate (`@id: …`), the answer goes back to it, and so on (hop limit).
+    private func runHandOffs(chatId: String, after reply: ChatMessage, owner: Bot) async {
+        guard let meta = chat(chatId), meta.kind == .bot, meta.botId == owner.id else { return }
+        var pending = DirectHandOff.next(after: reply, speaker: owner, kind: nil, owner: owner, team: bots, hops: 0)
+        while !pending.isEmpty, !Task.isCancelled {
+            let turn = pending.removeFirst()
+            guard let speaker = bot(turn.botId) else { continue }
+            if let notice = turn.notice { append(ChatMessage(role: .notice, text: notice), to: chatId) }
+            activity.record(.asked, bot: speaker.id, chat: chatId, turn.notice ?? "Asked to help")
+            let answer = await runBotTurn(chatId: chatId, bot: speaker, prompt: turn.prompt)
+            pending += DirectHandOff.next(after: answer, speaker: speaker, kind: turn.kind, owner: bot(owner.id) ?? owner,
+                                          team: bots, hops: turn.hops)
+            // You wrote meanwhile: that comes first.
+            if !(queues[chatId]?.waiting(for: owner.id).isEmpty ?? true) { break }
+        }
     }
 
     @discardableResult
@@ -857,6 +1017,10 @@ final class AppModel {
             self?.groupFinished(chatId, group: group, outcome: outcome)
             self?.chatTasks[chatId] = nil
             self?.busyChats.remove(chatId)
+            // You wrote while the group worked: it picks that up now.
+            if self?.pendingGroupRun.remove(chatId) != nil, !Task.isCancelled {
+                self?.startGroup(chatId) { await $0.runTask() }
+            }
         }
         chatTasks[chatId] = task
         return task
@@ -915,10 +1079,20 @@ final class AppModel {
 
     // MARK: - Running one bot
 
-    /// Engine options for one reply, with the safety guard, sandbox and site gateway set up.
-    private func prepareRun(for bot: Bot, chat: ChatMeta, runId: String) -> RunSetup {
+    /// Engine options for one reply, with the safety guard, sandbox, site gateway and chat tools set up.
+    func prepareRun(for bot: Bot, chat: ChatMeta, runId: String, chatTools: Bool = true) -> RunSetup {
         var setup = RunSetup()
         var o = RunOptions()
+
+        // A local model has no tools, folder access or session: it gets the chat as history instead.
+        guard bot.engine.isAgent else {
+            o.history = messages(for: chat.id)
+            o.historyNames = botNames
+            o.localAPIKey = secrets.read(LocalModelKey.account).value
+            setup.options = o
+            return setup
+        }
+
         let available = Set(skills.map(\.id))
         let botSkills = SkillLinker.effectiveSkills(for: bot, groups: groups).filter(available.contains)
         let lockedNames = botSkills.filter(lockedSkills.contains)
@@ -928,6 +1102,12 @@ final class AppModel {
         if chat.kind == .group, let gid = chat.groupId {
             try? FileManager.default.createDirectory(at: groupStore.workspace(gid), withIntermediateDirectories: true)
             o.addDirectories = [groupStore.dir(gid)]
+        }
+        // Team notes live in Shared/; every bot may read and add to them.
+        o.addDirectories.append(paths.shared)
+        if bot.engine == .codex {
+            // Launchpad's own CODEX_HOME: your sign-in and settings, without your global MCP servers.
+            o.environment.merge(CodexHome().environment()) { _, new in new }
         }
 
         var liveApprovals = false
@@ -950,6 +1130,18 @@ final class AppModel {
             let note = bot.rules.codexNote(lockedSkills: lockedNames)
             if !note.isEmpty { system += "\n" + note }
         }
+
+        if chatTools {
+            let tools = ChatToolsRun(runId: runId, chat: chat, bot: bot, planWait: planWait, paths: paths)
+            if let exe = ChatToolsSetup.executable(nextTo: Bundle.main.executableURL), (try? tools.prepare()) != nil {
+                o.connectors.append(tools.connector(executable: exe))
+                setup.tools = tools
+            }
+            // Without the server, the text fallback ([react: 🎉] …) in these instructions still works.
+            system += "\n\n" + ChatToolsSetup.instructions
+        }
+        let team = TeamNotes.teamLine(for: bot, others: bots, paths: paths)
+        if !team.isEmpty { system += "\n\n" + team }
 
         if bot.lockedDown && !BotSandbox.available {
             setup.refusal = "\(bot.name) is locked down, which needs macOS's sandbox, and it isn't available here, so \(bot.name) didn't run."
@@ -974,9 +1166,12 @@ final class AppModel {
     }
 
     /// Runs one bot in a chat, streams its reply into the chat, saves it, and returns it.
-    func runBotTurn(chatId: String, bot: Bot, prompt: String, allowFreshRetry: Bool = true) async -> ChatMessage {
-        guard let meta = chat(chatId) else { return ChatMessage(role: .bot, botId: bot.id, status: .stopped) }
-        botStore.syncInstructions(for: bot.id)
+    func runBotTurn(chatId: String, bot original: Bot, prompt: String, allowFreshRetry: Bool = true,
+                    context: TurnContext = TurnContext()) async -> ChatMessage {
+        guard let meta = chat(chatId) else { return ChatMessage(role: .bot, botId: original.id, status: .stopped) }
+        botStore.syncInstructions(for: original.id)
+        let bot = context.backup.map { original.running(on: $0) } ?? original
+        let history = messages(for: chatId)
         let runId = UUID().uuidString.lowercased()
         let setup = prepareRun(for: bot, chat: meta, runId: runId)
         if let refusal = setup.refusal {
@@ -985,9 +1180,19 @@ final class AppModel {
             return m
         }
 
+        // 1:1 chats: a session that's new (Compact, Branch, a lost session) or missed messages gets a recap.
+        var sendPrompt = prompt
+        let session = context.backup == nil ? meta.sessions[bot.id] : nil
+        if meta.kind == .bot, bot.engine.isAgent, context.backup == nil {
+            let turnIds = Set(context.turn?.messages.map(\.id) ?? [])
+            sendPrompt = ConversationRecap.prompt(for: prompt, history: history.filter { !turnIds.contains($0.id) },
+                                                  hasSession: session != nil,
+                                                  unseenAfter: threads.unseenAfter(chatId, botId: bot.id), names: botNames)
+        }
+
         // Undo: snapshot the bot's folder first (off the main thread; it's git).
         let folder = paths.botDir(bot.id)
-        let snaps = snapshots
+        let snaps = bot.engine.isAgent ? snapshots : nil
         let botId = bot.id
         var snapshot: String?
         if let snaps {
@@ -996,21 +1201,163 @@ final class AppModel {
             }.value
         }
 
-        let invocation = EngineCommand.invocation(
-            for: bot, prompt: prompt, botDirectory: folder, sessionId: meta.sessions[bot.id], options: setup.options
+        var invocation = EngineCommand.invocation(
+            for: bot, prompt: sendPrompt, botDirectory: folder, sessionId: session, options: setup.options
         )
+        if setup.tools != nil { invocation = ChatToolsSetup.allowingChatTools(invocation) }
+        activity.record(.started, bot: bot.id, chat: chatId, "Started on: \(prompt)")
+        let run = await streamRun(invocation, chatId: chatId, runId: runId, bot: bot, setup: setup, isSide: false)
+
+        var changed: [String] = []
+        if let snapshot, let snaps {
+            changed = await Task.detached(priority: .userInitiated) {
+                snaps.changes(botId: botId, folder: folder, since: snapshot)
+            }.value
+        }
+
+        let builder = run.builder
+        var message = finalMessage(run, bot: bot, chatId: chatId)
+        if !changed.isEmpty {
+            message.snapshot = snapshot
+            message.changedFiles = changed
+        }
+
+        // Steering: the reply you interrupted is kept as it was (or dropped if empty); the next turn carries on.
+        let steered = queues[chatId]?.isSteering(original.id) == true
+        if let turn = context.turn {
+            queues[chatId]?.runEnded(turn, stoppedForSteering: steered, hadSession: builder.sessionId != nil)
+        }
+        if steered && message.status == .stopped {
+            let kept = TurnQueue.settleInterrupted(message)
+            if let kept { append(kept, to: chatId) }
+            saveSession(builder.sessionId, chatId: chatId, botId: bot.id, onBackup: context.backup != nil)
+            return kept ?? message
+        }
+
+        if message.failure?.kind == .sessionLost, allowFreshRetry, var fresh = chat(chatId) {
+            fresh.sessions[bot.id] = nil
+            save(fresh)
+            append(ChatMessage(role: .notice, text: "Couldn't pick up the earlier conversation, so \(bot.name) is starting fresh."), to: chatId)
+            return await runBotTurn(chatId: chatId, bot: original, prompt: prompt, allowFreshRetry: false, context: context)
+        }
+
+        // Usage limit: answer once on the backup brain, with a recap.
+        if context.backup == nil, let brain = BackupPolicy.retryBrain(after: message.failure, bot: original, alreadyOnBackup: false) {
+            if !message.text.isEmpty || !message.steps.isEmpty { append(message, to: chatId) }
+            append(ChatMessage(role: .notice, text: BackupPolicy.notice(botName: original.name, from: original.brain, to: brain)), to: chatId)
+            // The main session will have missed what the backup says: recap it next time.
+            if meta.kind == .bot, meta.sessions[original.id] != nil, threads.unseenAfter(chatId, botId: original.id) == nil,
+               let seen = Self.lastSeen(history) {
+                try? threads.setUnseenAfter(seen, chatId: chatId, botId: original.id)
+            }
+            let backupPrompt = BackupPolicy.prompt(prompt, history: history, names: botNames, backup: brain)
+            var backup = context
+            backup.backup = brain
+            return await runBotTurn(chatId: chatId, bot: original, prompt: backupPrompt, allowFreshRetry: false, context: backup)
+        }
+
+        activity.record(message.status == .failed ? .failed : .finished, bot: bot.id, chat: chatId,
+                        message.failure?.message ?? (message.text.isEmpty ? "Finished" : message.text))
+        await save(reply: message, chatId: chatId, paced: meta.kind == .bot)
+        noteMemoryActivity(chatId)
+
+        if message.status == .done || message.status == .stopped {
+            saveSession(builder.sessionId, chatId: chatId, botId: bot.id, onBackup: context.backup != nil)
+        }
+        if message.status == .done, context.backup == nil, meta.kind == .bot {
+            try? threads.setUnseenAfter(nil, chatId: chatId, botId: bot.id)
+        }
+        if bot.engine == .codex { afterCodexTurn(chatId: chatId, sessionId: builder.sessionId ?? session) }
+        return message
+    }
+
+    /// The id of the last message a session saw before the user's message being answered.
+    static func lastSeen(_ history: [ChatMessage]) -> String? {
+        var list = history
+        while let last = list.last, last.role == .user { list.removeLast() }
+        return list.last?.id
+    }
+
+    private func saveSession(_ sessionId: String?, chatId: String, botId: String, onBackup: Bool) {
+        // A backup brain's session belongs to another engine: never stored as the bot's.
+        guard !onBackup, let sessionId, var meta = chat(chatId), meta.sessions[botId] != sessionId else { return }
+        meta.sessions[botId] = sessionId
+        save(meta)
+    }
+
+    /// Saves a finished reply. Short chatty replies in 1:1 chats arrive as a few texts, a moment apart.
+    private func save(reply message: ChatMessage, chatId: String, paced: Bool) async {
+        let parts = paced ? TextPacing.splitIntoTexts(message) : [message]
+        append(parts[0], to: chatId)
+        for part in parts.dropFirst() {
+            if !Task.isCancelled {
+                typing[chatId] = part.botId
+                try? await Task.sleep(nanoseconds: UInt64(TextPacing.typingDelay(for: part.text) * 1_000_000_000))
+                typing[chatId] = nil
+            }
+            var p = part
+            p.createdAt = Date()
+            append(p, to: chatId)
+        }
+    }
+
+    /// The reply as it ended: approval cards closed, chat cards and to-dos on it, text commands applied.
+    private func finalMessage(_ run: LiveRun, bot: Bot, chatId: String) -> ChatMessage {
+        var message = run.builder.message
+        let cards = run.approvals.map { card -> LiveApproval in
+            var c = card
+            if c.state == .pending { c.state = .expired }
+            return c
+        }
+        message.liveApprovals = cards.isEmpty ? nil : cards
+        message.todos = run.builder.todos.isEmpty ? nil : run.builder.todos
+        if message.status == .streaming {
+            message.status = .failed
+            message.failure = RunFailure(kind: .unknown, message: "\(bot.name) stopped without replying.")
+        }
+        var extras = run.extras
+        if message.status == .done || message.status == .stopped {
+            let extracted = ApprovalRequest.extract(from: message.text)
+            message.text = extracted.text
+            if message.status == .done { message.approval = extracted.request }
+            // The text fallback: [react: 🎉], [gif: …], [poll: …], [vote: 2].
+            let tokens = ChatTokens.extract(from: message.text)
+            if !tokens.actions.isEmpty {
+                message.text = tokens.text
+                extras = applyChatActions(tokens.actions, extras: extras, chatId: chatId, botId: bot.id, runId: run.id,
+                                          messageId: message.id)
+            }
+        }
+        extras.merge(into: &message)
+        if let plan = message.plan, plan.isDue(now: Date()) { message.plan?.state = .started }
+        run.tools?.cleanUp()
+        return message
+    }
+
+    /// Starts the engine and streams its events into a live reply until it ends. Approval cards and chat actions are
+    /// picked up every half second. Returns the run as it ended (already removed from `live`).
+    func streamRun(_ invocation: EngineInvocation, chatId: String, runId: String, bot: Bot, setup: RunSetup,
+                   isSide: Bool) async -> LiveRun {
         let handle = runner.run(invocation)
         handles[runId] = handle
         runChats[runId] = chatId
-        live[chatId, default: []].append(LiveRun(id: runId, botId: bot.id, builder: MessageBuilder(botId: bot.id)))
+        var start = LiveRun(id: runId, botId: bot.id, builder: MessageBuilder(botId: bot.id))
+        start.isSide = isSide
+        start.tools = setup.tools
+        live[chatId, default: []].append(start)
+        let messageId = start.builder.message.id
         if Task.isCancelled { handle.cancel() }
+        // You steered before this run had started: it stops straight away and the next turn takes your words.
+        if !isSide, queues[chatId]?.isSteering(bot.id) == true { handle.cancel() }
 
-        // Approval cards: look for new ones while the reply streams.
+        let reader = setup.tools.map { ChatActionReader(url: $0.actionsFile) }
+        let botId = bot.id
         var poller: Task<Void, Never>?
-        if let base = setup.askBase {
+        if setup.askBase != nil || reader != nil {
             poller = Task { @MainActor [weak self] in
                 while !Task.isCancelled {
-                    self?.collectApprovals(chatId: chatId, runId: runId, base: base, botId: botId)
+                    if let base = setup.askBase { self?.collectApprovals(chatId: chatId, runId: runId, base: base, botId: botId) }
+                    if let reader { self?.pollChatActions(reader, chatId: chatId, runId: runId, botId: botId, messageId: messageId) }
                     try? await Task.sleep(nanoseconds: 500_000_000)
                 }
             }
@@ -1024,6 +1371,7 @@ final class AppModel {
             }
             if let i = live[chatId]?.firstIndex(where: { $0.id == runId }) {
                 live[chatId]?[i].builder.apply(event)
+                if case .context = event, !isSide, let c = live[chatId]?[i].builder.context { contextByChat[chatId] = c }
             }
         }
 
@@ -1033,59 +1381,15 @@ final class AppModel {
             let ids = live[chatId]?.first { $0.id == runId }?.approvals.map(\.id) ?? []
             inbox.close(base: base, ids: ids)
         }
+        if let reader { pollChatActions(reader, chatId: chatId, runId: runId, botId: botId, messageId: messageId) }
         if let token = setup.gatewayToken { SiteGateway.shared.revoke(token) }
 
-        var changed: [String] = []
-        if let snapshot, let snaps {
-            changed = await Task.detached(priority: .userInitiated) {
-                snaps.changes(botId: botId, folder: folder, since: snapshot)
-            }.value
-        }
-
-        let run = live[chatId]?.first { $0.id == runId }
-        let builder = run?.builder ?? MessageBuilder(botId: bot.id)
+        let run = live[chatId]?.first { $0.id == runId } ?? start
         live[chatId]?.removeAll { $0.id == runId }
         if live[chatId]?.isEmpty == true { live[chatId] = nil }
         handles[runId] = nil
         runChats[runId] = nil
-
-        var message = builder.message
-        let cards = (run?.approvals ?? []).map { card -> LiveApproval in
-            var c = card
-            if c.state == .pending { c.state = .expired }
-            return c
-        }
-        message.liveApprovals = cards.isEmpty ? nil : cards
-        if !changed.isEmpty {
-            message.snapshot = snapshot
-            message.changedFiles = changed
-        }
-        if message.status == .streaming {
-            message.status = .failed
-            message.failure = RunFailure(kind: .unknown, message: "\(bot.name) stopped without replying.")
-        }
-
-        if message.failure?.kind == .sessionLost, allowFreshRetry, var fresh = chat(chatId) {
-            fresh.sessions[bot.id] = nil
-            save(fresh)
-            append(ChatMessage(role: .notice, text: "Couldn't pick up the earlier conversation, so \(bot.name) is starting fresh."), to: chatId)
-            return await runBotTurn(chatId: chatId, bot: bot, prompt: prompt, allowFreshRetry: false)
-        }
-
-        if message.status == .done || message.status == .stopped {
-            let extracted = ApprovalRequest.extract(from: message.text)
-            message.text = extracted.text
-            if message.status == .done { message.approval = extracted.request }
-        }
-        append(message, to: chatId)
-        noteMemoryActivity(chatId)
-
-        if message.status == .done || message.status == .stopped,
-           let sessionId = builder.sessionId, var meta = chat(chatId), meta.sessions[bot.id] != sessionId {
-            meta.sessions[bot.id] = sessionId
-            save(meta)
-        }
-        return message
+        return run
     }
 
     /// Picks up the guard's new approval cards (and ones it gave up on) for a reply that's running.
@@ -1167,8 +1471,9 @@ final class AppModel {
         let lockedDirs = SkillLocks.lockedDirs(skillIds: skillIds, locked: lockedSkills, paths: paths, botId: bot.id)
         // Every group folder it works in, so a rules file written for one chat suits the others too.
         let extra = groups(containing: bot.id).map { groupStore.dir($0.id) }
-        let cfg = GuardRulesFile.config(for: bot, paths: paths, extraRoots: extra, lockedSkillDirs: lockedDirs,
-                                        alwaysForWrites: alwaysForWrites, trustedServers: [])
+        // Team notes (Shared/TEAM.md) are every bot's to edit; the chat tools never need asking.
+        let cfg = GuardRulesFile.config(for: bot, paths: paths, extraRoots: extra + [paths.shared], lockedSkillDirs: lockedDirs,
+                                        alwaysForWrites: alwaysForWrites, trustedServers: [ChatToolsSetup.serverKey])
         return try? GuardRulesFile.write(cfg, botId: bot.id, paths: paths)
     }
 

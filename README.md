@@ -73,24 +73,27 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
 - **Bots** you create or **Hire** (Lead, Planner, Designer, Frontend, Backend, Tester, Reviewer, Shipper), or the whole
   **Dev team** with a `#build-and-ship` group in one click.
 - **Groups**: the lead replies first and hands work out by @mention; members go one at a time (or in parallel when the
-  lead says so); a hand-off limit pauses the team and asks you. **Ask everyone** gets a quick view from each member.
+  lead says so); a hand-off limit pauses the team and asks you. A **Huddle** gets a quick view from each member.
 - **Skills** library (with Graphify one click away), given to bots or whole groups, plus **Teach a skill** from any chat.
 - **Connectors** (MCP servers) per bot or group, secrets in the Keychain.
-- **Chat tools** (in LaunchpadCore, app wiring in progress): bots react, send GIFs, run polls, ask tappable questions,
-  share a plan with Start / Cancel before long tasks and set up routines, through the bundled `launchpad-chat` MCP server.
-  Messages can be pinned, saved, edited, deleted and forwarded; files can be attached; chats export to Markdown.
+- **Chat tools**: bots react, send GIFs, run polls, ask tappable questions, share a plan with Start / Cancel before
+  long tasks and set up routines, through the bundled `launchpad-chat` MCP server. Right-click a message to react, pin,
+  save, edit, delete, forward, ask another bot for a review or branch from it. Drop files on a chat to attach them;
+  export a chat to Markdown; ⌘K jumps anywhere; saved prompts sit in the composer's + menu.
+- **Team**: shared team notes (`Shared/TEAM.md`, editable in Settings), bots that ask a teammate for help in a 1:1
+  chat, and "Describe your bot" to draft a new bot from one line.
 - **Approval cards**: bots ask before deploying, sending, spending or deleting. For Claude Code bots this is enforced
   by a hook, not just requested.
-- **Safety core** (in LaunchpadCore, app wiring in progress): per-bot permissions (Ask / Allow / Never for send, delete,
+- **Safety**: per-bot permissions (Ask / Allow / Never for send, delete,
   spend, change, commands outside its folder, use your Mac), a guard that really reads shell commands, locked skills,
   the macOS sandbox with an optional lock-down, and undo for a bot's file changes.
 - **Routines** on a schedule or when a file appears, and plan **usage** in the sidebar.
 - **Marketplace**: 35 roles, 5 team packs, 41 skills and 40 app (MCP)
   presets with logos. See `CatalogRoles.swift`, `TeamPacks.swift`, `CatalogSkills.swift`, `ConnectorCatalog.swift`.
 
-- **Conversation tools** (core, app wiring in progress): a backup engine when a plan's limit is hit, the bot's live
-  to-do list, a context meter, threads (New thread, Compact, Branch from here, past threads), side questions that fork
-  the session, and steering a busy bot with a new message.
+- **Conversation tools**: a backup engine when a plan's limit is hit, the bot's live to-do list, a context ring in the
+  chat header, threads (New thread, Compact, Branch from here, past threads), side questions that fork the session,
+  and steering a busy bot by just writing to it.
 
 - **Memory**: each bot keeps `MEMORY.md` by topic. When a chat goes quiet, a cheap no-tools pass files lasting
   facts there (secrets redacted, size capped, daily limit per bot), and every change can be undone.

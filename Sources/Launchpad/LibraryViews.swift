@@ -218,7 +218,7 @@ struct TemplateCard: View {
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
-                Pill(text: template.engine.displayName, symbol: template.engine == .claude ? "sparkle" : "chevron.left.forwardslash.chevron.right")
+                Pill(text: template.engine.displayName, symbol: EngineStyle.symbol(template.engine))
                 Pill(text: template.permission.displayName, symbol: "lock")
             }
             Spacer(minLength: 0)
@@ -473,25 +473,33 @@ struct UsageSummary: View {
             Text("Usage")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
-            if u.claudeWindows.isEmpty {
-                row("Claude", detail: "no data yet")
+            windows("Claude", u.claudeWindows, empty: "no data yet")
+            if let codex = u.codexWindows, !codex.isEmpty {
+                windows("ChatGPT", codex, empty: "")
             } else {
-                ForEach(u.claudeWindows, id: \.name) { w in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text("Claude · \(w.label)").font(.caption)
-                            Spacer()
-                            Text("\(Int((w.utilization * 100).rounded()))%").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                        }
-                        ProgressView(value: min(1, max(0, w.utilization)))
-                            .tint(w.utilization > 0.8 ? Theme.failure : Theme.accent)
-                            .controlSize(.mini)
-                    }
-                    .help(w.resetsAt.map { "Resets \($0.formatted(date: .omitted, time: .shortened))" } ?? "")
-                }
+                row("ChatGPT", detail: u.codexTokensToday > 0 && u.codexDay == todayKey ? "\(formatTokens(u.codexTokensToday)) tokens today" : "no data yet")
             }
-            row("ChatGPT", detail: u.codexTokensToday > 0 && u.codexDay == todayKey ? "\(formatTokens(u.codexTokensToday)) tokens today" : "no data yet")
             Divider().padding(.vertical, 2)
+        }
+    }
+
+    @ViewBuilder private func windows(_ plan: String, _ list: [UsageWindow], empty: String) -> some View {
+        if list.isEmpty {
+            row(plan, detail: empty)
+        } else {
+            ForEach(list, id: \.name) { w in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text("\(plan) · \(w.label)").font(.caption)
+                        Spacer()
+                        Text("\(Int((w.utilization * 100).rounded()))%").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                    ProgressView(value: min(1, max(0, w.utilization)))
+                        .tint(w.utilization > 0.8 ? Theme.failure : Theme.accent)
+                        .controlSize(.mini)
+                }
+                .help(w.resetsAt.map { "Resets \($0.formatted(date: .omitted, time: .shortened))" } ?? "")
+            }
         }
     }
 

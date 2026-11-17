@@ -122,9 +122,9 @@ public struct GroupPrompts {
             let lines = newMessages.compactMap { m -> String? in
                 switch m.role {
                 case .notice: return nil
-                case .user: return "**Me (the user):** \(clip(m.text))"
+                case .user: return "**Me (the user):** \(clip(ChatOps.contextText(m)))"
                 case .bot:
-                    var text = clip(m.text)
+                    var text = clip(ChatOps.contextText(m))
                     if text.isEmpty, let f = m.failure { text = "(couldn't reply: \(f.message))" }
                     if let a = m.approval { text += "\n(asked for approval: \(a.action), \(a.status.rawValue))" }
                     return "**\(name(m.botId)) (@\(m.botId ?? "?")):** \(text)"

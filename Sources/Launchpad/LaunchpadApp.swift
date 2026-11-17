@@ -21,6 +21,12 @@ struct LaunchpadApp: App {
                 Button("New Bot…") { model.showingNewBot = true }
                     .keyboardShortcut("b", modifiers: [.command, .shift])
             }
+            CommandMenu("Go") {
+                Button("Quick Switcher…") { model.showingQuickSwitcher = true }
+                    .keyboardShortcut("k", modifiers: .command)
+                Button("Saved Messages") { model.showingSavedMessages = true }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+            }
         }
     }
 }

@@ -152,8 +152,7 @@ private struct DeskCard: View {
 
     private var detail: String {
         guard desk.state == .working, let since = desk.since else { return desk.line }
-        let mins = Int(now.timeIntervalSince(since) / 60)
-        return "\(mins < 1 ? "Just started" : "\(mins) min"): \(desk.line)"
+        return "\(WorkSummary.elapsed(since: since, now: now)): \(desk.line)"
     }
 
     private func open() {

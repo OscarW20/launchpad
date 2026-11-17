@@ -889,3 +889,16 @@ queueing for 15 minutes and sometimes never starting.
 
 Tests: every check's failure message was triggered in a throwaway clone. The release itself (signing with a real
 Developer ID, notarisation, stapling, publishing) has not been run: there is no certificate on this Mac yet.
+
+## Who's working, from the chat header (2026-11-17)
+
+The green "working" line in a chat's header is now a button. Clicking it opens a small popover listing the bots
+replying in that chat right now: avatar, name, what each is doing (the same line the Office shows) and how long it's
+been going. It says "Handing over to the next bot…" between two turns in a group and "Nobody's working" when idle.
+
+- **Core**: `WorkSummary.elapsed(since:now:)` gives "Just started", "4 min", "1 h 5 min". The Office's desks use it
+  too, so a long run now reads "1 h 5 min" there instead of "65 min".
+- **App**: `WorkingButton` and `WhoIsWorking` in `WorkingViews.swift`; the header swaps `WorkingStatus()` for the
+  button in both group and one-to-one chats. The times refresh every 10 seconds while the popover is open.
+
+Tests: 1 new (`testElapsedSaysHowLongABotHasBeenGoing`). The popover itself was not tried in the running app.

@@ -69,6 +69,14 @@ public enum WorkSummary {
         if let last = reply.steps.last { return StepLabel.describe(last).text }
         return reply.text.isEmpty ? "Thinking…" : "Writing a reply…"
     }
+
+    /// How long a bot has been going: "Just started", "4 min", "1 h 5 min".
+    public static func elapsed(since start: Date, now: Date = Date()) -> String {
+        let mins = Int(max(0, now.timeIntervalSince(start)) / 60)
+        if mins < 1 { return "Just started" }
+        if mins < 60 { return "\(mins) min" }
+        return mins % 60 == 0 ? "\(mins / 60) h" : "\(mins / 60) h \(mins % 60) min"
+    }
 }
 
 // MARK: - Back and forward

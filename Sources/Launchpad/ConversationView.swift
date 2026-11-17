@@ -79,7 +79,7 @@ struct ConversationHeader: View {
             HStack(spacing: 6) {
                 if let bot {
                     if model.isRunning(chatId) {
-                        WorkingStatus()
+                        WorkingButton(chatId: chatId)
                     } else if !bot.role.isEmpty {
                         Text(bot.role).foregroundStyle(Theme.secondary).lineLimit(1)
                     }
@@ -112,7 +112,7 @@ struct ConversationHeader: View {
                     }
                     Group {
                         if model.isRunning(chatId) {
-                            WorkingStatus()
+                            WorkingButton(chatId: chatId)
                         } else {
                             Text("\(group.everyone.count) members · lead: \(model.bot(group.lead)?.name ?? "none") · hand-off limit \(group.handoffLimit)")
                                 .foregroundStyle(Theme.secondary)

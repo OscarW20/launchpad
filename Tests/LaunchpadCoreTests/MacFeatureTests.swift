@@ -138,6 +138,21 @@ final class MacFeatureTests: XCTestCase {
 
     // MARK: Office and attention
 
+    func testElapsedSaysHowLongABotHasBeenGoing() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func after(_ seconds: TimeInterval) -> String {
+            WorkSummary.elapsed(since: start, now: start.addingTimeInterval(seconds))
+        }
+        XCTAssertEqual(after(0), "Just started")
+        XCTAssertEqual(after(59), "Just started")
+        XCTAssertEqual(after(60), "1 min")
+        XCTAssertEqual(after(59 * 60 + 59), "59 min")
+        XCTAssertEqual(after(3600), "1 h")
+        XCTAssertEqual(after(3900), "1 h 5 min")
+        // A clock that moved backwards doesn't show a negative time.
+        XCTAssertEqual(after(-120), "Just started")
+    }
+
     func testAttention() {
         var m = ChatMessage(role: .bot, botId: "a", text: "Done")
         XCTAssertNil(Attention.reason(m))

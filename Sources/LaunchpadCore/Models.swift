@@ -5,19 +5,44 @@ import Foundation
 public enum BotEngine: String, Codable, CaseIterable, Identifiable, Sendable {
     case claude
     case codex
+    /// A model on your own computer (Ollama, LM Studio or any OpenAI-compatible server). Chat only: no tools.
+    case local
 
     public var id: String { rawValue }
-    public var displayName: String { self == .claude ? "Claude Code" : "Codex" }
-    /// The subscription the engine runs on.
-    public var planName: String { self == .claude ? "Claude" : "ChatGPT" }
-    public var executableName: String { rawValue }
-    /// The command a person runs in Terminal to sign in.
-    public var signInCommand: String { self == .claude ? "claude auth login" : "codex login" }
-    public var installURL: URL {
-        self == .claude
-            ? URL(string: "https://docs.claude.com/en/docs/claude-code/setup")!
-            : URL(string: "https://github.com/openai/codex")!
+    public var displayName: String {
+        switch self {
+        case .claude: return "Claude Code"
+        case .codex: return "Codex"
+        case .local: return "Local model"
+        }
     }
+    /// The subscription the engine runs on.
+    public var planName: String {
+        switch self {
+        case .claude: return "Claude"
+        case .codex: return "ChatGPT"
+        case .local: return "your computer"
+        }
+    }
+    /// The command-line tool behind the engine. A local model is reached over HTTP; `ollama` is only looked for.
+    public var executableName: String { self == .local ? "ollama" : rawValue }
+    /// The command a person runs in Terminal to sign in (local: start the server).
+    public var signInCommand: String {
+        switch self {
+        case .claude: return "claude auth login"
+        case .codex: return "codex login"
+        case .local: return "ollama serve"
+        }
+    }
+    public var installURL: URL {
+        switch self {
+        case .claude: return URL(string: "https://docs.claude.com/en/docs/claude-code/setup")!
+        case .codex: return URL(string: "https://github.com/openai/codex")!
+        case .local: return URL(string: "https://ollama.com/download")!
+        }
+    }
+    /// Runs as a command-line agent with tools, sessions and a folder (Claude Code, Codex).
+    public var isAgent: Bool { self != .local }
 }
 
 public enum PermissionLevel: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -63,13 +88,17 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
     public var lockedDown: Bool
     /// Websites a locked-down bot may reach ("github.com" also allows its subdomains). Its engine's own sites are added for it.
     public var sites: [String]
+    /// Local engine only: the OpenAI-compatible server, e.g. "http://localhost:11434/v1" (nil = Ollama's default).
+    public var localBaseURL: String?
+    /// The engine (and model) to switch to once when this bot hits its plan's usage limit.
+    public var backup: BotBrain?
 
     public init(
         id: String, name: String, emoji: String = "🤖", colour: String = BotPalette.default,
         role: String = "", engine: BotEngine = .claude, model: String? = nil,
         permission: PermissionLevel = .editWorkspace, connectors: [String] = [],
         skills: [String] = [], createdAt: Date = Date(), rules: BotRules = BotRules(),
-        lockedDown: Bool = false, sites: [String] = []
+        lockedDown: Bool = false, sites: [String] = [], localBaseURL: String? = nil, backup: BotBrain? = nil
     ) {
         self.id = id
         self.name = name
@@ -85,11 +114,13 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
         self.rules = rules
         self.lockedDown = lockedDown
         self.sites = sites
+        self.localBaseURL = localBaseURL
+        self.backup = backup
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, emoji, colour, role, engine, model, permission, connectors, skills, createdAt
-        case rules, lockedDown, sites
+        case rules, lockedDown, sites, localBaseURL, backup
     }
 
     // bot.json may be written by hand or by another agent, so every field is optional on read.
@@ -110,6 +141,9 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
         rules = (try? c.decodeIfPresent(BotRules.self, forKey: .rules)) ?? BotRules()
         lockedDown = (try? c.decodeIfPresent(Bool.self, forKey: .lockedDown)) ?? false
         sites = (try? c.decodeIfPresent([String].self, forKey: .sites)) ?? []
+        let rawURL = try? c.decodeIfPresent(String.self, forKey: .localBaseURL)
+        localBaseURL = (rawURL?.isEmpty ?? true) ? nil : rawURL
+        backup = try? c.decodeIfPresent(BotBrain.self, forKey: .backup)
     }
 }
 

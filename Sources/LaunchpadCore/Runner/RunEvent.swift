@@ -13,6 +13,10 @@ public enum RunEvent: Equatable, Sendable {
     case cost(Double)
     /// Plan usage the engine reported (Claude: share of the 5-hour and weekly limits; Codex: tokens).
     case usage(UsageReport)
+    /// The bot's to-do list, in full, whenever it changes (Claude TodoWrite / TaskCreate / TaskUpdate, Codex todo_list).
+    case todos([TodoItem])
+    /// How full the model's context window is now.
+    case context(ContextUsage)
     /// The run finished. `resultText` is the engine's final answer, if it reports one.
     case finished(resultText: String?)
     /// Raw error text reported by the engine. The runner turns this into `.failed`.

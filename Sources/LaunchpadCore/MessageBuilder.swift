@@ -4,6 +4,10 @@ import Foundation
 public struct MessageBuilder: Sendable {
     public private(set) var message: ChatMessage
     public private(set) var sessionId: String?
+    /// The bot's live to-do list this run (empty if it didn't make one). Not part of `ChatMessage` yet.
+    public private(set) var todos: [TodoItem] = []
+    /// How full the context window was at the last report this run.
+    public private(set) var context: ContextUsage?
     private var lastWasStep = false
 
     public init(botId: String?) {
@@ -53,6 +57,12 @@ public struct MessageBuilder: Sendable {
 
         case .usage:
             break
+
+        case .todos(let items):
+            todos = items
+
+        case .context(let usage):
+            context = context.map { $0.merged(with: usage) } ?? usage
 
         case .finished(let resultText):
             if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let resultText {

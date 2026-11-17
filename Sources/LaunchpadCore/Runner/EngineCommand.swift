@@ -12,9 +12,13 @@ public struct EngineInvocation: Equatable, Sendable {
     public var environment: [String: String]
     /// When set (macOS), the engine runs inside `sandbox-exec` with this profile (`BotSandbox`).
     public var sandboxProfile: String?
+    /// Local engine: the HTTP call to make instead of launching a process (`arguments` and `stdin` are unused).
+    public var local: LocalModelRequest?
 
     public init(engine: BotEngine, arguments: [String], stdin: String, workingDirectory: URL,
-                plannedSessionId: String? = nil, environment: [String: String] = [:], sandboxProfile: String? = nil) {
+                plannedSessionId: String? = nil, environment: [String: String] = [:], sandboxProfile: String? = nil,
+                local: LocalModelRequest? = nil) {
+        self.local = local
         self.engine = engine
         self.arguments = arguments
         self.stdin = stdin
@@ -57,6 +61,16 @@ public struct RunOptions: Equatable, Sendable {
     public var quiet = false
     /// Codex reasoning effort ("low", "medium", "high"): `-c model_reasoning_effort="low"`.
     public var reasoningEffort: String?
+    /// Branch off the stored session instead of continuing it (side questions): Claude `--resume ID --fork-session
+    /// --session-id NEW`, Codex `codex exec fork ID`. The stored session is left untouched.
+    public var forkSession = false
+    /// Local engine only: the chat so far (local models have no session) and other bots' names for group chats.
+    public var history: [ChatMessage] = []
+    public var historyNames: [String: String] = [:]
+    /// Local engine only: the bot's instructions. nil = read CLAUDE.md from the bot's folder.
+    public var instructions: String?
+    /// Local engine only: an API key for servers that want one (from the Keychain; never saved).
+    public var localAPIKey: String?
 
     public init() {}
 }
@@ -81,7 +95,22 @@ public enum EngineCommand {
             return codex(prompt: prompt, botDirectory: botDirectory, model: bot.model,
                          permission: bot.permission, threadId: sessionId, options: options,
                          rules: bot.rules, lockedDown: bot.lockedDown)
+        case .local:
+            return local(bot: bot, prompt: prompt, botDirectory: botDirectory, options: options)
         }
+    }
+
+    /// A local model: one `POST {base}/chat/completions` with the bot's instructions, the chat so far and the prompt.
+    /// No tools, no session; `connectors`, permissions and the sandbox don't apply.
+    public static func local(bot: Bot, prompt: String, botDirectory: URL, options: RunOptions = RunOptions()) -> EngineInvocation {
+        let instructions = options.instructions
+            ?? (try? String(contentsOf: botDirectory.appendingPathComponent("CLAUDE.md"), encoding: .utf8))
+        let system = LocalModel.systemPrompt(botName: bot.name, instructions: instructions)
+        let messages = LocalModel.messages(system: system, history: options.history, prompt: prompt, botId: bot.id,
+                                           names: options.historyNames)
+        let request = LocalModelRequest(baseURL: bot.localBaseURL ?? LocalModel.defaultBaseURL, model: bot.model ?? "",
+                                        messages: messages, apiKey: options.localAPIKey)
+        return EngineInvocation(engine: .local, arguments: [], stdin: prompt, workingDirectory: botDirectory, local: request)
     }
 
     /// `claude -p --output-format stream-json --verbose --include-partial-messages [--resume ID | --session-id NEW] …`
@@ -93,7 +122,11 @@ public enum EngineCommand {
     ) -> EngineInvocation {
         var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
         var planned: String?
-        if let sessionId, !sessionId.isEmpty {
+        if let sessionId, !sessionId.isEmpty, options.forkSession {
+            let id = newSessionId()
+            args += ["--resume", sessionId, "--fork-session", "--session-id", id]
+            planned = id
+        } else if let sessionId, !sessionId.isEmpty {
             args += ["--resume", sessionId]
             planned = sessionId
         } else {
@@ -139,9 +172,10 @@ public enum EngineCommand {
     ) -> EngineInvocation {
         var args = ["exec"]
         let resuming = !(threadId ?? "").isEmpty
-        if resuming { args.append("resume") }
+        let forking = resuming && options.forkSession
+        if resuming { args.append(forking ? "fork" : "resume") }
         args += ["--json", "--skip-git-repo-check"]
-        if options.ephemeral && !resuming { args.append("--ephemeral") }
+        if options.ephemeral && (!resuming || forking) { args.append("--ephemeral") }
         // `codex exec` can't stop mid-task to ask (no hook), so the rules map onto its own sandbox where they can:
         // a full-access bot whose commands outside its folder are Ask/Never, or whose deletes are Never, is fenced
         // into its workspace (network stays on). Locked down: always the workspace sandbox, with no network.
@@ -175,14 +209,15 @@ public enum EngineCommand {
         // Our sandbox goes around Codex only when Codex runs without its own (macOS can't nest them).
         let outer = args.contains("--dangerously-bypass-approvals-and-sandbox") ? options.sandboxProfile : nil
         return EngineInvocation(engine: .codex, arguments: args, stdin: input, workingDirectory: botDirectory,
-                                plannedSessionId: threadId, environment: options.environment, sandboxProfile: outer)
+                                plannedSessionId: forking ? nil : threadId, environment: options.environment, sandboxProfile: outer)
     }
 
     /// A one-off run that keeps no session, e.g. drafting a skill from a chat.
-    public static func oneShot(engine: BotEngine, model: String?, prompt: String, directory: URL) -> EngineInvocation {
+    public static func oneShot(engine: BotEngine, model: String?, prompt: String, directory: URL,
+                               localBaseURL: String? = nil) -> EngineInvocation {
         var options = RunOptions()
         options.ephemeral = true
-        let bot = Bot(id: "scratch", name: "Scratch", engine: engine, model: model, permission: .readOnly)
+        let bot = Bot(id: "scratch", name: "Scratch", engine: engine, model: model, permission: .readOnly, localBaseURL: localBaseURL)
         return invocation(for: bot, prompt: prompt, botDirectory: directory, sessionId: nil, options: options)
     }
 }

@@ -1,7 +1,8 @@
 # Launchpad
 
 A native macOS chat app for your personal AI team. You message bots like colleagues; each bot
-runs on **Claude Code** (your Claude plan) or **Codex** (your ChatGPT plan), in its own folder.
+runs on **Claude Code** (your Claude plan), **Codex** (your ChatGPT plan) or a **local model** (Ollama, LM Studio),
+in its own folder.
 
 Personal use only. No backend: everything lives in `~/Launchpad/`.
 
@@ -55,6 +56,7 @@ LAUNCHPAD_LIVE_TESTS=1 swift test --filter LiveEngineTests
   skills/<skill-id>/SKILL.md
   chats/<chat-id>.json    title, members, engine session per bot
   chats/<chat-id>.jsonl   message history
+  chats/threads/<chat-id>/  earlier threads of that chat (index.json, <thread-id>.jsonl)
   connectors.json         MCP servers (no secrets: those are in your Keychain)
   routines.json           scheduled and folder-triggered messages
   Shared/TEAM.md          team notes every bot reads
@@ -85,6 +87,10 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
 - **Routines** on a schedule or when a file appears, and plan **usage** in the sidebar.
 - **Marketplace**: 35 roles, 5 team packs, 41 skills and 40 app (MCP)
   presets with logos. See `CatalogRoles.swift`, `TeamPacks.swift`, `CatalogSkills.swift`, `ConnectorCatalog.swift`.
+
+- **Conversation tools** (core, app wiring in progress): a backup engine when a plan's limit is hit, the bot's live
+  to-do list, a context meter, threads (New thread, Compact, Branch from here, past threads), side questions that fork
+  the session, and steering a busy bot with a new message.
 
 - **Memory**: each bot keeps `MEMORY.md` by topic. When a chat goes quiet, a cheap no-tools pass files lasting
   facts there (secrets redacted, size capped, daily limit per bot), and every change can be undone.

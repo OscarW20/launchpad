@@ -113,6 +113,7 @@ public struct BotSandbox: Equatable, Sendable {
         switch engine {
         case .claude: return ["anthropic.com", "claude.ai", "claude.com"]
         case .codex: return ["openai.com", "chatgpt.com"]
+        case .local: return []   // localhost is always reachable
         }
     }
 

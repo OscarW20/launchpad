@@ -9,6 +9,7 @@ import Foundation
 /// - `{"type":"error","message":"Reconnecting… 2/5 (…)"}` (retries; not final on their own)
 public final class CodexStreamParser: StreamParser {
     private var startedSteps = Set<String>()
+    private let todos = TodoTracker()
     public private(set) var isComplete = false
     public private(set) var lastError: String?
 
@@ -22,10 +23,13 @@ public final class CodexStreamParser: StreamParser {
             return []
         case "item.started":
             guard let item = obj["item"] as? [String: Any] else { return [] }
-            return start(item).map { [$0] } ?? []
+            return (start(item).map { [$0] } ?? []) + todoEvents(item)
+        case "item.updated":
+            guard let item = obj["item"] as? [String: Any] else { return [] }
+            return todoEvents(item)
         case "item.completed":
             guard let item = obj["item"] as? [String: Any] else { return [] }
-            return complete(item)
+            return complete(item) + todoEvents(item)
         case "turn.completed":
             isComplete = true
             var events: [RunEvent] = []
@@ -46,6 +50,14 @@ public final class CodexStreamParser: StreamParser {
         default:
             return []
         }
+    }
+
+    /// Codex's plan, as a to-do list.
+    private func todoEvents(_ item: [String: Any]) -> [RunEvent] {
+        guard item["type"] as? String == "todo_list", let list = item["items"] as? [[String: Any]] else { return [] }
+        let before = todos.items
+        todos.codexList(list)
+        return todos.items == before && !before.isEmpty ? [] : [.todos(todos.items)]
     }
 
     private func start(_ item: [String: Any]) -> RunEvent? {

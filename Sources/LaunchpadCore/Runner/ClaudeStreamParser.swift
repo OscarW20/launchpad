@@ -13,6 +13,8 @@ public final class ClaudeStreamParser: StreamParser {
     private var messagesWithDeltas = Set<String>()
     private var currentMessageId: String?
     private var announcedSession = false
+    private let todos = TodoTracker()
+    private var contextUsed = 0
     public private(set) var isComplete = false
     public private(set) var lastError: String?
 
@@ -52,6 +54,15 @@ public final class ClaudeStreamParser: StreamParser {
                   let content = message["content"] as? [[String: Any]] else { return [] }
             let messageId = message["id"] as? String
             var events: [RunEvent] = []
+            // Each model call reports its input: that is how full the context is now.
+            if let u = message["usage"] as? [String: Any] {
+                let used = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"]
+                    .reduce(0) { $0 + ((u[$1] as? NSNumber)?.intValue ?? 0) }
+                if used > 0, used != contextUsed {
+                    contextUsed = used
+                    events.append(.context(ContextUsage(engine: .claude, used: used)))
+                }
+            }
             for block in content {
                 switch block["type"] as? String {
                 case "tool_use":
@@ -63,6 +74,7 @@ public final class ClaudeStreamParser: StreamParser {
                         title: ToolSummary.title(tool: name, input: input),
                         detail: ToolSummary.pretty(input)
                     ))
+                    if todos.toolUse(name: name, id: id, input: input) { events.append(.todos(todos.items)) }
                 case "text":
                     // Only used when the text wasn't already streamed as deltas.
                     if let text = block["text"] as? String, !text.isEmpty,
@@ -78,11 +90,15 @@ public final class ClaudeStreamParser: StreamParser {
         case "user":
             guard let message = obj["message"] as? [String: Any],
                   let content = message["content"] as? [[String: Any]] else { return [] }
-            return content.compactMap { block in
-                guard block["type"] as? String == "tool_result", let id = block["tool_use_id"] as? String else { return nil }
+            var events: [RunEvent] = []
+            for block in content {
+                guard block["type"] as? String == "tool_result", let id = block["tool_use_id"] as? String else { continue }
                 let failed = block["is_error"] as? Bool ?? false
-                return .stepFinished(id: id, output: ToolSummary.clip(Self.resultText(block["content"])), failed: failed)
+                let text = Self.resultText(block["content"])
+                events.append(.stepFinished(id: id, output: ToolSummary.clip(text), failed: failed))
+                if !failed, todos.toolResult(id: id, text: text) { events.append(.todos(todos.items)) }
             }
+            return events
 
         case "rate_limit_event":
             guard let info = obj["rate_limit_info"] as? [String: Any] else { return [] }
@@ -103,6 +119,11 @@ public final class ClaudeStreamParser: StreamParser {
             isComplete = true
             var events: [RunEvent] = []
             if let cost = obj["total_cost_usd"] as? Double { events.append(.cost(cost)) }
+            if let models = obj["modelUsage"] as? [String: Any],
+               let window = models.values.compactMap({ (($0 as? [String: Any])?["contextWindow"] as? NSNumber)?.intValue }).max(),
+               window > 0, contextUsed > 0 {
+                events.append(.context(ContextUsage(engine: .claude, used: contextUsed, window: window)))
+            }
             let isError = obj["is_error"] as? Bool ?? false
             let subtype = obj["subtype"] as? String ?? ""
             if !isError && subtype == "success" {

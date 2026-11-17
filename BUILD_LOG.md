@@ -358,3 +358,58 @@ Core only (`Sources/LaunchpadCore/Chat`, new executable `launchpad-chat`); the m
 - Tests: 45 new (316 total, 2 opt-in live skipped): JSON-RPC handshake and every tool in-process, plan wait with a
   fake clock, claims, routines, config, reader, applier, the guard exemption, and the built binary run once with a
   scripted stdin.
+
+### Phase 9: Runners & conversation features (ported from Biscuit Bots)
+Core only (`Sources/LaunchpadCore`); the app's wiring and UI come next (integration notes below).
+
+- **Local models** (`Runner/LocalModel.swift`): new `BotEngine.local` (Ollama, LM Studio or any OpenAI-compatible
+  server). `Bot.localBaseURL` (nil = `http://localhost:11434/v1`; `localhost:1234` style input is normalised).
+  `EngineCommand.invocation` builds a `LocalModelRequest` (in `EngineInvocation.local`) from the bot's CLAUDE.md, a
+  "you have no tools" note, the chat so far (`RunOptions.history`, newest 24k characters, other bots named in
+  groups) and the prompt. `EngineRunner` POSTs `{base}/chat/completions` with `stream: true` through URLSession
+  (FoundationNetworking on Linux), reads SSE deltas (or a whole JSON body if the server ignores `stream`), and Stop
+  cancels the request. Plain-English errors: server not running ("Start Ollama…", with `ollama serve`), model not
+  downloaded (`ollama pull <model>`), wrong address, chat too long. Local servers bypass proxies.
+- **Backup brain** (`Runner/Recap.swift`): `Bot.backup: BotBrain?` (engine + model). `BackupPolicy.retryBrain` says
+  retry only after a usage-limit failure, once, and only on something different; `Bot.running(on:)` swaps the
+  engine for one turn; `BackupPolicy.prompt` adds a recap (a local backup gets the chat as history instead).
+- **Recaps** (`ConversationRecap`): one builder for every "this model hasn't seen the chat" case: no session
+  (Compact, Branch, lost session, backup) → recent 12 messages in front; a session that missed messages
+  (`unseenAfter`) → just those. Notices, failed and half-written replies are left out.
+- **To-do list** (`Runner/Progress.swift`): `RunEvent.todos([TodoItem])` from Claude's TaskCreate / TaskUpdate (the
+  task number comes from the tool result) and TodoWrite, and Codex `todo_list` items (now also `item.updated`).
+  `MessageBuilder.todos` holds the live list (not saved in `ChatMessage` yet).
+- **Context meter**: `RunEvent.context(ContextUsage)`. Claude: each call's input (incl. cached) from `assistant`
+  usage, window from the result's `modelUsage.*.contextWindow`. Codex: `CodexSessionLogs.context(threadId:)` reads
+  Codex's own count (`last_token_usage`, `model_context_window`) from its session log, because `turn.completed`
+  usage is the whole session's running total. Local: the server's `usage` when it sends one.
+- **Codex usage from session logs** (`CodexSessionLogs.usageReport()`): newest `~/.codex/sessions/**/*.jsonl` with a
+  `token_count` `rate_limits` (used_percent, window_minutes, resets_at) → `UsageReport(engine: .codex, windows:)`
+  named five_hour / seven_day like Claude's. `UsageSnapshot.codexWindows` (optional, old usage.json still loads).
+- **Codex home** (`Runner/CodexHome.swift`): one Launchpad CODEX_HOME (Application Support/Launchpad/codex-home,
+  outside ~/Launchpad so our sandbox doesn't block Codex's writes) with everything linked to ~/.codex except
+  config.toml, which is your config minus `[mcp_servers.*]`. So a Codex bot only gets its own connectors (Codex
+  has no strict-MCP switch) but keeps your model/provider/profile settings. A sign-in Codex saved over our link is
+  copied back to ~/.codex. Shared rather than per bot: everything per bot is passed with `-c` anyway.
+- **Steering & batching** (`Runner/Steering.swift`): `TurnQueue` (per chat). Writing to a busy bot in a 1:1 chat
+  steers (stop the run, next turn carries on with a "don't start over" note); otherwise messages queue and become
+  one merged turn (teammates first, yours last). A run stopped before its session existed re-sends the first message.
+  `settleInterrupted` keeps a cut-short reply as done (or drops it if empty).
+- **Threads** (`Threads.swift`): `ThreadStore` keeps earlier conversations in `chats/threads/<chat>/` (`index.json`
+  + `<thread>.jsonl`). New thread (archive messages + sessions, start empty), Compact (keep messages, clear
+  sessions → recap next turn), Branch from a message (new chat with messages up to it, no sessions), reopen, delete,
+  and per-bot `unseenAfter` marks. `ChatStore.loadAll` ignores the folder.
+- **Side questions** (`Runner/SideQuestion.swift`, `RunOptions.forkSession`): Claude `--resume <id> --fork-session
+  --session-id <new> --no-session-persistence`; Codex `codex exec fork --json --ephemeral … <id> -`. Read-only, no
+  session kept; without a session (or for a local bot) a fresh run with a recap. Verified live: Claude Code 2.1.326
+  forked a haiku session (new id, remembered the earlier context; `--session-id` with `--fork-session` works);
+  codex-cli 0.169 `exec fork` accepted the flags and started a new thread (`thread.started`) from a copied session
+  (no sign-in here, so no reply).
+- Fixtures: `claudeTaskRun` is trimmed real output (Claude Code 2.1.326, haiku, TaskCreate/TaskUpdate). TodoWrite
+  isn't offered by 2.1.326, so it's tested on the tracker directly. The Codex `token_count` and `todo_list` lines
+  are written from codex-cli 0.169's event shapes (no signed-in Codex to capture from).
+- Not ported: Biscuit's per-thread session keys (Launchpad already keeps sessions per chat), voice-call recaps,
+  routine run threads, and a local API key setting in the UI (`RunOptions.localAPIKey` is ready for a Keychain value).
+
+Tests: 315 (plus 2 opt-in live ones). New `LocalModelTests` (16, including a fake HTTP server: streaming, non-streaming,
+missing model, nothing listening, Stop) and `ConversationFeatureTests` (25).

@@ -347,8 +347,11 @@ public enum MemoryReview {
         case .codex:
             model = bot.model
             options.reasoningEffort = "low"
+        case .local:
+            model = bot.model
         }
-        let scratch = Bot(id: "memory-review", name: "Memory review", engine: bot.engine, model: model, permission: .readOnly)
+        let scratch = Bot(id: "memory-review", name: "Memory review", engine: bot.engine, model: model, permission: .readOnly,
+                          localBaseURL: bot.localBaseURL)
         return EngineCommand.invocation(for: scratch, prompt: prompt, botDirectory: directory, sessionId: nil, options: options)
     }
 }

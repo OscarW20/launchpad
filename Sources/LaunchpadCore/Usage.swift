@@ -9,6 +9,9 @@ public struct UsageSnapshot: Codable, Equatable, Sendable {
     public var codexDay: String?
     public var codexTokensToday: Int = 0
     public var codexUpdatedAt: Date?
+    /// ChatGPT plan windows, read from Codex's session logs (`CodexSessionLogs.usageReport()`). Optional so older
+    /// usage.json files still load.
+    public var codexWindows: [UsageWindow]?
 
     public init() {}
 }
@@ -44,6 +47,16 @@ public final class UsageStore: @unchecked Sendable {
                     s.codexTokensToday += tokens
                     s.codexUpdatedAt = now
                 }
+                if !report.windows.isEmpty {
+                    var windows = s.codexWindows ?? []
+                    for w in report.windows {
+                        if let i = windows.firstIndex(where: { $0.name == w.name }) { windows[i] = w } else { windows.append(w) }
+                    }
+                    s.codexWindows = windows
+                    s.codexUpdatedAt = now
+                }
+            case .local:
+                break   // runs on your computer: no plan to track
             }
         }
     }

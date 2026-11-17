@@ -18,7 +18,7 @@ public final class RunHandle: @unchecked Sendable {
     public func cancel() { onCancel() }
 }
 
-/// Launches Claude Code or Codex for one message and streams what it does.
+/// Launches Claude Code or Codex (or calls a local model's server) for one message and streams what it does.
 ///
 /// The stream always ends with exactly one of `.finished`, `.failed` or `.stopped`.
 public final class EngineRunner: @unchecked Sendable {
@@ -54,6 +54,14 @@ public final class EngineRunner: @unchecked Sendable {
     }
 
     private static func execute(_ inv: EngineInvocation, locator: CLILocator, state: RunState, emit: @escaping (RunEvent) -> Void) {
+        if inv.engine == .local {
+            guard let request = inv.local else {
+                emit(.failed(LocalModelErrors.badURL(nil)))
+                return
+            }
+            LocalModelClient.run(request, state: state, emit: emit)
+            return
+        }
         guard let executable = locator.locate(inv.engine) else {
             emit(.failed(ErrorClassifier.cliMissing(inv.engine)))
             return
@@ -157,6 +165,7 @@ public final class EngineRunner: @unchecked Sendable {
 final class RunState: @unchecked Sendable {
     private let lock = NSLock()
     private var process: Process?
+    private var cancelHook: (@Sendable () -> Void)?
     private(set) var isCancelledFlag = false
 
     var isCancelled: Bool {
@@ -171,12 +180,21 @@ final class RunState: @unchecked Sendable {
         return !isCancelledFlag
     }
 
+    /// For runs without a process (local models): what Stop does. Returns false if Stop was already pressed.
+    func attach(cancel: @escaping @Sendable () -> Void) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        cancelHook = cancel
+        return !isCancelledFlag
+    }
+
     func cancel() {
         lock.lock()
         guard !isCancelledFlag else { lock.unlock(); return }
         isCancelledFlag = true
         let p = process
+        let hook = cancelHook
         lock.unlock()
+        hook?()
 
         guard let p, p.isRunning else { return }
         p.interrupt() // SIGINT first: lets the engine save its session cleanly

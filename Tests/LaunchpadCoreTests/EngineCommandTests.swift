@@ -122,3 +122,25 @@ final class AppToolPermissionTests: XCTestCase {
         XCTAssertFalse(allowed(args(.readOnly, connectors: [], guardOn: true)).contains("Bash"))
     }
 }
+
+final class SandboxedBrowserTests: XCTestCase {
+    let browser = Connector(id: "playwright", name: "Browser", kind: .stdio, command: "npx", args: ["-y", "@playwright/mcp@latest"])
+
+    func testBrowserStartsWithoutChromesOwnSandboxInsideOurs() {
+        XCTAssertEqual(MCPConfig.adjusted([browser], sandboxed: true).first?.args, ["-y", "@playwright/mcp@latest", "--no-sandbox"])
+        XCTAssertEqual(MCPConfig.adjusted([browser], sandboxed: false).first?.args, ["-y", "@playwright/mcp@latest"])
+        let already = Connector(id: "p", name: "P", kind: .stdio, command: "npx", args: ["@playwright/mcp", "--no-sandbox"])
+        XCTAssertEqual(MCPConfig.adjusted([already], sandboxed: true).first?.args, ["@playwright/mcp", "--no-sandbox"])
+    }
+
+    func testRunUnderTheSandboxPassesTheFlag() {
+        var o = RunOptions()
+        o.manageConnectors = true
+        o.connectors = [browser]
+        o.sandboxProfile = "(version 1)(allow default)"
+        let claude = EngineCommand.invocation(for: Bot(id: "t", name: "T"), prompt: "x", botDirectory: URL(fileURLWithPath: "/b"), sessionId: nil, options: o)
+        XCTAssertTrue(claude.arguments[claude.arguments.firstIndex(of: "--mcp-config")! + 1].contains("--no-sandbox"))
+        let codex = EngineCommand.invocation(for: Bot(id: "t", name: "T", engine: .codex), prompt: "x", botDirectory: URL(fileURLWithPath: "/b"), sessionId: nil, options: o)
+        XCTAssertTrue(codex.arguments.contains { $0.contains("--no-sandbox") })
+    }
+}

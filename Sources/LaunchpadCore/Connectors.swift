@@ -157,6 +157,22 @@ public enum MCPConfig {
         return all.filter { set.contains($0.id) }
     }
 
+    /// Fixes servers that can't start inside Launchpad's sandbox as they are.
+    /// Chrome (the Playwright browser server) applies its own macOS sandbox at launch, and macOS doesn't allow one
+    /// sandbox inside another ("sandbox initialization failed: Operation not permitted"), so under Launchpad's
+    /// sandbox it starts with `--no-sandbox`. The bot's whole process tree, browser included, stays inside
+    /// Launchpad's sandbox, which is the stricter of the two.
+    public static func adjusted(_ connectors: [Connector], sandboxed: Bool) -> [Connector] {
+        guard sandboxed else { return connectors }
+        return connectors.map { c in
+            guard c.kind == .stdio, c.args.contains(where: { $0.hasPrefix("@playwright/mcp") }),
+                  !c.args.contains("--no-sandbox") else { return c }
+            var fixed = c
+            fixed.args.append("--no-sandbox")
+            return fixed
+        }
+    }
+
     /// JSON for `claude --mcp-config`. Uses `${VAR}` placeholders that Claude Code expands.
     public static func claudeJSON(_ connectors: [Connector]) -> String {
         var servers: [String: Any] = [:]

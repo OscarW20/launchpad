@@ -177,8 +177,10 @@ struct TaskDetailView: View {
                         }
                         Button("Dismiss") { model.dismissTask(task.id) }
                     }
+                    .buttonStyle(SoftButtonStyle())
                     Text(task.text)
-                        .font(Theme.rounded(.title3, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Theme.text)
                         .textSelection(.enabled)
                     if let runId = approvalRun(task) {
                         approval(task, runId: runId, status: status)
@@ -196,7 +198,7 @@ struct TaskDetailView: View {
                         }
                     }
                 }
-                .padding(20)
+                .padding(Theme.Space.xl)
                 .frame(maxWidth: 860, alignment: .leading)
             }
             .navigationTitle("Task")
@@ -215,7 +217,8 @@ struct TaskDetailView: View {
         let run = model.workflowEngine.run(runId)
         VStack(alignment: .leading, spacing: 10) {
             Label("\(run?.name ?? "A workflow") is waiting for your OK", systemImage: "hand.raised.fill")
-                .foregroundStyle(Theme.accent)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.text)
             if status == .needsYou {
                 HStack {
                     Button {
@@ -229,7 +232,9 @@ struct TaskDetailView: View {
                     } label: {
                         Label("Decline", systemImage: "xmark")
                     }
+                    .buttonStyle(SoftButtonStyle())
                 }
+                .controlSize(.large)
             } else if run?.approved == true {
                 Label("Approved", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.success)
             } else if run?.approved == false {
@@ -238,9 +243,8 @@ struct TaskDetailView: View {
                 Text(run?.note ?? "This run isn't waiting any more.").foregroundStyle(Theme.secondary)
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .card(padding: Theme.Space.l, radius: 22)
     }
 }
 
@@ -313,19 +317,16 @@ struct WorkflowDetailView: View {
         VStack(spacing: 0) {
             header
             ResumeBanner(workflowId: workflowId)
-            Picker("", selection: $tab) {
-                ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 300)
-            .padding(.bottom, 8)
+            PillTabs(selection: $tab, options: Tab.allCases.map { ($0.rawValue, $0) })
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.Space.xl)
+                .padding(.bottom, Theme.Space.s)
             switch tab {
             case .steps:
                 if let binding = Binding($draft) {
                     WorkflowEditor(workflow: binding)
                 } else {
-                    ContentUnavailableView("Workflow not found", systemImage: "questionmark.circle")
+                    EmptyState(symbol: "questionmark.circle", title: "Workflow not found")
                 }
             case .runs:
                 WorkflowRunsView(workflowId: workflowId)
@@ -361,12 +362,11 @@ struct WorkflowDetailView: View {
         let running = model.workflowEngine.isRunning(workflowId)
         let live = model.workflowRuns.last { $0.workflowId == workflowId && $0.isLive }
         return HStack(spacing: 12) {
-            Image(systemName: "flowchart")
-                .font(.title2)
-                .foregroundStyle(Theme.accent)
+            IconTile(symbol: "flowchart", size: 48)
             VStack(alignment: .leading, spacing: 2) {
                 Text(draft?.name ?? workflowId)
                     .font(Theme.rounded(.title2, weight: .bold))
+                    .foregroundStyle(Theme.text)
                 Text(subtitle(live))
                     .foregroundStyle(Theme.secondary)
             }
@@ -386,7 +386,9 @@ struct WorkflowDetailView: View {
                 .disabled((draft?.steps ?? []).isEmpty)
             }
         }
-        .padding(20)
+        .buttonStyle(SoftButtonStyle())
+        .padding(.horizontal, Theme.Space.xl)
+        .padding(.vertical, Theme.Space.l)
     }
 
     private func subtitle(_ live: WorkflowRun?) -> String {
@@ -419,10 +421,12 @@ struct ResumeBanner: View {
                     .buttonStyle(PillButtonStyle())
                 Button("Discard") { model.workflowEngine.discardResume(run.id) }
             }
+            .buttonStyle(SoftButtonStyle())
             .controlSize(.small)
-            .padding(10)
-            .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .padding(.horizontal, 20)
+            .padding(Theme.Space.m)
+            .background(Theme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.warning.opacity(0.35)))
+            .padding(.horizontal, Theme.Space.xl)
             .padding(.bottom, 8)
         }
     }
@@ -654,6 +658,8 @@ struct WorkflowRunsView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .buttonStyle(SoftButtonStyle())
     }
 
     private func symbol(_ s: WorkflowRun.Status) -> String {
@@ -671,7 +677,7 @@ struct WorkflowRunsView: View {
         case .running: return Theme.accent
         case .waiting: return Theme.warning
         case .done: return Theme.success
-        case .stopped: return .secondary
+        case .stopped: return Theme.secondary
         case .failed: return Theme.failure
         }
     }
@@ -719,6 +725,8 @@ struct RunHistoryView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .buttonStyle(SoftButtonStyle())
     }
 
     private func symbol(_ k: RunLogEntry.Kind) -> String {

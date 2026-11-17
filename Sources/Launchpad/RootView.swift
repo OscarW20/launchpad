@@ -38,7 +38,7 @@ struct RootView: View {
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 HStack(spacing: Theme.Space.s) {
-                    AppLogo(size: 24)
+                    BrandMark(size: 24)
                     Text("Launchpad")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Theme.text)

@@ -19,20 +19,24 @@ struct LiveApprovalCardView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: kind?.symbol ?? "hand.raised.fill")
-                    .font(.title3)
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 26)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.warning)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(Theme.warning.opacity(0.14)))
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(name) wants to \(kind?.wants ?? "do something that needs your OK")")
-                        .font(Theme.rounded(.headline, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.text)
                     HStack(spacing: 6) {
                         Text(kind?.title ?? card.category)
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 7)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.accentText)
+                            .padding(.horizontal, 8)
                             .padding(.vertical, 2)
-                            .background(Theme.accent.opacity(0.18), in: Capsule())
+                            .background(Theme.accentSoft, in: Capsule())
                         Text(ToolNames.readable(card.tool))
                             .font(.callout.weight(.medium))
+                            .foregroundStyle(Theme.secondary)
                     }
                 }
             }
@@ -44,15 +48,17 @@ struct LiveApprovalCardView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 140)
-                .padding(8)
-                .background(Theme.code, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.horizontal, Theme.Space.m)
+                .padding(.vertical, 10)
+                .background(Theme.code, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
             }
             state
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.accent.opacity(card.state == .pending ? 0.12 : 0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.accent.opacity(card.state == .pending ? 0.45 : 0.2)))
+        .padding(Theme.Space.l)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(card.state == .pending ? Theme.accent.opacity(0.45) : Theme.line, lineWidth: card.state == .pending ? 1.5 : 1))
     }
 
     @ViewBuilder private var state: some View {
@@ -65,15 +71,18 @@ struct LiveApprovalCardView: View {
                     Label("Approve", systemImage: "checkmark")
                 }
                 .buttonStyle(PillButtonStyle())
+                .controlSize(.large)
                 Button {
                     model.answerApproval(card.id, in: chatId, .deny)
                 } label: {
                     Label("Decline", systemImage: "xmark")
                 }
                 .buttonStyle(SoftButtonStyle())
+                .controlSize(.large)
                 if model.canAlwaysAllow(card, botId: botId) {
                     Button("Always allow") { model.answerApproval(card.id, in: chatId, .always) }
                         .buttonStyle(SoftButtonStyle())
+                        .controlSize(.large)
                         .help("Approve, and let \(model.bot(botId)?.name ?? "this bot") use \(ToolNames.readable(card.tool)) for this without asking again. You can take it back in the bot's settings.")
                 }
             }
@@ -123,14 +132,15 @@ struct ReplyChangesBar: View {
                 } label: {
                     Label("Undo", systemImage: "arrow.uturn.backward")
                 }
+                .buttonStyle(SoftButtonStyle())
                 .controlSize(.small)
                 .disabled(model.isRunning(chatId) || model.snapshots == nil)
                 .help(model.snapshots == nil ? "Undo needs git, which Launchpad couldn't find." : "Put these files back as they were before this reply")
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, Theme.Space.m)
         .padding(.vertical, 6)
-        .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Theme.field, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .confirmationDialog("Undo this reply's changes?", isPresented: $confirm) {
             Button("Undo Changes", role: .destructive) { model.undoReply(message.id, in: chatId) }
         } message: {

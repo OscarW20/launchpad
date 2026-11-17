@@ -167,8 +167,8 @@ struct PlanCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Plan", systemImage: "list.bullet.clipboard")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.secondary)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.accentText)
             Text(card.message).font(.body.weight(.medium))
             if !card.steps.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
@@ -185,8 +185,10 @@ struct PlanCardView: View {
                 HStack(spacing: 10) {
                     Button { model.answerPlan(messageId, in: chatId, start: true) } label: { Label("Start", systemImage: "play.fill") }
                         .buttonStyle(PillButtonStyle())
+                        .controlSize(.large)
                     Button { model.answerPlan(messageId, in: chatId, start: false) } label: { Label("Cancel", systemImage: "xmark") }
                         .buttonStyle(SoftButtonStyle())
+                        .controlSize(.large)
                     if card.autoStart != nil {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             if let left = card.secondsLeft(now: context.date) {
@@ -203,10 +205,8 @@ struct PlanCardView: View {
                 Label("Cancelled", systemImage: "xmark.circle.fill").foregroundStyle(Theme.secondary).font(.callout.weight(.medium))
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.accent.opacity(0.3)))
+        .card(padding: Theme.Space.l, radius: 22)
     }
 }
 
@@ -223,23 +223,25 @@ struct QuestionCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(card.items.count == 1 ? "Question" : "Questions", systemImage: "questionmark.bubble")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.secondary)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.accentText)
             ForEach(Array(card.items.enumerated()), id: \.offset) { i, item in
                 VStack(alignment: .leading, spacing: 6) {
                     InlineText(item.text).font(.body.weight(.medium))
                     if card.answered {
-                        Text(card.answers?[safe: i] ?? "").foregroundStyle(Theme.accent)
+                        Text(card.answers?[safe: i] ?? "").foregroundStyle(Theme.accentText)
                     } else {
                         FlowRow(spacing: 6) {
                             ForEach(item.options, id: \.self) { option in
                                 let on = picked[i, default: []].contains(option)
                                 Button { toggle(option, at: i, multi: item.multi) } label: {
                                     Text(option)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 4)
-                                        .background(on ? Theme.accent.opacity(0.2) : Theme.field, in: Capsule())
-                                        .overlay(Capsule().strokeBorder(on ? Theme.accent : Theme.line))
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(on ? Color.white : Theme.accentText)
+                                        .padding(.horizontal, 14)
+                                        .frame(height: 30)
+                                        .background(on ? AnyShapeStyle(Theme.accentGradient) : AnyShapeStyle(Theme.accentSoft), in: Capsule())
+                                        .contentShape(Capsule())
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -253,12 +255,12 @@ struct QuestionCardView: View {
             if !card.answered {
                 Button("Send answers") { model.answerQuestions(messageId, in: chatId, answers: answers) }
                     .buttonStyle(PillButtonStyle())
+                    .controlSize(.large)
                     .disabled(answers.contains { $0.trimmingCharacters(in: .whitespaces).isEmpty })
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.field, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .card(padding: Theme.Space.l, radius: 22)
     }
 
     private var answers: [String] {
@@ -327,8 +329,8 @@ struct PollView: View {
         let total = max(1, counts.reduce(0, +))
         VStack(alignment: .leading, spacing: 8) {
             Label("Poll", systemImage: "chart.bar")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.secondary)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.accentText)
             Text(poll.question).font(.body.weight(.medium))
             ForEach(Array(poll.options.enumerated()), id: \.offset) { i, option in
                 let voters = poll.voters(i)
@@ -344,10 +346,13 @@ struct PollView: View {
                             Text("\(counts[i])").monospacedDigit().foregroundStyle(Theme.secondary)
                         }
                         GeometryReader { geo in
-                            Capsule().fill(Theme.accent.opacity(0.35))
-                                .frame(width: geo.size.width * CGFloat(counts[i]) / CGFloat(total))
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Theme.line)
+                                Capsule().fill(Theme.accent)
+                                    .frame(width: geo.size.width * CGFloat(counts[i]) / CGFloat(total))
+                            }
                         }
-                        .frame(height: 4)
+                        .frame(height: 6)
                         if !voters.isEmpty {
                             Text(voters.map(name).joined(separator: ", ")).font(.caption).foregroundStyle(Theme.secondary)
                         }
@@ -365,9 +370,8 @@ struct PollView: View {
                 }
             }
         }
-        .padding(12)
         .frame(maxWidth: 420, alignment: .leading)
-        .background(Theme.field, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .card(padding: Theme.Space.l, radius: 22)
     }
 
     private func name(_ id: String) -> String { id == ChatOps.you ? "You" : (model.bot(id)?.name ?? id) }
@@ -406,9 +410,10 @@ struct NewPollSheet: View {
                 .buttonStyle(PillButtonStyle())
                 .disabled(ChatOps.makePoll(question: question, options: options) == nil)
             }
-            .padding(16)
+            .padding(Theme.Space.l)
         }
         .frame(width: 440, height: 420)
+        .sheetBackground()
     }
 }
 
@@ -434,9 +439,11 @@ struct FileChips: View {
                         Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle)
                     }
                     .font(.callout)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Theme.field, in: RoundedRectangle(cornerRadius: 8))
+                    .foregroundStyle(Theme.text)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Theme.field, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Theme.line))
                 }
                 .buttonStyle(.plain)
                 .help(url.path)
@@ -479,12 +486,12 @@ struct TodoListView: View {
         let done = items.filter { $0.status == .completed }.count
         VStack(alignment: .leading, spacing: 4) {
             Label("To-do · \(done) of \(items.count) done", systemImage: "checklist")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.secondary)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.accentText)
             ForEach(items) { item in
                 HStack(spacing: 6) {
                     switch item.status {
-                    case .completed: Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.success)
+                    case .completed: Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.successFill)
                     case .inProgress: Image(systemName: "circle.dotted.circle").foregroundStyle(Theme.accent)
                     case .pending: Image(systemName: "circle").foregroundStyle(Theme.secondary)
                     }
@@ -496,9 +503,9 @@ struct TodoListView: View {
                 .font(.callout)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, Theme.Space.m)
+        .padding(.vertical, 10)
+        .background(Theme.field, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -560,8 +567,9 @@ struct EditMessageSheet: View {
             TextEditor(text: $text)
                 .font(.body)
                 .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 8))
+                .padding(Theme.Space.s)
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).strokeBorder(Theme.line))
             Text("The bot isn't asked again; earlier versions are kept.").font(.caption).foregroundStyle(Theme.secondary)
             HStack {
                 Spacer()
@@ -574,8 +582,9 @@ struct EditMessageSheet: View {
                 .buttonStyle(PillButtonStyle())
             }
         }
-        .padding(20)
+        .padding(Theme.Space.xl)
         .frame(width: 480, height: 300)
+        .sheetBackground()
         .onAppear { text = message.text }
     }
 }
@@ -590,7 +599,7 @@ struct PinnedBar: View {
         let pinned = ChatOps.pinned(model.messages(for: chatId))
         if !pinned.isEmpty {
             HStack(spacing: 8) {
-                Image(systemName: "pin.fill").foregroundStyle(Theme.accent)
+                Image(systemName: "pin.fill").foregroundStyle(Theme.accentText)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(pinned) { m in
@@ -598,9 +607,10 @@ struct PinnedBar: View {
                                 Text(ChatOps.summary(m))
                                     .lineLimit(1)
                                     .frame(maxWidth: 240)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(Theme.field, in: Capsule())
+                                    .foregroundStyle(Theme.accentText)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Theme.accentSoft, in: Capsule())
                             }
                             .buttonStyle(.plain)
                             .contextMenu { Button("Unpin") { model.togglePin(m.id, in: chatId) } }
@@ -609,9 +619,9 @@ struct PinnedBar: View {
                 }
             }
             .font(.callout)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 6)
-            .background(Theme.card.opacity(0.4))
+            .padding(.horizontal, Theme.Space.l)
+            .padding(.vertical, Theme.Space.s)
+            .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
         }
     }
 }
@@ -625,8 +635,7 @@ struct SavedMessagesSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Saved messages").font(Theme.rounded(.title2, weight: .bold))
             if saved.isEmpty {
-                ContentUnavailableView("Nothing saved yet", systemImage: "bookmark",
-                                       description: Text("Right-click a message and choose Save for Later."))
+                EmptyState(symbol: "bookmark", title: "Nothing saved yet", message: "Right-click a message and choose Save for Later.")
             } else {
                 List {
                     ForEach(saved, id: \.message.id) { item in
@@ -650,14 +659,16 @@ struct SavedMessagesSheet: View {
                         }
                     }
                 }
+                .scrollContentBackground(.hidden)
             }
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
+        .padding(Theme.Space.xl)
         .frame(width: 560, height: 520)
+        .sheetBackground()
         .onAppear { saved = model.savedMessages() }
     }
 }
@@ -700,17 +711,23 @@ struct QuickSwitcherSheet: View {
                             Spacer()
                         }
                         .padding(.vertical, 2)
-                        .listRowBackground(i == selection ? Theme.accent.opacity(0.18) : Color.clear)
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous)
+                                .fill(i == selection ? Theme.accentSoft : Color.clear)
+                                .padding(.horizontal, 6)
+                        )
                         .contentShape(Rectangle())
                         .onTapGesture { selection = i; open(results) }
                         .id(i)
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .onChange(of: selection) { proxy.scrollTo(selection) }
             }
         }
         .frame(width: 560, height: 420)
+        .sheetBackground()
         .onAppear {
             items = model.switcherItems()
             chats = model.switcherChats()
@@ -791,8 +808,7 @@ struct PastThreadsSheet: View {
             Text("Earlier conversations in \(model.chat(chatId)?.title ?? "this chat"). Reopening one puts the current conversation aside.")
                 .foregroundStyle(Theme.secondary)
             if threads.isEmpty {
-                ContentUnavailableView("No past threads", systemImage: "text.bubble",
-                                       description: Text("Start a New Thread from the Thread menu and the current one is kept here."))
+                EmptyState(symbol: "text.bubble", title: "No past threads", message: "Start a New Thread from the Thread menu and the current one is kept here.")
             } else {
                 List {
                     ForEach(threads) { t in
@@ -822,14 +838,16 @@ struct PastThreadsSheet: View {
                         }
                     }
                 }
+                .scrollContentBackground(.hidden)
             }
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
+        .padding(Theme.Space.xl)
         .frame(width: 600, height: 520)
+        .sheetBackground()
     }
 }
 

@@ -178,11 +178,13 @@ extension View {
         formStyle(.grouped)
             .scrollContentBackground(.hidden)
             .toggleStyle(.switch)
+            .buttonStyle(SoftButtonStyle())
     }
 
     /// Sheet background: the solid panel colour with the glow.
     func sheetBackground() -> some View {
-        background(ZStack { Theme.panelSolid; GlowBackground().opacity(0.6) }.ignoresSafeArea())
+        buttonStyle(SoftButtonStyle())
+            .background(ZStack { Theme.panelSolid; GlowBackground().opacity(0.6) }.ignoresSafeArea())
     }
 }
 
@@ -231,7 +233,10 @@ private struct PillButtonBody: View {
             .animation(.easeOut(duration: 0.12), value: hover)
     }
 
+    private var isDestructiveRole: Bool { configuration.role == .destructive && (kind == .soft || kind == .plain) }
+
     private var foreground: Color {
+        if isDestructiveRole { return Theme.failure }
         switch kind {
         case .primary, .destructive: return .white
         case .soft: return Theme.accentText
@@ -240,6 +245,7 @@ private struct PillButtonBody: View {
     }
 
     private var fill: AnyShapeStyle {
+        if isDestructiveRole { return AnyShapeStyle(Theme.failureFill.opacity(0.12)) }
         switch kind {
         case .primary: return AnyShapeStyle(Theme.accentGradient)
         case .soft: return AnyShapeStyle(Theme.accentSoft)
@@ -566,7 +572,7 @@ extension EmptyState where Actions == EmptyView {
 }
 
 /// The Launchpad mark: the app icon, small and rounded.
-struct AppLogo: View {
+struct BrandMark: View {
     var size: CGFloat = 24
 
     private static let image: NSImage? = AppResources.url("AppIcon-1024", "png", in: "Brand").flatMap { NSImage(contentsOf: $0) }

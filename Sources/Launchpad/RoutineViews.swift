@@ -151,7 +151,7 @@ struct RoutineDetailView: View {
                 }
                 .themedForm()
             } else {
-                ContentUnavailableView("Routine not found", systemImage: "questionmark.circle")
+                EmptyState(symbol: "questionmark.circle", title: "Routine not found")
             }
         }
         .navigationTitle(draft?.name ?? "Routine")

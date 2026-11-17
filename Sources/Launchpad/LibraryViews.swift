@@ -61,45 +61,42 @@ struct SkillDetailView: View {
         let parsed = SkillFile.parse(text)
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Image(systemName: "sparkles")
-                    .font(.title2)
-                    .foregroundStyle(Theme.accent)
+                IconTile(symbol: "sparkles", size: 48)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(parsed.name ?? skillId)
                         .font(Theme.rounded(.title2, weight: .bold))
+                        .foregroundStyle(Theme.text)
                     Text(parsed.description ?? "Add a description: it tells bots when to use this skill.")
                         .foregroundStyle(Theme.secondary)
                         .lineLimit(2)
                 }
                 Spacer()
                 SkillLockToggle(skillId: skillId)
-                Picker("View", selection: $mode) {
-                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 260)
+                PillTabs(selection: $mode, options: Mode.allCases.map { ($0.rawValue, $0) })
             }
-            .padding(20)
+            .padding(.horizontal, Theme.Space.xl)
+            .padding(.vertical, Theme.Space.l)
 
             HStack(spacing: 0) {
                 if mode != .preview {
                     TextEditor(text: $text)
                         .font(.system(.body, design: .monospaced))
                         .scrollContentBackground(.hidden)
-                        .padding(10)
-                        .background(Theme.card)
+                        .padding(Theme.Space.m)
+                        .background(Theme.code)
                 }
-                if mode == .split { Divider() }
+                if mode == .split { Rectangle().fill(Theme.line).frame(width: 1) }
                 if mode != .edit {
                     ScrollView {
                         MarkdownView(text: parsed.body)
-                            .padding(16)
+                            .padding(Theme.Space.l)
                     }
-                    .background(Theme.canvas)
+                    .background(Theme.card)
                 }
             }
-            .overlay(Rectangle().strokeBorder(Theme.line).allowsHitTesting(false))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.line).allowsHitTesting(false))
+            .padding(.horizontal, Theme.Space.l)
 
             GiveSkillBar(skillId: skillId)
         }
@@ -143,9 +140,7 @@ struct GiveSkillBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Give to")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.secondary)
+            SectionHeader("Give to")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(model.groups) { g in
@@ -164,9 +159,8 @@ struct GiveSkillBar: View {
                 }
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(Theme.card.opacity(0.6))
+        .padding(.horizontal, Theme.Space.xl)
+        .padding(.vertical, Theme.Space.m)
     }
 
     private func chip(title: String, emoji: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -176,12 +170,16 @@ struct GiveSkillBar: View {
                 Text(title)
                 if on { Image(systemName: "checkmark").font(.caption.weight(.bold)) }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(on ? Theme.accent.opacity(0.2) : Theme.field, in: Capsule())
-            .overlay(Capsule().strokeBorder(on ? Theme.accent.opacity(0.6) : Theme.line))
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(on ? Theme.accentText : Theme.text)
+            .padding(.horizontal, Theme.Space.m)
+            .frame(height: 30)
+            .background(on ? Theme.accentSoft : Theme.field, in: Capsule())
+            .overlay(Capsule().strokeBorder(on ? Theme.accent.opacity(0.5) : Theme.line))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
@@ -198,7 +196,8 @@ struct TemplateCard: View {
                 AvatarView(bot: template.bot, size: 42)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(template.name)
-                        .font(Theme.rounded(.headline, weight: .bold))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.text)
                     Text(template.role)
                         .font(.caption)
                         .foregroundStyle(Theme.secondary)
@@ -207,6 +206,7 @@ struct TemplateCard: View {
             }
             Text(template.blurb)
                 .font(.callout)
+                .foregroundStyle(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
                 Pill(text: template.engine.displayName, symbol: EngineStyle.symbol(template.engine))
@@ -220,6 +220,7 @@ struct TemplateCard: View {
                         .foregroundStyle(Theme.success)
                     Spacer()
                     Button("Hire another") { model.hire(template) }
+                        .buttonStyle(SoftButtonStyle())
                         .controlSize(.small)
                 } else {
                     Spacer()
@@ -228,10 +229,10 @@ struct TemplateCard: View {
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 210, alignment: .topLeading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
+        .padding(Theme.Space.l + 4)
+        .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.line))
     }
 }
 
@@ -246,8 +247,10 @@ struct ConnectorListView: View {
             ForEach(model.connectors) { c in
                 HStack(spacing: 10) {
                     Image(systemName: c.kind == .http ? "globe" : "terminal")
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 22)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.accentText)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(Theme.accentSoft))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.name).font(Theme.rounded(.body, weight: .semibold))
                         Text(c.kind == .http ? (c.url ?? "") : ([c.command ?? ""] + c.args).joined(separator: " "))
@@ -360,7 +363,7 @@ struct ConnectorDetailView: View {
                 }
                 .themedForm()
             } else {
-                ContentUnavailableView("Connector not found", systemImage: "questionmark.circle")
+                EmptyState(symbol: "questionmark.circle", title: "Connector not found")
             }
         }
         .navigationTitle(draft?.name ?? "Connector")

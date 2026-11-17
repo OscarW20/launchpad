@@ -99,9 +99,7 @@ private struct QuickAskView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Image(nsImage: MenuBarIcon.image)
-                    .renderingMode(.template)
-                    .foregroundStyle(Theme.accent)
+                BrandMark(size: 28)
                 TextField(sent == nil ? "Ask your team anything…" : "Ask a follow-up…", text: $text)
                     .textFieldStyle(.plain)
                     .font(.system(size: 18))
@@ -109,13 +107,13 @@ private struct QuickAskView: View {
                     .onSubmit(send)
                 targetMenu
             }
-            .padding(.horizontal, 16)
-            .frame(height: 58)
+            .padding(.horizontal, Theme.Space.l)
+            .frame(height: 60)
             if let sent {
-                Divider()
+                Rectangle().fill(Theme.line).frame(height: 1)
                 replies(sent)
             }
-            Divider()
+            Rectangle().fill(Theme.line).frame(height: 1)
             HStack {
                 Text("⌃⌥B to open or close · Return to send · Esc to close")
                     .font(.caption)
@@ -127,17 +125,24 @@ private struct QuickAskView: View {
                         MainWindow.bringForward()
                         close()
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(PillButtonStyle())
+                    .controlSize(.small)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Theme.Space.l)
             .padding(.vertical, 10)
         }
         .frame(width: 640)
         .fixedSize(horizontal: false, vertical: true)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.canvas))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.panel)
+                GlowBackground().opacity(0.5).clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.line))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .shadow(color: .black.opacity(0.25), radius: 24, y: 10)
         .padding(30)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -166,11 +171,20 @@ private struct QuickAskView: View {
                 }
             }
         } label: {
-            Text(targetLabel)
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                Text(targetLabel).lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Theme.accentText)
+            .padding(.horizontal, Theme.Space.m)
+            .frame(height: 30)
+            .background(Capsule().fill(Theme.accentSoft))
+            .contentShape(Capsule())
         }
         .menuStyle(.button)
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
         .fixedSize()
         .help("Who to ask")
     }
@@ -207,7 +221,7 @@ private struct QuickAskView: View {
                                 Text(model.authorName(r)).font(.caption.weight(.bold)).foregroundStyle(Theme.secondary)
                             }
                             Text(markdown(r.text.isEmpty ? (r.failure?.message ?? "") : r.text))
-                                .foregroundStyle(r.status == .failed ? Theme.failure : Color.primary)
+                                .foregroundStyle(r.status == .failed ? Theme.failure : Theme.text)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -219,7 +233,7 @@ private struct QuickAskView: View {
                     }
                 }
             }
-            .padding(16)
+            .padding(Theme.Space.l)
         }
         .frame(maxHeight: 300)
     }

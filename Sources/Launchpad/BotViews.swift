@@ -289,7 +289,9 @@ struct NewBotSheet: View {
                 }
                 Spacer()
             }
-            .padding(20)
+            .buttonStyle(SoftButtonStyle())
+            .padding(.horizontal, Theme.Space.xl)
+            .padding(.vertical, Theme.Space.l)
 
             Form {
                 Section {
@@ -340,9 +342,10 @@ struct NewBotSheet: View {
                 .buttonStyle(PillButtonStyle())
                 .disabled(bot.name.trimmingCharacters(in: .whitespaces).isEmpty || (bot.engine == .local && bot.model == nil))
             }
-            .padding(16)
+            .padding(Theme.Space.l)
         }
         .frame(width: 580, height: 720)
+        .sheetBackground()
     }
 
     private func draft() {
@@ -540,7 +543,7 @@ struct BotDetailView: View {
                     .themedForm()
                 }
             } else {
-                ContentUnavailableView("Bot not found", systemImage: "questionmark.circle")
+                EmptyState(symbol: "questionmark.circle", title: "Bot not found")
             }
         }
         .navigationTitle(draft?.name ?? "Bot")
@@ -589,7 +592,9 @@ struct BotDetailView: View {
             }
             .buttonStyle(PillButtonStyle())
         }
-        .padding(20)
+        .buttonStyle(SoftButtonStyle())
+        .padding(.horizontal, Theme.Space.xl)
+        .padding(.vertical, Theme.Space.l)
     }
 
     private func load() {

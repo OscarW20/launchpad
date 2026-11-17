@@ -82,22 +82,20 @@ struct MenuBarContent: View {
             }
             .buttonStyle(SoftButtonStyle())
             .controlSize(.small)
-            .padding(.horizontal, 10)
-            .padding(.bottom, 10)
+            .padding(.horizontal, Theme.Space.m)
+            .padding(.bottom, Theme.Space.m)
         }
         .frame(width: 330)
-        .background(Theme.canvas)
+        .background(ZStack { Theme.panelSolid.opacity(0.85); GlowBackground().opacity(0.7) })
     }
 
     private func header(working: Int, needs: Int) -> some View {
         HStack(spacing: 10) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 30, height: 30)
+            BrandMark(size: 30)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Launchpad").font(.headline)
+                Text("Launchpad").font(.system(size: 14, weight: .bold)).foregroundStyle(Theme.text)
                 HStack(spacing: 5) {
-                    Circle().fill(working == 0 ? Theme.success : Theme.accent).frame(width: 6, height: 6)
+                    Circle().fill(working == 0 ? Theme.successFill : Theme.accent).frame(width: 6, height: 6)
                     Text(status(working: working))
                         .font(.caption)
                         .foregroundStyle(Theme.secondary)
@@ -126,14 +124,15 @@ struct MenuBarContent: View {
             QuickAsk.shared.show()
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "sparkle").foregroundStyle(Theme.accent)
+                Image(systemName: "sparkle").foregroundStyle(Theme.accentText)
                 Text("Ask your team anything…").foregroundStyle(Theme.secondary)
                 Spacer()
                 Text("⌃⌥B").font(.caption).foregroundStyle(Theme.secondary)
             }
-            .padding(.horizontal, 12)
-            .frame(height: 34)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.field))
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(Capsule().fill(Theme.field))
+            .overlay(Capsule().strokeBorder(Theme.line))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -141,7 +140,7 @@ struct MenuBarContent: View {
 
     private func sectionTitle<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(Theme.secondary)
+            SectionHeader(title)
             Spacer()
             trailing()
         }
@@ -185,9 +184,9 @@ private struct MenuWorkingRow: View {
                 avatar: AnyView(AvatarView(bot: bot, size: 28).overlay(Circle().strokeBorder(Theme.accent, lineWidth: 2))),
                 action: action) {
             Button { model.stop(chatId) } label: {
-                Image(systemName: "stop.fill").font(.system(size: 9, weight: .bold))
+                Label("Stop", systemImage: "stop.fill")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(CircleButtonStyle(kind: .destructive, size: 22))
             .help("Stop \(bot?.name ?? "this bot")")
         }
     }
@@ -210,7 +209,7 @@ private struct MenuRow<Accessory: View>: View {
                     avatar
                     VStack(alignment: .leading, spacing: 1) {
                         HStack {
-                            Text(title).font(.callout.weight(.medium)).lineLimit(1)
+                            Text(title).font(.callout.weight(.medium)).foregroundStyle(Theme.text).lineLimit(1)
                             Spacer(minLength: 4)
                             if let trailing { Text(trailing).font(.caption2).foregroundStyle(Theme.secondary) }
                         }
@@ -227,7 +226,7 @@ private struct MenuRow<Accessory: View>: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hover ? Theme.field : .clear))
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).fill(hover ? Theme.rowHover : .clear))
         .onHover { hover = $0 }
     }
 }

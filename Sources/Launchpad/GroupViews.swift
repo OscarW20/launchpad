@@ -138,7 +138,9 @@ struct NewGroupSheet: View {
                 }
                 Spacer()
             }
-            .padding(20)
+            .buttonStyle(SoftButtonStyle())
+            .padding(.horizontal, Theme.Space.xl)
+            .padding(.vertical, Theme.Space.l)
             Form {
                 GroupFormSections(group: $group)
             }
@@ -158,9 +160,10 @@ struct NewGroupSheet: View {
                 .buttonStyle(PillButtonStyle())
                 .disabled(group.name.trimmingCharacters(in: .whitespaces).isEmpty || group.members.isEmpty)
             }
-            .padding(16)
+            .padding(Theme.Space.l)
         }
         .frame(width: 560, height: 680)
+        .sheetBackground()
     }
 }
 
@@ -192,7 +195,9 @@ struct GroupDetailView: View {
                         } label: { Label("Open Chat", systemImage: "bubble.left.and.bubble.right.fill") }
                             .buttonStyle(PillButtonStyle())
                     }
-                    .padding(20)
+                    .buttonStyle(SoftButtonStyle())
+                    .padding(.horizontal, Theme.Space.xl)
+                    .padding(.vertical, Theme.Space.l)
                     Form {
                         GroupFormSections(group: binding)
                         Section {
@@ -229,7 +234,7 @@ struct GroupDetailView: View {
                     .themedForm()
                 }
             } else {
-                ContentUnavailableView("Group not found", systemImage: "questionmark.circle")
+                EmptyState(symbol: "questionmark.circle", title: "Group not found")
             }
         }
         .navigationTitle(draft?.displayName ?? "Group")

@@ -17,21 +17,20 @@ struct MarketplaceView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Picker("Show", selection: $tab) {
-                    ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 360)
+            HStack(spacing: Theme.Space.m) {
+                Text("Marketplace")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Theme.text)
+                PillTabs(selection: $tab, options: Tab.allCases.map { ($0.rawValue, $0) })
+                    .padding(.leading, Theme.Space.s)
                 Spacer()
-                TextField("Search", text: $search)
-                    .textFieldStyle(PillFieldStyle())
-                    .frame(width: 220)
+                SearchField(text: $search, prompt: "Search")
+                    .frame(maxWidth: 240)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-            Divider()
+            .padding(.horizontal, Theme.Space.xl)
+            .padding(.top, Theme.Space.l)
+            .padding(.bottom, Theme.Space.m)
+            Rectangle().fill(Theme.line).frame(height: 1)
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     switch tab {
@@ -41,7 +40,7 @@ struct MarketplaceView: View {
                     case .apps: apps
                     }
                 }
-                .padding(24)
+                .padding(Theme.Space.xl)
                 .frame(maxWidth: 1080)
                 .frame(maxWidth: .infinity)
             }
@@ -68,6 +67,7 @@ struct MarketplaceView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("\(pack.emoji) \(pack.name)")
                         .font(Theme.rounded(.title2, weight: .bold))
+                        .foregroundStyle(Theme.text)
                     Text(pack.tagline)
                         .foregroundStyle(Theme.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -91,11 +91,15 @@ struct MarketplaceView: View {
                 .buttonStyle(PillButtonStyle())
                 .controlSize(.large)
             }
-            .padding(20)
+            .padding(Theme.Space.xl)
             .background(
-                LinearGradient(colors: [Theme.accent.opacity(0.14), Theme.userBubble.opacity(0.45)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                ZStack {
+                    Theme.card
+                    LinearGradient(colors: [Theme.accent.opacity(0.16), Theme.accent.opacity(0.02)], startPoint: .topTrailing, endPoint: .bottomLeading)
+                },
+                in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
             )
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.line))
         }
     }
 
@@ -105,7 +109,7 @@ struct MarketplaceView: View {
         ForEach(HireCatalog.categories, id: \.self) { category in
             let items = HireCatalog.roles.filter { $0.category == category && matches($0.name, $0.role, $0.blurb) }
             if !items.isEmpty {
-                Text(category).font(Theme.rounded(.title3, weight: .bold))
+                Text(category).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(items) { TemplateCard(template: $0) }
                 }
@@ -119,7 +123,7 @@ struct MarketplaceView: View {
         ForEach(SkillCatalog.categories, id: \.self) { category in
             let items = SkillCatalog.all.filter { $0.category == category && matches($0.name, $0.blurb) }
             if !items.isEmpty {
-                Text(category).font(Theme.rounded(.title3, weight: .bold))
+                Text(category).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(items) { skill in
                         let installed = model.skill(skill.id) != nil
@@ -133,6 +137,7 @@ struct MarketplaceView: View {
                                     model.selectedSkillId = skill.id
                                     model.section = .skills
                                 }
+                                .buttonStyle(SoftButtonStyle())
                                 .controlSize(.small)
                             } else {
                                 Spacer()
@@ -152,7 +157,7 @@ struct MarketplaceView: View {
         ForEach(ConnectorCatalog.categories, id: \.self) { category in
             let items = ConnectorCatalog.all.filter { $0.category == category && matches($0.name, $0.blurb) }
             if !items.isEmpty {
-                Text(category).font(Theme.rounded(.title3, weight: .bold))
+                Text(category).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(items) { preset in
                         let installed = model.connectors.contains { $0.id == preset.id }
@@ -166,6 +171,7 @@ struct MarketplaceView: View {
                                     model.selectedConnectorId = preset.id
                                     model.section = .connectors
                                 }
+                                .buttonStyle(SoftButtonStyle())
                                 .controlSize(.small)
                             } else {
                                 Spacer()
@@ -228,20 +234,21 @@ struct CatalogCard<Actions: View>: View {
             HStack(spacing: 10) {
                 AppLogo(logo: logo, symbol: symbol, tint: tint, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(Theme.rounded(.headline, weight: .bold))
+                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                     Text(subtitle).font(.caption).foregroundStyle(Theme.secondary)
                 }
             }
             Text(blurb)
                 .font(.callout)
+                .foregroundStyle(Theme.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             HStack { actions() }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
+        .padding(Theme.Space.l + 4)
+        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.line))
     }
 }
 
@@ -262,7 +269,9 @@ struct InstallAppSheet: View {
                     Text(preset.blurb).foregroundStyle(Theme.secondary)
                 }
             }
-            .padding(20)
+            .buttonStyle(SoftButtonStyle())
+            .padding(.horizontal, Theme.Space.xl)
+            .padding(.vertical, Theme.Space.l)
             Form {
                 if !preset.settings.isEmpty {
                     Section("Settings") {
@@ -315,9 +324,10 @@ struct InstallAppSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(PillButtonStyle())
             }
-            .padding(16)
+            .padding(Theme.Space.l)
         }
         .frame(width: 520, height: 560)
+        .sheetBackground()
     }
 }
 #endif

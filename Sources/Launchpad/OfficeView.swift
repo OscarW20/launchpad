@@ -15,11 +15,7 @@ struct OfficeView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     header(desks)
                     if desks.isEmpty {
-                        ContentUnavailableView {
-                            Label("The office is empty", systemImage: "building.2")
-                        } description: {
-                            Text("Create a bot, or hire a ready-made team.")
-                        } actions: {
+                        EmptyState(symbol: "building.2", title: "The office is empty", message: "Create a bot, or hire a ready-made team.") {
                             Button("Hire a Team") { model.section = .hire }
                                 .buttonStyle(PillButtonStyle())
                         }
@@ -32,7 +28,7 @@ struct OfficeView: View {
                     }
                     TeamNotesCard()
                 }
-                .padding(24)
+                .padding(Theme.Space.xl)
                 .frame(maxWidth: 1100, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -44,7 +40,7 @@ struct OfficeView: View {
     private func header(_ desks: [DeskInfo]) -> some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Office").font(Theme.rounded(.largeTitle, weight: .bold))
+                Text("Office").font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.text)
                 Text("Your team at their desks. Watch anyone who's working, or click a desk to open their chat.")
                     .foregroundStyle(Theme.secondary)
             }
@@ -52,18 +48,18 @@ struct OfficeView: View {
             HStack(spacing: 8) {
                 counter(desks.filter { $0.state == .working }.count, "working", Theme.accent)
                 counter(desks.filter { $0.state == .needsYou }.count, "need you", Theme.warning)
-                counter(desks.filter { $0.state == .waiting }.count, "up next", .secondary)
+                counter(desks.filter { $0.state == .waiting }.count, "up next", Theme.secondary)
             }
         }
     }
 
     private func counter(_ n: Int, _ label: String, _ tint: Color) -> some View {
         HStack(spacing: 5) {
-            Text("\(n)").font(.headline).foregroundStyle(tint)
-            Text(label).font(.callout).foregroundStyle(Theme.secondary)
+            Text("\(n)").font(.system(size: 14, weight: .bold)).foregroundStyle(tint)
+            Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.secondary)
         }
-        .padding(.horizontal, 12)
-        .frame(height: 30)
+        .padding(.horizontal, Theme.Space.m)
+        .frame(height: 32)
         .background(Theme.card, in: Capsule())
         .overlay(Capsule().strokeBorder(Theme.line))
     }
@@ -92,7 +88,7 @@ private struct DeskCard: View {
                 AvatarView(bot: desk.bot, size: 44)
                     .overlay(Circle().strokeBorder(tint, lineWidth: desk.state == .idle || desk.state == .waiting ? 0 : 2.5))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(desk.bot.name).font(.headline).lineLimit(1)
+                    Text(desk.bot.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
                     Text(desk.bot.role.isEmpty ? desk.bot.engine.displayName : desk.bot.role)
                         .font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
                 }
@@ -100,9 +96,9 @@ private struct DeskCard: View {
                 Text(desk.state.title)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(tint)
-                    .padding(.horizontal, 7)
-                    .frame(height: 18)
-                    .background(tint.opacity(0.13), in: Capsule())
+                    .padding(.horizontal, 8)
+                    .frame(height: 20)
+                    .background(tint.opacity(0.14), in: Capsule())
             }
             Text(detail)
                 .font(.callout)
@@ -111,7 +107,7 @@ private struct DeskCard: View {
             if let app = desk.app {
                 Label("Using \(app)", systemImage: "cursorarrow.click.2")
                     .font(.caption)
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
             }
             HStack {
                 if desk.state == .working || desk.state == .needsYou, desk.chatId != nil {
@@ -127,9 +123,9 @@ private struct DeskCard: View {
             .buttonStyle(SoftButtonStyle())
             .controlSize(.small)
         }
-        .padding(14)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .padding(Theme.Space.l)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
             .strokeBorder(desk.state == .working || desk.state == .needsYou ? tint.opacity(0.6) : Theme.line,
                           lineWidth: desk.state == .working || desk.state == .needsYou ? 1.5 : 1))
         .shadow(color: .black.opacity(hover ? 0.08 : 0.03), radius: hover ? 10 : 4, y: 3)
@@ -149,7 +145,7 @@ private struct DeskCard: View {
         switch desk.state {
         case .working: return Theme.accent
         case .needsYou: return Theme.warning
-        case .waiting: return .secondary
+        case .waiting: return Theme.secondary
         case .idle: return Theme.success
         }
     }
@@ -173,28 +169,41 @@ struct OfficeFeedColumn: View {
         let events = model.activity.recent(120)
         let working = model.workingRuns.count
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Circle().fill(working == 0 ? Color.secondary.opacity(0.5) : Theme.success).frame(width: 8, height: 8)
-                Text("Live").font(.headline)
+            HStack(spacing: Theme.Space.s) {
+                Text("Live").font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.text)
                 Spacer()
-                Text(working == 0 ? "All quiet" : "\(working) working").font(.caption).foregroundStyle(Theme.secondary)
+                HStack(spacing: 6) {
+                    Circle().fill(working == 0 ? Theme.secondary.opacity(0.6) : Theme.successFill).frame(width: 7, height: 7)
+                    Text(working == 0 ? "All quiet" : "\(working) working")
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(working == 0 ? Theme.secondary : Theme.success)
+                .padding(.horizontal, 10)
+                .frame(height: 26)
+                .background(Theme.field, in: Capsule())
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            Divider()
+            .padding(.horizontal, Theme.Space.l)
+            .padding(.top, Theme.Space.l)
+            .padding(.bottom, Theme.Space.s)
             if events.isEmpty {
                 Text("What your bots do shows up here as it happens: what they start, the tools they use, who they ask for help and when they finish.")
                     .foregroundStyle(Theme.secondary)
-                    .padding(14)
+                    .padding(Theme.Space.l)
                 Spacer()
             } else {
-                List(events) { e in
-                    ActivityRow(event: e)
-                        .contentShape(Rectangle())
-                        .onTapGesture { if model.chat(e.chatId) != nil { model.show(chat: e.chatId) } }
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(events) { e in
+                            ActivityRow(event: e)
+                                .padding(.horizontal, Theme.Space.s)
+                                .padding(.vertical, 6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                                .onTapGesture { if model.chat(e.chatId) != nil { model.show(chat: e.chatId) } }
+                        }
+                    }
+                    .padding(.horizontal, Theme.Space.s)
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
             }
         }
         .navigationTitle("Office")
@@ -217,7 +226,7 @@ private struct ActivityRow: View {
                     .offset(x: 3, y: 3)
             }
             VStack(alignment: .leading, spacing: 1) {
-                (Text(model.bot(event.botId)?.name ?? "Bot").bold() + Text(" " + verb).foregroundColor(.secondary))
+                (Text(model.bot(event.botId)?.name ?? "Bot").bold() + Text(" " + verb).foregroundColor(Theme.secondary))
                     .font(.callout)
                 Text(event.text).font(.caption).lineLimit(2)
                 Text("\(TimeLabel.clock(event.date)) · \(model.chat(event.chatId)?.title ?? "a chat")")
@@ -251,10 +260,10 @@ private struct ActivityRow: View {
     private var tint: Color {
         switch event.kind {
         case .started: return Theme.accent
-        case .step: return .blue
+        case .step: return Theme.accentDeep
         case .asked: return Theme.warning
-        case .finished: return Theme.success
-        case .failed: return Theme.failure
+        case .finished: return Theme.successFill
+        case .failed: return Theme.failureFill
         }
     }
 }
@@ -268,7 +277,7 @@ private struct TeamNotesCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Team notes", systemImage: "note.text").font(.headline)
+                Label("Team notes", systemImage: "note.text").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                 Spacer()
                 Button("Edit") { editing = true }
                 Button("Open in Editor") { SystemActions.open(model.paths.teamNotes) }
@@ -284,9 +293,7 @@ private struct TeamNotesCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
         }
-        .padding(16)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.line))
+        .card(padding: Theme.Space.l + 4)
         .onAppear(perform: load)
         .sheet(isPresented: $editing, onDismiss: load) { TeamNotesEditorSheet() }
     }
@@ -308,8 +315,11 @@ private struct TeamNotesEditorSheet: View {
                 .foregroundStyle(Theme.secondary)
             TextEditor(text: $text)
                 .font(.system(.body, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(Theme.Space.s)
                 .frame(minHeight: 340)
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.line))
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).strokeBorder(Theme.line))
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -318,10 +328,12 @@ private struct TeamNotesEditorSheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(PillButtonStyle())
             }
         }
-        .padding(20)
+        .padding(Theme.Space.xl)
         .frame(width: 620)
+        .sheetBackground()
         .onAppear { text = model.teamNotesText() }
     }
 }

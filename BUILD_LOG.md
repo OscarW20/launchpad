@@ -794,3 +794,11 @@ every page, action and keyboard path works as before.
 - System fonts only: SF Pro for interface text, SF Pro Rounded for big titles.
 
 Tests: no core changes; `swift build` and `swift test` still pass on Linux, and the macOS CI builds the app.
+
+## Keep app data out of git (2026-11-17)
+
+`.gitignore` now lists Launchpad's data folders at the repo root (`.launchpad/`, `Shared/`, `bots/`, `chats/`,
+`groups/`, `skills/`, `work/`) and `connectors.json`. On a case-insensitive disk `~/Launchpad` (the app's home) and
+`~/launchpad` (this checkout) are the same folder, so a `git add -A` could have committed chat history. The patterns
+are anchored to the root so same-named folders deeper in the tree are unaffected; none of the names were tracked.
+Moving the default data home out of the checkout is still open. No code changes.

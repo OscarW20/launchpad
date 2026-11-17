@@ -7,3 +7,13 @@ xcuserdata/
 DerivedData/
 dist/
 .DS_Store
+# Launchpad's own data, when the app's home folder is this checkout (~/Launchpad and ~/launchpad are the same
+# folder on a case-insensitive disk). Chats, bots and connector settings must never be committed.
+/.launchpad/
+/Shared/
+/bots/
+/chats/
+/groups/
+/skills/
+/work/
+/connectors.json

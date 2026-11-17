@@ -100,6 +100,8 @@ final class AppModel {
     let secrets: SecretStore
     let grants: ApprovalGrants
     let runner: EngineRunner
+    let memory: MemoryStore
+    let reviewer: MemoryReviewer
 
     var bots: [Bot] = []
     var groups: [BotGroup] = []
@@ -150,6 +152,8 @@ final class AppModel {
         secrets = KeychainSecretStore()
         grants = ApprovalGrants(paths: paths)
         runner = EngineRunner()
+        memory = MemoryStore(paths: paths)
+        reviewer = MemoryReviewer(paths: paths, store: memory, engine: MemoryReviewer.engine(using: runner))
         do {
             try paths.ensureStructure()
         } catch {
@@ -199,7 +203,10 @@ final class AppModel {
 
     func reloadBots() {
         let loaded = botStore.loadAll()
-        for bot in loaded { botStore.syncInstructions(for: bot.id) }
+        for bot in loaded {
+            _ = memory.importNotesIfNeeded(bot)
+            botStore.syncInstructions(for: bot.id)
+        }
         if loaded != bots { bots = loaded }
         if let id = selectedBotId, bot(id) == nil { selectedBotId = nil }
     }
@@ -691,6 +698,7 @@ final class AppModel {
 
     func deleteChat(_ id: String) {
         stop(id)
+        reviewer.forget(chatId: id)
         try? chatStore.delete(chatId: id)
         messages[id] = nil
         drafts[id] = nil
@@ -787,6 +795,8 @@ final class AppModel {
         switch action {
         case .continueGroup:
             send(chatId: chatId, text: "Keep going.")
+        case .undoMemory:
+            break
         }
     }
 
@@ -884,6 +894,7 @@ final class AppModel {
             if message.status == .done { message.approval = extracted.request }
         }
         append(message, to: chatId)
+        noteMemoryActivity(chatId)
 
         if message.status == .done || message.status == .stopped,
            let sessionId = builder.sessionId, var meta = chat(chatId), meta.sessions[bot.id] != sessionId {
@@ -918,13 +929,60 @@ final class AppModel {
         chats.sort { $0.updatedAt > $1.updatedAt }
     }
 
+    // MARK: - Memory
+
+    /// Whose memory a chat feeds: the chat's bot, or a group's lead.
+    private func memoryOwner(_ chatId: String) -> String? {
+        guard let meta = chat(chatId) else { return nil }
+        return meta.kind == .bot ? meta.botId : group(meta.groupId)?.lead
+    }
+
+    private func noteMemoryActivity(_ chatId: String) {
+        if let owner = memoryOwner(chatId) { reviewer.noteActivity(chatId: chatId, botId: owner) }
+    }
+
+    @ObservationIgnored private var memoryTask: Task<Void, Never>?
+
+    /// Runs at most one memory pass when a chat has gone quiet.
+    private func checkMemory() {
+        guard memoryTask == nil else { return }
+        let busy = Set(chats.map(\.id).filter { isRunning($0) })
+        guard let ticket = reviewer.duePasses(busy: busy).first, let bot = bot(ticket.botId) else { return }
+        loadMessagesIfNeeded(ticket.chatId)
+        let msgs = messages(for: ticket.chatId)
+        let names = Dictionary(bots.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+        let reviewer = self.reviewer
+        memoryTask = Task { @MainActor [weak self] in
+            let result = await reviewer.run(ticket, bot: bot, messages: msgs) { names[$0 ?? ""] ?? "Bot" }
+            if case .updated(let update) = result {
+                self?.append(ChatMessage(id: update.id, role: .notice, text: update.summary, noticeAction: .undoMemory), to: ticket.chatId)
+            }
+            self?.memoryTask = nil
+        }
+    }
+
+    func undoMemoryUpdate(noticeId: String, chatId: String) {
+        guard let update = memory.update(id: noticeId) else { return }
+        let changed = memory.undo(update) ?? 0
+        if let list = messages[chatId], let i = list.firstIndex(where: { $0.id == noticeId }) {
+            var notice = list[i]
+            notice.noticeAction = nil
+            notice.text += changed > 0 ? " (undone)" : " (nothing left to undo)"
+            messages[chatId]?[i] = notice
+            try? chatStore.append(notice, chatId: chatId)
+        }
+    }
+
     // MARK: - Routines
 
     private func startRoutines() {
         // Take a first look at watched folders so existing files don't count as new.
         for r in routines { if case .newFile(let folder) = r.trigger { _ = fileWatch.newFiles(in: folder) } }
         routineTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkRoutines() }
+            MainActor.assumeIsolated {
+                self?.checkRoutines()
+                self?.checkMemory()
+            }
         }
     }
 

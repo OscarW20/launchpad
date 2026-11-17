@@ -183,6 +183,7 @@ public enum LaunchpadProtocol {
         spend money, or delete anything, ask first: write a line `[[approve: <what you'll do, in plain words>]]` and \
         end your turn. Only do it after I reply "Approved". Launchpad blocks these actions until then.
         - Never write passwords, API keys or tokens into files, logs or chat. If you need a secret, ask me to add it.
+        - Your long-term memory is ./MEMORY.md in your own folder. Read it at the start of a task; keep facts short.
         - Keep replies friendly and short. Say what you did and what's next.
         """
         if !skills.isEmpty {

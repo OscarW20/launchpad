@@ -37,6 +37,11 @@ public struct RunOptions: Equatable, Sendable {
     public var environment: [String: String] = [:]
     /// Don't keep a session (e.g. drafting a skill).
     public var ephemeral = false
+    /// No tools at all (e.g. a background memory review). Claude: `--tools ""`. Codex has no such switch; it runs
+    /// read-only there.
+    public var quiet = false
+    /// Codex reasoning effort ("low", "medium", "high"): `-c model_reasoning_effort="low"`.
+    public var reasoningEffort: String?
 
     public init() {}
 }
@@ -82,6 +87,7 @@ public enum EngineCommand {
         }
         if options.ephemeral { args.append("--no-session-persistence") }
         if let model, !model.isEmpty { args += ["--model", model] }
+        if options.quiet { args += ["--tools", ""] }
         switch permission {
         case .readOnly:
             args += ["--permission-mode", "default",
@@ -128,6 +134,9 @@ public enum EngineCommand {
             args += ["-c", "sandbox_workspace_write.writable_roots=[\(roots)]"]
         }
         args += MCPConfig.codexArgs(options.connectors)
+        if let effort = options.reasoningEffort, !effort.isEmpty {
+            args += ["-c", "model_reasoning_effort=\(MCPConfig.toml(effort))"]
+        }
         if let model, !model.isEmpty { args += ["-m", model] }
         if let threadId, resuming { args.append(threadId) }
         args.append("-")

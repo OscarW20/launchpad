@@ -238,6 +238,95 @@ struct NewBotSheet: View {
     }
 }
 
+// MARK: - Memory
+
+struct MemorySection: View {
+    @Environment(AppModel.self) private var model
+    let botId: String
+    @State private var outline: [MemoryBook.OutlineTopic]? = []
+    @State private var newFact = ""
+    @State private var topic = MemoryBook.allTopics.first ?? "Notes"
+    @State private var learns = true
+    @State private var message: String?
+
+    var body: some View {
+        Section {
+            Toggle("Learn from chats", isOn: Binding(get: { learns }, set: {
+                learns = $0
+                model.reviewer.setLearning($0, botId: botId)
+            }))
+            if let outline {
+                ForEach(outline) { t in
+                    if !t.entries.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(t.title ?? "Intro").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                            ForEach(t.entries) { e in
+                                HStack(alignment: .top) {
+                                    Text(e.text).fixedSize(horizontal: false, vertical: true)
+                                    Spacer()
+                                    Button {
+                                        show(model.memory.deleteEntry(at: e.position, expecting: e.text, botId: botId))
+                                    } label: { Image(systemName: "minus.circle") }
+                                        .buttonStyle(.borderless)
+                                        .help("Forget this")
+                                }
+                            }
+                        }
+                    }
+                }
+                HStack {
+                    TextField("Remember…", text: $newFact)
+                    Picker("", selection: $topic) {
+                        ForEach(MemoryBook.allTopics, id: \.self) { Text($0).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 140)
+                    Button("Add") {
+                        show(model.memory.addEntry(newFact, topic: topic, botId: botId))
+                        newFact = ""
+                    }
+                    .disabled(newFact.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            } else {
+                Label("MEMORY.md isn't plain text Launchpad can read, so it's left alone.", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(Theme.warning)
+            }
+            if let message {
+                Text(message).font(.caption).foregroundStyle(.secondary)
+            }
+            HStack {
+                Button("Open MEMORY.md") { SystemActions.open(model.paths.memoryMD(botId)) }
+                Button("Undo Last Change") {
+                    let n = model.memory.undoLastChange(botId) ?? 0
+                    message = n > 0 ? "Undone." : "Nothing to undo."
+                    reload()
+                }
+                .disabled(!model.memory.canUndoLastChange(botId))
+            }
+        } header: {
+            Text("Memory")
+        } footer: {
+            Text("What this bot remembers, in MEMORY.md. When a chat goes quiet, Launchpad files lasting facts here (never passwords or keys).")
+        }
+        .onAppear(perform: reload)
+    }
+
+    private func reload() {
+        outline = model.memory.outline(botId)
+        learns = model.reviewer.learns(botId)
+    }
+
+    private func show(_ result: MemoryEditResult) {
+        switch result {
+        case .secret: message = "That looks like a password or key, so it isn't saved."
+        case .unreadable: message = "MEMORY.md couldn't be read, so nothing was changed."
+        case .notFound: message = "That line changed in the meantime. Try again."
+        default: message = nil
+        }
+        reload()
+    }
+}
+
 // MARK: - Detail / edit
 
 struct BotDetailView: View {
@@ -309,10 +398,8 @@ struct BotDetailView: View {
                         } footer: {
                             Text("Only the connectors turned on here (or for its groups) are available to this bot.")
                         }
+                        MemorySection(botId: botId)
                         Section {
-                            Button("Open notes.md (the bot's memory)") {
-                                SystemActions.open(model.paths.notesMD(botId))
-                            }
                             Button("Move Bot to Trash…", role: .destructive) { confirmDelete = true }
                         }
                     }

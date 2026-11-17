@@ -244,5 +244,42 @@ round-trips and builds Claude/Codex config, secrets stay out of connectors.json,
 pack twice is idempotent (and repairs a deleted member).
 
 ### Known gaps / next
-- The Marketplace page itself (see the integration notes in the hand-off).
 - Docs URLs and the SSE/v2 endpoints were taken from the vendors' published docs as I knew them, not re-checked live here.
+
+### Phase 7: Memory (ported from an earlier app's memory system)
+- **MEMORY.md** replaces notes.md as each bot's memory: short `- ` lines under topic headings (Preferences, Decisions,
+  People, Projects, How I work, Notes). New bots get a MEMORY.md starter; the default instructions, Hire templates and
+  Launchpad's rules (`LaunchpadProtocol`) point bots at it. `MemoryStore.importNotesIfNeeded(bot)` moves an existing
+  notes.md in once (under `## From notes.md`; the empty starter adds nothing), keeps the original in
+  `.launchpad/memory/bots/<id>/notes-imported.md`, and rewrites `./notes.md` → `./MEMORY.md` in CLAUDE.md/AGENTS.md.
+- **MemoryBook** (pure): parse/write topics, merge facts (duplicates skipped by normalised word overlap, a fact that
+  extends an old line replaces it), a 12 KB cap that only limits a review's own growth (oldest review-topic lines are
+  folded into "Earlier: …" lines; your intro and own headings are never touched), secret redaction/`containsSecret`
+  (keys, tokens, JWTs, cards, "password is …", logins), tolerant JSON parsing of the model's reply, and
+  `applyChanges` (re-applies a change onto a newer file: used by Undo and by the editor's Save).
+- **Never overwrite what we can't read**: a MEMORY.md that isn't UTF-8 (or UTF-16 with a BOM) is reported
+  `.unreadable` and no review, edit or import writes to it.
+- **Versions**: every app write keeps the version before it (and what it wrote) in `.launchpad/memory/bots/<id>/history`
+  (10 kept, plus any a live "Memory updated" notice points at), outside the bot's folder so bots don't see them.
+  Undo for one review takes back just its lines; "Undo last change" walks back one app change at a time; both keep
+  lines the bot wrote itself since. Reviews are logged in `.launchpad/memory/updates.json`; the update id doubles as the
+  id of the chat notice, so `Models.swift` needed no new field.
+- **Background review**: `MemoryReviewSchedule` is a pure value (clock passed in): a chat is due 10 quiet minutes after
+  its last activity, or straight away after `requestPass` (compact / new thread); one pass at a time; 8 passes per bot
+  per day (local day); after an engine failure that bot backs off 30 min, doubling to 8 h; a broken-JSON reply retries
+  once, then counts as reviewed; first review of an old chat only looks at the last day; less than 40 characters of your
+  own writing costs no model call. `MemoryReviewer` saves it to `.launchpad/memory/review.json`, runs the pass via an
+  injected engine (`MemoryReviewer.engine(using: EngineRunner)` in the app, a fake in tests) and applies it.
+- **The pass**: Claude bots use `haiku` with `--tools ""` and `--strict-mcp-config` (no connectors); Codex bots use
+  their own model with `-c model_reasoning_effort="low"`, read-only sandbox. No session kept, scratch folder, transcript
+  redacted before it's cut (10 k chars, newest kept), at most 8 facts.
+- **Shared files changed** (kept minimal): `RunOptions` gained `quiet` and `reasoningEffort` (EngineCommand.swift);
+  `LaunchpadPaths` gained `memoryMD` and `memoryData`; BotStore's `Instructions` (`memoryTemplate`,
+  `pointingAtMemory`, MEMORY.md wording), Hire's and LaunchpadProtocol's memory line.
+- Not ported: a "Learn from chats" field on `Bot` (kept as a per-bot switch in review.json instead, so bot.json is
+  unchanged), local-model engines (Launchpad has none), and a global MCP opt-out for Codex (its exec mode has no
+  switch; the pass is read-only there).
+- Tests: 59 new (153 total, 2 opt-in live skipped): merge, redaction, size cap (including 1 MB files), versions,
+  encodings, Undo, editor save/add/edit/delete, notes import, schedule (idle, budget, back-off, one at a time,
+  persistence), the run flags, and the reviewer end to end with a fake engine and clock.
+- The macOS app still has to wire it in (AppModel timer, notices with Undo, a memory section in the bot editor).

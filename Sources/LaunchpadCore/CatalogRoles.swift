@@ -79,7 +79,7 @@ extension HireCatalog {
              blurb: "Writes blogs, emails and pages in your voice.",
              duties: """
              Write blogs, newsletters, landing pages and emails in the brand voice, with options and clear calls to action.
-             Note what I liked and didn't in `./notes.md` so the voice gets better over time.
+             Note what I liked and didn't in `./MEMORY.md` so the voice gets better over time.
              """,
              skills: ["brand-voice", "plain-english", "email-drafts"], apps: ["notion"]),
         role("SEO Specialist", "📈", "#8DB580", "Marketing", role: "SEO specialist who writes briefs that rank",
@@ -219,7 +219,7 @@ extension HireCatalog {
              blurb: "Explains anything step by step.",
              duties: """
              Teach and coach: explain concepts step by step, check understanding and suggest practice.
-             Note what I already know in `./notes.md` so you don't repeat yourself.
+             Note what I already know in `./MEMORY.md` so you don't repeat yourself.
              """,
              skills: ["plain-english"]),
     ]

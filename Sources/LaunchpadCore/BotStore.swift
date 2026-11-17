@@ -12,7 +12,7 @@ public enum BotStoreError: Error, LocalizedError {
     }
 }
 
-/// Reads and writes bot folders: bots/<id>/{bot.json, CLAUDE.md, AGENTS.md, notes.md, workspace/}.
+/// Reads and writes bot folders: bots/<id>/{bot.json, CLAUDE.md, AGENTS.md, MEMORY.md, workspace/}.
 public final class BotStore: @unchecked Sendable {
     public let paths: LaunchpadPaths
     private let fm: FileManager
@@ -62,7 +62,7 @@ public final class BotStore: @unchecked Sendable {
         try fm.createDirectory(at: paths.workspace(id), withIntermediateDirectories: true)
         try save(bot)
         try setInstructions(instructions ?? Instructions.defaultText(for: bot), for: id)
-        try Data(Instructions.notesTemplate(for: bot).utf8).write(to: paths.notesMD(id), options: .atomic)
+        try Data(Instructions.memoryTemplate(for: bot).utf8).write(to: paths.memoryMD(id), options: .atomic)
         return bot
     }
 
@@ -150,8 +150,9 @@ public enum Instructions {
 
         ## How you work
         - Do your work inside `./workspace/`. Create projects and files there.
-        - `./notes.md` is your memory. Read it when you start a task. Add short notes about
-          decisions, my preferences and anything worth remembering next time.
+        - `./MEMORY.md` is your long-term memory. Read it when you start a task. Keep it short: one `- ` line per
+          fact under its topic headings (Preferences, Decisions, People, Projects, How I work, Notes), and update
+          a line rather than adding a near-copy. Launchpad also files facts from our chats there. No secrets in it.
         - Reply like a friendly colleague: clear and brief. Use markdown, and code blocks for code.
         - If something important is unclear, ask me one focused question.
         - Never put passwords, API keys or tokens in files, logs or chat.
@@ -162,12 +163,19 @@ public enum Instructions {
         """
     }
 
-    public static func notesTemplate(for bot: Bot) -> String {
+    /// A new bot's MEMORY.md.
+    public static func memoryTemplate(for bot: Bot) -> String {
         """
-        # \(bot.name)'s notes
+        # \(bot.name)'s memory
 
-        My own memory. I keep it short and up to date.
+        What I've learned about you and our work: one short line per fact, under topic headings.
 
         """
+    }
+
+    /// Instructions written before MEMORY.md pointed bots at notes.md: point them at MEMORY.md instead.
+    public static func pointingAtMemory(_ text: String) -> String {
+        text.replacingOccurrences(of: "`./notes.md`", with: "`./MEMORY.md`")
+            .replacingOccurrences(of: "`notes.md`", with: "`MEMORY.md`")
     }
 }

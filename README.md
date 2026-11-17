@@ -46,7 +46,7 @@ LAUNCHPAD_LIVE_TESTS=1 swift test --filter LiveEngineTests
     bot.json        name, emoji, colour, role, engine, model, permission, connectors, skills
     CLAUDE.md       instructions (Claude Code reads this)
     AGENTS.md       the same instructions (Codex reads this), kept in sync
-    notes.md        the bot's own memory
+    MEMORY.md       the bot's long-term memory, by topic (an old notes.md is imported once)
     workspace/      where it does its work
   groups/<group-id>/
     group.json      name, members, lead, rules, hand-off limit, skills, connectors
@@ -76,8 +76,11 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
 - **Approval cards**: bots ask before deploying, sending, spending or deleting. For Claude Code bots this is enforced
   by a hook, not just requested.
 - **Routines** on a schedule or when a file appears, and plan **usage** in the sidebar.
-- **Marketplace data** (in `LaunchpadCore`, UI to come): 35 roles, 5 team packs, 41 skills and 40 app (MCP)
+- **Marketplace**: 35 roles, 5 team packs, 41 skills and 40 app (MCP)
   presets with logos. See `CatalogRoles.swift`, `TeamPacks.swift`, `CatalogSkills.swift`, `ConnectorCatalog.swift`.
+
+- **Memory**: each bot keeps `MEMORY.md` by topic. When a chat goes quiet, a cheap no-tools pass files lasting
+  facts there (secrets redacted, size capped, daily limit per bot), and every change can be undone.
 
 ## Code layout
 

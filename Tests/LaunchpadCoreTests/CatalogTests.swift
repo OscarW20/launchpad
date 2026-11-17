@@ -44,7 +44,7 @@ final class CatalogTests: XCTestCase {
             for s in t.skills { XCTAssertNotNil(SkillCatalog.skill(s), "\(t.id) uses unknown skill \(s)") }
             for a in t.suggestedApps { XCTAssertNotNil(ConnectorCatalog.preset(a), "\(t.id) uses unknown app \(a)") }
             let text = t.instructionsText
-            XCTAssertTrue(text.contains("notes.md"), "\(t.id) memory")
+            XCTAssertTrue(text.contains("MEMORY.md"), "\(t.id) memory")
             XCTAssertTrue(text.contains("[[approve:"), "\(t.id) approvals")
             XCTAssertTrue(text.contains("Never put passwords"), "\(t.id) secrets")
             XCTAssertTrue(text.contains("## Your job"), "\(t.id) job")

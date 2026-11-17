@@ -225,6 +225,8 @@ public struct ChatMessage: Codable, Identifiable, Hashable, Sendable {
 public enum NoticeAction: String, Codable, Hashable, Sendable {
     /// The group hit its hand-off limit: let it carry on.
     case continueGroup
+    /// "Memory updated": offer Undo. The notice's id is the memory update's id.
+    case undoMemory
 }
 
 // MARK: - Failures (plain English)

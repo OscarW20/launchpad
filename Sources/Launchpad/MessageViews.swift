@@ -34,13 +34,18 @@ struct MessageRow: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                    if let action = message.noticeAction, message.id == model.messages(for: chatId).last?.id {
+                    if let action = message.noticeAction {
                         switch action {
                         case .continueGroup:
-                            Button("Keep going") { model.perform(action, chatId: chatId) }
-                                .buttonStyle(.borderedProminent)
+                            if message.id == model.messages(for: chatId).last?.id {
+                                Button("Keep going") { model.perform(action, chatId: chatId) }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.small)
+                                    .disabled(model.isRunning(chatId))
+                            }
+                        case .undoMemory:
+                            Button("Undo") { model.undoMemoryUpdate(noticeId: message.id, chatId: chatId) }
                                 .controlSize(.small)
-                                .disabled(model.isRunning(chatId))
                         }
                     }
                 }

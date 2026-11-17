@@ -26,7 +26,14 @@ public struct LaunchpadPaths: Sendable {
     public func botJSON(_ id: String) -> URL { botDir(id).appendingPathComponent("bot.json") }
     public func claudeMD(_ id: String) -> URL { botDir(id).appendingPathComponent("CLAUDE.md") }
     public func agentsMD(_ id: String) -> URL { botDir(id).appendingPathComponent("AGENTS.md") }
+    /// Before MEMORY.md, a bot's memory was notes.md; it's imported into MEMORY.md once (see MemoryStore).
     public func notesMD(_ id: String) -> URL { botDir(id).appendingPathComponent("notes.md") }
+    /// The bot's long-term memory, grouped by topic (see MemoryBook).
+    public func memoryMD(_ id: String) -> URL { botDir(id).appendingPathComponent("MEMORY.md") }
+    /// The app's own memory data for a bot (versions for Undo), kept out of the bot's folder.
+    public func memoryData(_ id: String) -> URL {
+        root.appendingPathComponent(".launchpad/memory/bots/\(id)", isDirectory: true)
+    }
     public func workspace(_ id: String) -> URL { botDir(id).appendingPathComponent("workspace", isDirectory: true) }
 
     public func chatMeta(_ id: String) -> URL { chats.appendingPathComponent("\(id).json") }

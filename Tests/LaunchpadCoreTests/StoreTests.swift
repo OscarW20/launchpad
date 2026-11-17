@@ -19,7 +19,7 @@ final class StoreTests: XCTestCase {
         let bot = try store.create(name: "Frontend Dev", emoji: "🎨", role: "Frontend engineer", engine: .claude)
         XCTAssertEqual(bot.id, "frontend-dev")
         let fm = FileManager.default
-        for url in [paths.botJSON(bot.id), paths.claudeMD(bot.id), paths.agentsMD(bot.id), paths.notesMD(bot.id)] {
+        for url in [paths.botJSON(bot.id), paths.claudeMD(bot.id), paths.agentsMD(bot.id), paths.memoryMD(bot.id)] {
             XCTAssertTrue(fm.fileExists(atPath: url.path), url.lastPathComponent)
         }
         var isDir: ObjCBool = false

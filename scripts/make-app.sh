@@ -1,5 +1,8 @@
 #!/bin/bash
 # Builds Launchpad.app into ./dist. Usage: ./scripts/make-app.sh [--open | --install]
+# Lines starting "==> " are progress; scripts/update.sh logs them for the app's Update button.
+# For testing: SWIFT_BUILD_FLAGS adds flags to swift build, LAUNCHPAD_INSTALL_DIR installs somewhere other than
+# Applications, and LAUNCHPAD_NO_OPEN=1 doesn't open the app afterwards.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -14,11 +17,20 @@ if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
 fi
 BUILD="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 DESCRIBE="$(git describe --tags --match 'v[0-9]*' --always --dirty 2>/dev/null || true)"
+# The exact commit and this checkout's folder, so the app can tell when main has moved on and where to update from.
+COMMIT="$(git rev-parse HEAD 2>/dev/null || true)"
+SOURCE="$(pwd -P)"
+xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 
-swift build -c release --product Launchpad
-swift build -c release --product launchpad-guard
-swift build -c release --product launchpad-chat
-BINDIR="$(swift build -c release --show-bin-path)"
+echo "==> Building Launchpad $VERSION ($BUILD)"
+# shellcheck disable=SC2086
+swift build ${SWIFT_BUILD_FLAGS:-} -c release --product Launchpad
+# shellcheck disable=SC2086
+swift build ${SWIFT_BUILD_FLAGS:-} -c release --product launchpad-guard
+# shellcheck disable=SC2086
+swift build ${SWIFT_BUILD_FLAGS:-} -c release --product launchpad-chat
+# shellcheck disable=SC2086
+BINDIR="$(swift build ${SWIFT_BUILD_FLAGS:-} -c release --show-bin-path)"
 BIN="$BINDIR/Launchpad"
 
 APP="dist/Launchpad.app"
@@ -46,6 +58,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD</string>
   <key>LaunchpadGitDescribe</key><string>$DESCRIBE</string>
+  <key>LaunchpadGitCommit</key><string>$COMMIT</string>
+  <key>LaunchpadSourcePath</key><string>$(xml "$SOURCE")</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSAppleEventsUsageDescription</key><string>A bot working in Launchpad wants to control another app.</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -60,6 +74,7 @@ iconutil -c icns "Sources/Launchpad/Resources/Brand/AppIcon.iconset" -o "$APP/Co
 # Signing. With SIGN_IDENTITY set (the name or hash of a "Developer ID Application" certificate in your keychain)
 # the helpers and then the app are signed with the hardened runtime and a timestamp, ready to notarise. Without it
 # the app gets an ad-hoc signature, which runs on this Mac only. A signing failure stops the build.
+echo "==> Signing"
 SIGN_IDENTITY="${SIGN_IDENTITY:-}"
 LOCAL_IDENTITY="Launchpad Local Signing"
 if [[ -n "$SIGN_IDENTITY" ]]; then
@@ -83,19 +98,63 @@ fi
 codesign --verify --strict "$APP"
 echo "Built $APP $VERSION ($BUILD), $SIGNED"
 
+# The copy of Launchpad running from the app at $1, if any (one process id per line).
+# -a: pgrep leaves out its own ancestors otherwise, and when the app's Update button starts this, the app is one.
+running_from() { pgrep -a -f "^$1/Contents/MacOS/Launchpad" || true; }
+
 case "${1:-}" in
   --open)
     open "$APP"
     ;;
   --install)
-    # Quit a running copy, replace /Applications/Launchpad.app, and open it.
-    osascript -e 'tell application id "app.launchpad.personal" to quit' >/dev/null 2>&1 || true
-    sleep 1
-    DEST="/Applications/Launchpad.app"
-    if [ ! -w /Applications ]; then mkdir -p "$HOME/Applications"; DEST="$HOME/Applications/Launchpad.app"; fi
-    rm -rf "$DEST"
-    ditto "$APP" "$DEST"
+    # Replaces the installed app without ever leaving you with none: the new app is copied in next to the old
+    # one first, the running copy is asked to quit, and only then are the two swapped (a rename, which can't
+    # half-finish). If anything fails before the swap, the old app is untouched.
+    DIR="${LAUNCHPAD_INSTALL_DIR:-/Applications}"
+    if [[ -z "${LAUNCHPAD_INSTALL_DIR:-}" && ! -w "$DIR" ]]; then DIR="$HOME/Applications"; fi
+    mkdir -p "$DIR"
+    DEST="$DIR/Launchpad.app"
+    NEW="$DIR/.Launchpad.new.app"
+    OLD="$DIR/.Launchpad.old.app"
+
+    echo "==> Installing into $DIR"
+    rm -rf "$NEW" "$OLD"
+    if ! ditto "$APP" "$NEW"; then
+      rm -rf "$NEW"
+      echo "Couldn't copy the new app into $DIR. The installed app is unchanged." >&2
+      exit 1
+    fi
+
+    if [[ -n "$(running_from "$DEST")" ]]; then
+      echo "==> Waiting for Launchpad to quit"
+      osascript -e "tell application \"$DEST\" to quit" >/dev/null 2>&1 || true
+      for _ in $(seq 1 30); do [[ -z "$(running_from "$DEST")" ]] && break; sleep 0.5; done
+      if [[ -n "$(running_from "$DEST")" ]]; then
+        # It didn't answer the polite request (a sheet open, or it's busy): end it.
+        running_from "$DEST" | xargs kill 2>/dev/null || true
+        for _ in $(seq 1 20); do [[ -z "$(running_from "$DEST")" ]] && break; sleep 0.5; done
+      fi
+      if [[ -n "$(running_from "$DEST")" ]]; then
+        rm -rf "$NEW"
+        echo "Launchpad is still running and wouldn't quit. Quit it and run this again; the installed app is unchanged." >&2
+        exit 1
+      fi
+    fi
+
+    trap '' HUP INT TERM   # don't stop between the two renames
+    if [[ -e "$DEST" ]]; then mv "$DEST" "$OLD"; fi
+    if ! mv "$NEW" "$DEST"; then
+      # Put the old app back.
+      if [[ -e "$OLD" ]]; then mv "$OLD" "$DEST"; fi
+      rm -rf "$NEW"
+      echo "Couldn't put the new app in place. The old app has been put back." >&2
+      exit 1
+    fi
+    rm -rf "$OLD"
     echo "Installed $DEST"
-    open "$DEST"
+    if [[ -z "${LAUNCHPAD_NO_OPEN:-}" ]]; then
+      echo "==> Opening Launchpad"
+      open "$DEST"
+    fi
     ;;
 esac

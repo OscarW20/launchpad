@@ -33,6 +33,9 @@ To update later (pull, build, reinstall):
 ~/launchpad/scripts/update.sh
 ```
 
+The update only replaces the installed app once the new one has built, and stops with a message if the checkout
+has uncommitted changes or has diverged from GitHub. Progress goes to `~/Library/Logs/Launchpad/update.log`.
+
 Or just build `dist/Launchpad.app` and open it:
 
 ```bash

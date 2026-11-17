@@ -959,3 +959,37 @@ and "Idle". The title row counts them ("3 working · 5 idle").
   members text only shows when the group is quiet, as before.
 
 Tests: 1 new (`testWorkingMembersComeFirstInGroupOrder`). The popover was not tried in the running app.
+
+## Update and install safe to run from inside the app (2026-11-17)
+
+Groundwork for an Update button, so updating doesn't need Terminal. The scripts only; the check and the button
+come next.
+
+- **Build stamps** (`scripts/make-app.sh`): Info.plist now carries `LaunchpadGitCommit` (the full commit) and
+  `LaunchpadSourcePath` (the checkout it was built in). Core reads them as `BuildStamp`, which also gives the path to
+  `scripts/update.sh`.
+- **Install without a gap** (`make-app.sh --install`): the new app is copied in next to the old one first; a running
+  copy is asked to quit and waited for (15 s, then ended, then 10 s more); only then are the two swapped by rename.
+  A failed copy, or an app that won't quit, leaves the installed app untouched. It used to delete the old app, wait
+  one second and copy.
+- **`scripts/update.sh`**: stops with a plain message when the checkout isn't on `main`, has uncommitted changes,
+  can't reach GitHub or has diverged; a checkout that is only ahead still builds. One update at a time (a lock).
+  Everything is logged to `~/Library/Logs/Launchpad/update.log` (`LAUNCHPAD_UPDATE_LOG` to move it): lines starting
+  `==> ` are progress and the last is `==> Done: …` or `==> Failed: …`. Core's `UpdateLog.state(of:)` reads that.
+- For testing: `SWIFT_BUILD_FLAGS`, `LAUNCHPAD_INSTALL_DIR` and `LAUNCHPAD_NO_OPEN` in `make-app.sh`.
+
+### Decisions
+- The running app is found by the path of its executable, not its bundle id, so installing into a test folder
+  can't quit the real app. `pgrep` needs `-a`: it leaves out its own ancestors, and when the app starts the
+  update, the app is one.
+- Without a terminal, `update.sh` writes only to the log. Printing to an app that has just quit would kill the
+  update between quitting and swapping.
+- `update.sh` is one function, so bash has read all of it before the pull can replace the file under it.
+- Signing is left as it is: the "Launchpad Local Signing" certificate (`scripts/setup-signing.sh`) already gives
+  local builds a stable signature, so the Apple Development certificate isn't used as a third way to sign.
+
+Tests: 3 new in `AppVersionTests` (build stamp, update log states). The scripts were run against a throwaway clone
+and install folder: fresh install, install over a running copy (it quit and was replaced), a copy that fails, a
+dirty checkout, the wrong branch, diverged, offline, a second update at once, a build that fails (installed app
+untouched) and a full update with no terminal attached. Not run: a real update of /Applications/Launchpad.app, and
+an update started by the app itself.

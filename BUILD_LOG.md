@@ -324,3 +324,86 @@ Core only (`Sources/LaunchpadCore/Guard`, `Sources/LaunchpadCore/Safety`); the a
 Tests: 139 (plus 2 opt-in live ones). The 186 Biscuit Bots guard self-checks are now XCTest cases (`GuardEngineTests`),
 with Biscuit-only ones swapped for generic ones; plus the hook and handshake end to end, rules file, settings JSON, run
 options, Codex mapping, sandbox profiles (kernel test on macOS only), snapshots with real git, secrets and the gateway.
+
+### App integration: safety, routines and work
+The macOS app now uses the safety, routines and work cores. New files: `SafetyViews.swift`, `RoutineViews.swift`
+(the routine list and editor, moved out of LibraryViews), `WorkViews.swift` (Tasks and Workflows) and
+`AppModel+Work.swift`.
+
+**Safety**
+- **Per-reply guard** (`AppModel.prepareRun`): each Claude reply gets its own run id. The bot's rules file is written
+  (`GuardRulesFile`, including locked skill folders and the Settings choice) and `RunOptions.guardHook` is set with an
+  `--ask` base for that reply. Bots are told about live approvals (`LaunchpadProtocol.text(liveApprovals: true)`).
+  If the helper is missing or the rules can't be written, a bot with custom rules or a locked skill doesn't run
+  ("Couldn't start the safety check, so … didn't run."). Other bots fall back to the older `--approvals` guard as before.
+- **Live approval cards**: while a reply streams, the app checks the inbox every 0.5 s. New cards appear in the reply
+  with the category and the readable tool name shown big, then the details. You can Approve, Decline, or pick Always
+  allow (only shown when the card offers it, and not for writes when the bot is locked down or the Settings switch is off).
+  Always allow saves the bot, rewrites its rules file and answers any other waiting cards with the same
+  category:tool. Cards whose key is already always allowed are answered by themselves. When the reply ends, the
+  inbox is closed and cards still waiting show as expired. Cards are saved on the reply (`ChatMessage.liveApprovals`).
+  The older `[[approve: …]]` card still works.
+- **Sandbox**: when `sandbox-exec` exists, every bot runs inside `BotSandbox.profile()`. Codex is only wrapped when it
+  runs without its own sandbox. A locked-down bot refuses to run when there's no sandbox.
+- **Site gateway**: locked-down bots get a per-reply gateway token (their own sites, plus their engine's and
+  connectors'), their proxy environment, and a line in their instructions. The token is revoked when the reply ends.
+  If the gateway can't start, the bot doesn't run.
+- **Codex**: `bot.rules.codexNote(lockedSkills:)` is added to its instructions.
+- **Undo**: before each reply the bot's folder is snapshotted off the main thread. Afterwards the changed files are
+  saved on the reply (`snapshot`, `changedFiles`). A "Changed N files · Undo" bar asks you to confirm, lists the
+  files, restores them, marks the reply `undone` and posts a notice. Undo is refused while that bot is working.
+  `Snapshots` is created in the background at launch because finding git can be slow. Without git, Undo is off.
+- **Keychain**: `KeychainSecretStore.read` returns found / missing / failed, using the Keychain's own message when it fails.
+- **UI**: in the bot editor, Permissions (Ask/Allow/Never per category), an Always allowed list (removals survive cards
+  answered while the editor was open, via `BotRules.merged`), your own "change" commands (bad regexes are flagged and
+  dropped on save), and Lock-down with its sites (engine and connector sites are shown read-only). Skills have a
+  Lock toggle, which rewrites every bot's rules file. Settings has the "Always allow for sends, deletes, spending and
+  changes" switch (`alwaysForWrites`, stored in UserDefaults), plus sandbox and undo status.
+- `ChatMessage` gained the optional `liveApprovals`, `snapshot`, `changedFiles` and `undone` fields, and the new
+  `LiveApproval` type. Older JSONL still decodes (test added).
+
+**Routines & work**
+- **Routine editor**: covers every trigger (daily, weekly, hourly, every…, once, a new file, a web address). It shows
+  the next run, has "If missed while closed, run once when you're back" (catchUp, clock triggers) and "Each run in
+  its own chat" (ownChat), a missed-runs banner with Run now / Skip, and a warning when the folder is missing.
+  Web address routines show their address, a secret you can show, hide or copy, a curl example, New Secret
+  (with confirmation), and Try again if the Keychain refuses. Saving goes through `preparedForSave(stored:)`.
+  Deleting a routine forgets its secret.
+- **Timer**: every 20 s, `RoutineSchedule.tick` runs (due, catch-up with a notice, and missed runs that get a notice
+  plus the banner), then `workflowEngine.reloadWorkflows()` and `startDue()`, then the listener sync. Folder routines
+  are checked every 3 s with `FolderTriggers.poll`, which replaces `NewFileWatch`. `fire` follows the notes: it uses
+  `runMessage(payload:)`, own-chat or the routine's chat, `markRan` (deleting old run chats) and logs the run.
+- **Web address listener**: `LoopbackHTTPListener` on 127.0.0.1:8791 runs only while an enabled web address routine
+  exists. Secrets are cached from the Keychain. If the port can't be opened, the routine shows the problem and
+  Launchpad tries again on the next tick.
+- **Workflows**: `AppModel` is the `WorkflowStepExecutor`. Bot steps run in a "🔁 <workflow>" chat with that bot or
+  group. They wait for the chat to be free, and stopping or a timeout stops the chat. A group's replies are joined as
+  "Name: text". `finishedReply` lets a resumed run use a reply that already came in. Approval steps bounce the Dock
+  icon and wait in Tasks. Output steps post a "📤" notice in the target's chat.
+- **New sidebar section "Work"** with Tasks, Workflows and Routines:
+  - **Tasks**: send a task to a bot or group. It goes to the everyday chat, or a new chat if that one is busy.
+    Each task shows its status (Waiting, Working, Needs you, Done, Didn't finish) and its replies. Approval tasks
+    have Approve / Decline, and you can dismiss tasks. The sidebar badge counts tasks that need you.
+  - **Workflows**: a list plus an editor (name, on/off, a schedule using clock triggers only, and steps of every
+    kind with their target, timeout, match and save-to-file settings; steps can be reordered). It also has
+    Run / Stop, a resume banner after a quit, a Runs tab with each step's result, and a History tab with the whole
+    run log.
+
+**Decisions**
+- The rules file is per bot, so it's always written with *every* group folder the bot is in as an extra root (not just
+  this chat's). Otherwise a solo chat and a group chat running at once would keep rewriting each other's file.
+- `FolderTriggers.prime` runs at launch, and on an editor save only when the folder is new or the routine was just
+  switched on. Priming a folder that's already watched would swallow files that have arrived but not yet been reported.
+- Core change: `WorkflowEngine.record(_:)` adds routine runs to the history. Using `store.appendLog` from the app
+  would be overwritten by the engine's next save of its own copy (test added).
+- Missed-run notices go to the routine's latest chat. If it has none, they only show as the banner.
+
+**Not done / left out**
+- `create_routine` for bots (`RoutineRequests`) is still for later (via MCP).
+- No `.workflows` area in `FolderWatcher`. Workflow files are re-read on each 20 s tick instead.
+- Approval steps don't send a system notification (that needs UserNotifications permission in a signed app). The Dock
+  bounces and the Tasks badge shows.
+- `trustedServers` is always empty (there's no UI for it yet).
+
+Tests: 2 new (old chat lines decode and the safety fields round-trip; routine runs recorded through the engine
+survive its saves). 276 in total, all passing on Linux. The app is built and bundled by the macOS CI.

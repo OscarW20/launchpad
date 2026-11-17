@@ -296,6 +296,7 @@ extension AppModel {
         QuickAsk.shared.install(model: self)
         Notifier.shared.install(model: self)
         ComputerUseController.shared.start(locator: runner.locator)
+        Updater.shared.start()
     }
 }
 #endif

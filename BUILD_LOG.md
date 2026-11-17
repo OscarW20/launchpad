@@ -1016,3 +1016,30 @@ GitHub's `main` has moved past the build that's running.
 
 Tests: 14 new in `UpdateCheckTests`: 13 with a scripted git (each outcome above) and one against real temporary
 repositories (up to date, two commits behind, the checkout left untouched, remote gone).
+
+## Update button in the app (2026-11-17)
+
+Launchpad now updates itself from inside the app, on top of the build stamps, `scripts/update.sh` and `UpdateCheck`.
+
+- **Checking**: `Updater` (in `UpdaterViews.swift`) runs `UpdateCheck` off the main thread at launch and every three
+  hours. A quiet check that can't reach GitHub shows nothing and keeps the last answer.
+- **Banner**: when `main` is ahead, a bar across the top of the main window says "3 updates available" with the
+  newest change, What's New (the commit subjects), Update and Later. Later hides it until more changes arrive.
+- **Settings**: under Version, an Updates row (status and when it last checked), the list of what's new,
+  Check for Updates and Update Now. A check you asked for shows the reason when it can't check.
+- **Updating**: Update starts `scripts/update.sh` with its output on `/dev/null` so it outlives the app, then follows
+  `update.log`: the banner shows each step. When the installer reaches "Waiting for Launchpad to quit" the installed
+  app quits by itself; the script swaps the app and reopens it.
+- **Bots working**: "Update now and stop them, or wait?" comes first. Update Now stops every bot, then updates.
+- **Failures**: the app keeps running, and the banner gives the reason from the log with Show Details (the last 12
+  lines of build output, `UpdateLog.detail`) and Try Again.
+
+### Decisions
+- The app quits itself at the quit step rather than waiting for the script's AppleScript request, which macOS may
+  hold behind an Automation prompt. It only does so when it is the copy in Applications.
+- The old log is removed before starting, so an earlier update's "Done" can't be read as this one's.
+- Bots are stopped when you confirm, not at the quit step: the answer you gave is acted on straight away.
+
+Tests: 2 new in `AppVersionTests` (the failure detail, and that the install script still prints the quit step the
+app waits for). Nothing here was tried in the running app: the banner, the Settings rows, a real update started from
+the button, the confirmation, and a failed build's error.

@@ -141,6 +141,7 @@ struct SettingsView: View {
                         .font(.system(.body, design: .monospaced))
                         .textSelection(.enabled)
                 }
+                UpdateSettingsRows()
                 Button("Check again") { model.refreshEngines() }
             }
         }

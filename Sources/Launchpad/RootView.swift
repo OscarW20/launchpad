@@ -34,6 +34,7 @@ struct RootView: View {
         .padding(.horizontal, Theme.Space.m)
         .padding(.bottom, Theme.Space.m)
         .padding(.top, Theme.Space.xs)
+        .safeAreaInset(edge: .top, spacing: 0) { UpdateBanner() }
         .background(GlowBackground())
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -86,6 +87,7 @@ struct RootView: View {
         .sheet(isPresented: $model.showingSavedMessages) {
             SavedMessagesSheet()
         }
+        .updateConfirmation(model: model)
         .alert(
             "Something went wrong",
             isPresented: Binding(get: { model.alertMessage != nil }, set: { if !$0 { model.alertMessage = nil } })

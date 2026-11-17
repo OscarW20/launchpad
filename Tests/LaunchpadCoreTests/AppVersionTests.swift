@@ -57,4 +57,19 @@ final class AppVersionTests: XCTestCase {
         XCTAssertEqual(UpdateLog.state(of: log + "error: x\n==> Failed: couldn't reach GitHub.\n"),
                        .failed("couldn't reach GitHub."))
     }
+
+    func testTheUpdateLogsDetailIsTheLastBuildOutput() {
+        XCTAssertEqual(UpdateLog.detail(of: ""), "")
+        let log = "==> Checking for updates\n==> Building\n[1/9] Compiling\n\nerror: no such module\n==> Failed: the build stopped.\n"
+        XCTAssertEqual(UpdateLog.detail(of: log), "[1/9] Compiling\nerror: no such module")
+        XCTAssertEqual(UpdateLog.detail(of: log, lines: 1), "error: no such module")
+    }
+
+    func testTheInstallerSaysTheQuitStepTheAppWaitsFor() throws {
+        // The app quits by itself when it reads this step, so the words must match the install script's.
+        let script = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("scripts/make-app.sh")
+        let text = try String(contentsOf: script, encoding: .utf8)
+        XCTAssertTrue(text.contains("echo \"==> \(UpdateLog.quitStep)\""))
+    }
 }

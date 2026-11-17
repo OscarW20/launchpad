@@ -92,4 +92,15 @@ public enum UpdateLog {
         if step.hasPrefix("Failed: ") { return .failed(String(step.dropFirst(8))) }
         return .running(step)
     }
+
+    /// The step at which the installer asks the running app to quit, so the app can quit by itself straight away.
+    public static let quitStep = "Waiting for Launchpad to quit"
+
+    /// The last few lines of build output (not progress lines), to show when an update fails.
+    public static func detail(of log: String, lines: Int = 12) -> String {
+        log.split(whereSeparator: \.isNewline)
+            .filter { !$0.hasPrefix("==> ") && !$0.allSatisfy(\.isWhitespace) }
+            .suffix(lines)
+            .joined(separator: "\n")
+    }
 }

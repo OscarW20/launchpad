@@ -38,6 +38,11 @@ struct LiveApprovalCardView: View {
                             .font(.callout.weight(.medium))
                             .foregroundStyle(Theme.secondary)
                     }
+                    if let why = modeLine {
+                        Text(why)
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondary)
+                    }
                 }
             }
             if !card.detail.isEmpty {
@@ -59,6 +64,13 @@ struct LiveApprovalCardView: View {
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
             .strokeBorder(card.state == .pending ? Theme.accent.opacity(0.45) : Theme.line, lineWidth: card.state == .pending ? 1.5 : 1))
+    }
+
+    /// Which mode this chat is in, so a card that still appears says why: a group's mode, or that one-to-one chats always ask.
+    private var modeLine: String? {
+        guard let chat = model.chat(chatId) else { return nil }
+        if chat.kind == .group { return "Group mode: \(model.approvalMode(for: chat.groupId).title)" }
+        return "One-to-one chats always ask"
     }
 
     @ViewBuilder private var state: some View {

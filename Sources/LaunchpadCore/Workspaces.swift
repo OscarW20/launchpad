@@ -91,6 +91,11 @@ public enum WorkspaceError: Error, LocalizedError, Equatable {
     /// Moving a group would pull a bot out of another group that stays behind. Say what to do with each.
     case sharedBots([SharedBot])
     case differentWorkspace(botId: String, groupId: String)
+    /// Another workspace already has this name (ignoring case).
+    case nameTaken(String)
+    case sameWorkspace
+    /// Taking the shared bots out would leave the group with nobody.
+    case groupWouldBeEmpty(String)
     case unreadable
 
     public var errorDescription: String? {
@@ -102,7 +107,10 @@ public enum WorkspaceError: Error, LocalizedError, Equatable {
         case .botInGroups(let names): return "This bot is in \(names.joined(separator: ", ")). Move the group instead."
         case .sharedBots(let b): return "\(b.map(\.botId).joined(separator: ", ")) also belong to groups that aren't moving."
         case .differentWorkspace: return "That bot is in a different workspace. Duplicate it here instead."
-        case .unreadable: return "The workspaces file couldn't be read, so it was set aside and nothing was changed."
+        case .nameTaken(let n): return "There's already a workspace called \(n)."
+        case .sameWorkspace: return "Choose a different workspace to move things into."
+        case .groupWouldBeEmpty(let g): return "Taking those bots out would leave \(g) with no members. Copy them instead."
+        case .unreadable: return "The workspaces file couldn't be read, so nothing was changed. Reset it from Manage Workspaces (the old file is kept) and everything shows in General."
         }
     }
 }
@@ -167,6 +175,29 @@ public final class WorkspaceStore: @unchecked Sendable {
 
     public var workspaces: [Workspace] { load().workspaces }
 
+    /// The file is there but can't be read. Until it's reset every bot and group shows in General, and changes are
+    /// refused (`WorkspaceError.unreadable`) so the old file is never overwritten.
+    public var isUnreadable: Bool {
+        guard let data = try? Data(contentsOf: file) else { return false }
+        return (try? JSONCoding.decoder().decode(WorkspaceLayout.self, from: data)) == nil
+    }
+
+    /// Sets an unreadable file aside (as `workspaces.unreadable-<time>.json`, kept for you) so everything starts in General.
+    /// Returns where it went, or nil if the file was fine.
+    @discardableResult
+    public func resetUnreadable() throws -> URL? {
+        lock.lock(); defer { lock.unlock() }
+        guard isUnreadable else { return nil }
+        let stamp = Int(Date().timeIntervalSince1970)
+        var aside = file.deletingLastPathComponent().appendingPathComponent("workspaces.unreadable-\(stamp).json")
+        var n = 2
+        while fm.fileExists(atPath: aside.path) {
+            aside = file.deletingLastPathComponent().appendingPathComponent("workspaces.unreadable-\(stamp)-\(n).json"); n += 1
+        }
+        try fm.moveItem(at: file, to: aside)
+        return aside
+    }
+
     public func workspaceId(forBot id: String) -> String { load().bots[id] ?? Workspace.generalId }
     public func workspaceId(forGroup id: String) -> String { load().groups[id] ?? Workspace.generalId }
 
@@ -210,6 +241,8 @@ public final class WorkspaceStore: @unchecked Sendable {
     }
 
     /// Can this bot join this group? Only from the same workspace; otherwise offer "Duplicate it here".
+    private func requireReadable() throws { if isUnreadable { throw WorkspaceError.unreadable } }
+
     public func canAdd(bot botId: String, toGroup groupId: String) -> Bool {
         workspaceId(forBot: botId) == workspaceId(forGroup: groupId)
     }
@@ -221,6 +254,7 @@ public final class WorkspaceStore: @unchecked Sendable {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw WorkspaceError.emptyName }
         return try mutate { l in
+            if l.workspaces.contains(where: { Self.sameName($0.name, clean) }) { throw WorkspaceError.nameTaken(clean) }
             let id = Slug.unique(clean, taken: Set(l.workspaces.map(\.id)))
             let ws = Workspace(id: id, name: clean, colour: colour, icon: icon.isEmpty ? "📁" : icon)
             l.workspaces.append(ws)
@@ -234,6 +268,7 @@ public final class WorkspaceStore: @unchecked Sendable {
         guard !clean.isEmpty else { throw WorkspaceError.emptyName }
         try mutate { l in
             guard let i = l.workspaces.firstIndex(where: { $0.id == workspace.id }) else { throw WorkspaceError.notFound(workspace.id) }
+            if l.workspaces.contains(where: { $0.id != workspace.id && Self.sameName($0.name, clean) }) { throw WorkspaceError.nameTaken(clean) }
             l.workspaces[i].name = clean
             l.workspaces[i].colour = workspace.colour
             l.workspaces[i].icon = workspace.icon
@@ -267,7 +302,8 @@ public final class WorkspaceStore: @unchecked Sendable {
         let held = counts(of: id)
         if held.bots + held.groups > 0 {
             guard let destination else { throw WorkspaceError.notEmpty(bots: held.bots, groups: held.groups) }
-            guard destination != id, layout.workspaces.contains(where: { $0.id == destination }) else { throw WorkspaceError.notFound(destination) }
+            guard destination != id else { throw WorkspaceError.sameWorkspace }
+            guard layout.workspaces.contains(where: { $0.id == destination }) else { throw WorkspaceError.notFound(destination) }
         }
         try mutate { l in
             if let destination {
@@ -311,11 +347,13 @@ public final class WorkspaceStore: @unchecked Sendable {
     /// Moves a group and its bots together.
     @discardableResult
     public func move(group groupId: String, to workspaceId: String, shared policy: SharedBotPolicy = .ask) throws -> MovedGroup {
+        try requireReadable()
         var group = try groupStore.load(id: groupId)
         guard load().workspaces.contains(where: { $0.id == workspaceId }) else { throw WorkspaceError.notFound(workspaceId) }
         let shared = try sharedBots(movingGroup: groupId, to: workspaceId)
         if !shared.isEmpty, policy == .ask { throw WorkspaceError.sharedBots(shared) }
         let sharedIds = Set(shared.map(\.botId))
+        if policy == .leaveOut, !sharedIds.isEmpty, group.everyone.allSatisfy(sharedIds.contains) { throw WorkspaceError.groupWouldBeEmpty(group.name) }
 
         var duplicates: [String: String] = [:]
         var leftOut: [String] = []
@@ -345,6 +383,7 @@ public final class WorkspaceStore: @unchecked Sendable {
     /// folder, its own memory (starting empty) and no sessions, so it knows nothing the original does.
     @discardableResult
     public func duplicate(bot botId: String, into workspaceId: String) throws -> Bot {
+        try requireReadable()
         let source = try botStore.load(id: botId)
         guard load().workspaces.contains(where: { $0.id == workspaceId }) else { throw WorkspaceError.notFound(workspaceId) }
         try paths.ensureStructure(fileManager: fm)
@@ -365,6 +404,10 @@ public final class WorkspaceStore: @unchecked Sendable {
 
     // MARK: Internals
 
+    private static func sameName(_ a: String, _ b: String) -> Bool {
+        a.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(b) == .orderedSame
+    }
+
     private static func assign(_ map: inout [String: String], _ id: String, _ workspaceId: String) {
         if workspaceId == Workspace.generalId { map.removeValue(forKey: id) } else { map[id] = workspaceId }
     }
@@ -374,15 +417,8 @@ public final class WorkspaceStore: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         var layout: WorkspaceLayout
         if let data = try? Data(contentsOf: file) {
-            if let decoded = try? JSONCoding.decoder().decode(WorkspaceLayout.self, from: data) {
-                layout = decoded
-            } else {
-                // Never overwrite a file we can't read: set it aside, then start from General.
-                let aside = file.deletingLastPathComponent().appendingPathComponent("workspaces.unreadable.json")
-                try? fm.removeItem(at: aside)
-                try? fm.moveItem(at: file, to: aside)
-                layout = WorkspaceLayout()
-            }
+            guard let decoded = try? JSONCoding.decoder().decode(WorkspaceLayout.self, from: data) else { throw WorkspaceError.unreadable }
+            layout = decoded
         } else {
             layout = WorkspaceLayout()
         }

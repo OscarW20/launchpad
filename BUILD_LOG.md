@@ -1489,3 +1489,9 @@ column beside it, not a tree).
 
 Tests: none new (the model is Backend's, with its own tests). Nothing was tried in the running app: the switcher and
 its popover, the sheets, moving and duplicating, the shared-bots choice, ⌘1 to ⌘9, the chip, notifications and the banner.
+
+### Workspaces: Tester's findings fixed (2026-11-18)
+- Taking shared bots out of a moving group can't leave it empty (`groupWouldBeEmpty`; copy them instead).
+- An unreadable `workspaces.json` is reported (`isUnreadable`), changes are refused (`unreadable`, before any copy is made) and it is only set aside by `resetUnreadable()` (kept as `workspaces.unreadable-<time>.json`).
+- Workspace names are unique ignoring case (`nameTaken`, so no second "General"). Deleting into itself says `sameWorkspace`.
+- Tests: 4 new/changed; suite 591, 0 failures, 3 skips.

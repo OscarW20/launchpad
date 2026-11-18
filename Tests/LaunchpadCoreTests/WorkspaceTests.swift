@@ -50,15 +50,27 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertTrue(c.protected.contains(store.file.path))
     }
 
-    func testUnreadableFileIsSetAsideNotOverwritten() throws {
+    func testUnreadableFileIsReportedRefusedAndKeptUntilReset() throws {
+        let a = try bot("Ava")
         try FileManager.default.createDirectory(at: store.file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("not json".utf8).write(to: store.file)
+        XCTAssertTrue(store.isUnreadable)
         XCTAssertEqual(store.workspaces.map(\.id), ["general"])
-        try store.create(name: "Biscuit")
-        let aside = store.file.deletingLastPathComponent().appendingPathComponent("workspaces.unreadable.json")
+        // Changes are refused and the file is untouched; no half-made copy is left behind.
+        XCTAssertThrowsError(try store.create(name: "Biscuit")) { XCTAssertEqual($0 as? WorkspaceError, .unreadable) }
+        XCTAssertThrowsError(try store.duplicate(bot: a.id, into: "general")) { XCTAssertEqual($0 as? WorkspaceError, .unreadable) }
+        XCTAssertEqual(bots.loadAll().count, 1)
+        XCTAssertEqual(try String(contentsOf: store.file, encoding: .utf8), "not json")
+
+        let aside = try XCTUnwrap(try store.resetUnreadable())
         XCTAssertEqual(try String(contentsOf: aside, encoding: .utf8), "not json")
+        XCTAssertFalse(store.isUnreadable)
+        XCTAssertNil(try store.resetUnreadable())
+        try store.create(name: "Biscuit")
         XCTAssertEqual(store.workspaces.map(\.name), ["General", "Biscuit"])
     }
+
+    func testMissingFileIsNotUnreadable() { XCTAssertFalse(store.isUnreadable) }
 
     func testDanglingAssignmentFallsBackToGeneral() throws {
         let a = try bot("Ava")
@@ -72,7 +84,7 @@ final class WorkspaceTests: XCTestCase {
     func testCreateRenameAndGeneralRules() throws {
         let w = try store.create(name: " Biscuit ", colour: "#FF0000", icon: "🍪")
         XCTAssertEqual(w.id, "biscuit")
-        XCTAssertEqual(try store.create(name: "Biscuit").id, "biscuit-2")
+        XCTAssertEqual(try store.create(name: "Biscuit!").id, "biscuit-2")   // different name, same slug
         XCTAssertThrowsError(try store.create(name: "  ")) { XCTAssertEqual($0 as? WorkspaceError, .emptyName) }
         var renamed = w; renamed.name = "Biscuit Pet Care"
         try store.update(renamed)
@@ -80,7 +92,7 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertThrowsError(try store.delete(id: "general")) { XCTAssertEqual($0 as? WorkspaceError, .cantDeleteGeneral) }
         var general = store.workspaces[0]; general.name = "Everything"
         try store.update(general)
-        XCTAssertEqual(store.workspaces.map(\.name), ["Everything", "Biscuit Pet Care", "Biscuit"])
+        XCTAssertEqual(store.workspaces.map(\.name), ["Everything", "Biscuit Pet Care", "Biscuit!"])
         try store.reorder(["biscuit-2"])
         XCTAssertEqual(store.workspaces.map(\.id), ["general", "biscuit-2", "biscuit"])
         XCTAssertEqual(store.workspaces[0].name, "Everything")
@@ -236,5 +248,40 @@ final class WorkspaceTests: XCTestCase {
         try store.delete(id: "empty")                      // empty ones need no destination
         XCTAssertEqual(store.workspaces.map(\.id), ["general", "other"])
         XCTAssertThrowsError(try store.delete(id: "empty")) { XCTAssertEqual($0 as? WorkspaceError, .notFound("empty")) }
+    }
+
+    // MARK: Names, empty groups and delete into itself
+
+    func testNamesMustBeUniqueIgnoringCase() throws {
+        try store.create(name: "Biscuit")
+        XCTAssertThrowsError(try store.create(name: " biscuit ")) { XCTAssertEqual($0 as? WorkspaceError, .nameTaken("biscuit")) }
+        XCTAssertThrowsError(try store.create(name: "GENERAL")) { XCTAssertEqual($0 as? WorkspaceError, .nameTaken("GENERAL")) }
+        let other = try store.create(name: "Other")
+        var clash = other; clash.name = "BISCUIT"
+        XCTAssertThrowsError(try store.update(clash))
+        var same = other; same.colour = "#00FF00"; same.name = "other"   // keeping your own name (new case) is fine
+        try store.update(same)
+        XCTAssertEqual(store.workspaces.last?.name, "other")
+    }
+
+    func testLeaveOutRefusesToEmptyAGroup() throws {
+        let a = try bot("Ava")
+        let moving = try group("Moves", [a]), staying = try group("Stays", [a])
+        _ = staying
+        try store.create(name: "Biscuit")
+        XCTAssertThrowsError(try store.move(group: moving.id, to: "biscuit", shared: .leaveOut)) {
+            XCTAssertEqual($0 as? WorkspaceError, .groupWouldBeEmpty(moving.name))
+        }
+        XCTAssertEqual(store.workspaceId(forGroup: moving.id), "general")
+        XCTAssertEqual(try groups.load(id: moving.id).members, [a.id])
+        // Copying instead still works.
+        XCTAssertNoThrow(try store.move(group: moving.id, to: "biscuit", shared: .duplicate))
+    }
+
+    func testDeleteIntoItselfSaysSo() throws {
+        let a = try bot("Ava")
+        try store.create(name: "Biscuit")
+        try store.move(bot: a.id, to: "biscuit")
+        XCTAssertThrowsError(try store.delete(id: "biscuit", movingContentsTo: "biscuit")) { XCTAssertEqual($0 as? WorkspaceError, .sameWorkspace) }
     }
 }

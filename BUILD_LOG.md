@@ -1444,3 +1444,15 @@ timestamp server); same signature gives "no prompt", ad-hoc to stable gives "may
 signing step that hangs both fall back to ad-hoc with the note (the hang after the 3 s limit used in the test); the
 Developer ID path is unchanged (3 hardened calls, entitlements on the app). Not tested: a real signing with the certificate, that the prompt
 actually stops after Always Allow, and an update started by the Update button.
+
+## Workspaces: the core (2026-11-18)
+
+Keeps Biscuit, Launchpad and a personal app apart. Core only (`Sources/LaunchpadCore/Workspaces.swift`); the UI is Frontend's.
+
+- **Model.** `Workspace` (id, name, colour, icon) and `WorkspaceStore`, saved as `workspaces.json` in the data folder (added to the guard's protected list, so a bot can't move itself). Membership is kept there, not in group.json or bot.json.
+- **Migration.** None on disk: with no file, or no entry for a bot or group, it's in "General" (which always exists, can be renamed, can't be deleted). Creating a workspace touches no bot or group file. A file that can't be read is set aside as `workspaces.unreadable.json`, never overwritten.
+- **Rules.** A group and its bots live in one workspace. Moving a group moves its bots; if a bot is also in a group that stays behind, `move(group:shared:)` stops (`.ask`), or copies it for the moving group (`.duplicate`), or drops it from the group (`.leaveOut`). A bot in a group can't move alone (`botInGroups`). `canAdd(bot:toGroup:)` is false across workspaces (the UI offers "Duplicate it here"). `problems()` lists members that don't match their group.
+- **Delete.** A workspace with anything in it needs `movingContentsTo`, otherwise `notEmpty` and nothing changes. Contents move whole; nothing is deleted.
+- **Duplicate.** `duplicate(bot:into:)` copies setup and instructions into a new folder with its own empty memory and no sessions, and records `origin` ("Copied from").
+- **Chats and routines** follow their bot or group: `workspaceId(for: ChatMeta)` and `workspaceId(for: Routine.Target)`.
+- **Tests.** 14 new; suite 587, 0 failures, 3 skips. Not run on Linux, not tried in the app.

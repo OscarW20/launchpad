@@ -56,6 +56,10 @@ public struct RunOptions: Equatable, Sendable {
     public var environment: [String: String] = [:]
     /// Don't keep a session (e.g. drafting a skill).
     public var ephemeral = false
+    /// Lean Claude runs: skip your personal Claude Code setup (user-level plugins, hooks and settings) and offer only
+    /// the built-in tools bots use. Cuts a turn's prompt from ~44k to ~9k tokens and stops personal hooks busting
+    /// the prompt cache every run. Launchpad's own guard (`--settings`), MCP apps and skills still apply.
+    public var lean = false
     /// No tools at all (e.g. a background memory review). Claude: `--tools ""`. Codex has no such switch; it runs
     /// read-only there.
     public var quiet = false
@@ -76,6 +80,9 @@ public struct RunOptions: Equatable, Sendable {
 }
 
 public enum EngineCommand {
+    /// Built-in tools offered on lean runs (MCP apps come on top). Skill keeps skills working; Task keeps helpers.
+    public static let leanTools = ["Read", "Edit", "Write", "Bash", "Glob", "Grep", "WebFetch", "WebSearch", "TodoWrite", "Skill", "Task"]
+
     /// Tools a read-only Claude bot may use without asking.
     static let claudeReadOnlyTools = ["Read", "Grep", "Glob", "WebSearch", "WebFetch", "TodoWrite"]
     static let claudeWriteTools = ["Edit", "MultiEdit", "Write", "NotebookEdit", "Bash"]
@@ -136,7 +143,12 @@ public enum EngineCommand {
         }
         if options.ephemeral { args.append("--no-session-persistence") }
         if let model, !model.isEmpty { args += ["--model", model] }
-        if options.quiet { args += ["--tools", ""] }
+        if options.quiet {
+            args += ["--tools", ""]
+        } else if options.lean {
+            args += ["--tools", leanTools.joined(separator: ",")]
+        }
+        if options.lean { args += ["--setting-sources", "project,local"] }
         // A run has no one to click "Allow", so Claude Code refuses any tool that isn't pre-approved.
         // The bot's connected apps are pre-approved here; Launchpad's guard still asks you before anything
         // that sends, deletes, spends or changes shared systems, per the bot's rules.

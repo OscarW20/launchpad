@@ -235,6 +235,11 @@ final class AppModel {
     /// Groups in "Full freedom" (`ApprovalModes`).
     var fullFreedomGroups: Set<String> = []
     /// Settings: let "Always allow" cover sends, deletes, spending and changes.
+    /// Lean bot runs (see RunOptions.lean). On by default.
+    var leanRuns: Bool = UserDefaults.standard.object(forKey: "leanRuns") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(leanRuns, forKey: "leanRuns") }
+    }
+
     var alwaysForWrites: Bool = UserDefaults.standard.object(forKey: "alwaysForWrites") as? Bool ?? true {
         didSet {
             UserDefaults.standard.set(alwaysForWrites, forKey: "alwaysForWrites")
@@ -1230,6 +1235,7 @@ final class AppModel {
             setup.options = o
             return setup
         }
+        o.lean = leanRuns
 
         let available = Set(skills.map(\.id))
         let botSkills = SkillLinker.effectiveSkills(for: bot, groups: groups).filter(available.contains)

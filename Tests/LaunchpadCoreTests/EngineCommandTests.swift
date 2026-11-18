@@ -144,3 +144,25 @@ final class SandboxedBrowserTests: XCTestCase {
         XCTAssertTrue(codex.arguments.contains { $0.contains("--no-sandbox") })
     }
 }
+
+final class LeanRunTests: XCTestCase {
+    func testLeanRunsSkipPersonalSetupAndOfferOnlyBotTools() {
+        var o = RunOptions()
+        o.lean = true
+        let a = EngineCommand.invocation(for: Bot(id: "b", name: "B"), prompt: "x", botDirectory: URL(fileURLWithPath: "/b"), sessionId: nil, options: o).arguments
+        XCTAssertEqual(a[a.firstIndex(of: "--setting-sources")! + 1], "project,local")
+        let tools = a[a.firstIndex(of: "--tools")! + 1].split(separator: ",").map(String.init)
+        XCTAssertTrue(tools.contains("Skill") && tools.contains("Bash") && tools.contains("Read"))
+        // Quiet runs (memory review) still get no tools at all.
+        o.quiet = true
+        let q = EngineCommand.invocation(for: Bot(id: "b", name: "B"), prompt: "x", botDirectory: URL(fileURLWithPath: "/b"), sessionId: nil, options: o).arguments
+        XCTAssertEqual(q[q.firstIndex(of: "--tools")! + 1], "")
+        XCTAssertEqual(q.filter { $0 == "--tools" }.count, 1)
+        // Off by default, so nothing changes unless the app asks for it.
+        let plain = EngineCommand.invocation(for: Bot(id: "b", name: "B"), prompt: "x", botDirectory: URL(fileURLWithPath: "/b"), sessionId: nil).arguments
+        XCTAssertFalse(plain.contains("--setting-sources"))
+        // Codex is unaffected.
+        let cx = EngineCommand.invocation(for: Bot(id: "c", name: "C", engine: .codex), prompt: "x", botDirectory: URL(fileURLWithPath: "/b"), sessionId: nil, options: { var o = RunOptions(); o.lean = true; return o }()).arguments
+        XCTAssertFalse(cx.contains("--setting-sources"))
+    }
+}

@@ -88,6 +88,21 @@ struct SettingsView: View {
                 Text("Before a long task, a bot shares its plan with Start and Cancel. Pick whether it waits for you or starts by itself. GIFs need a GIPHY key, kept in your Keychain.")
             }
 
+            Section {
+                Toggle(isOn: Binding(get: { !model.leanRuns }, set: { model.leanRuns = !$0 })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Bots use my personal Claude Code setup")
+                        Text("Off (recommended): bots skip your own Claude Code plugins, hooks and settings and get only the tools they need. A turn costs about 9k prompt tokens instead of about 44k, and the prompt cache isn't reset every run.")
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondary)
+                    }
+                }
+            } header: {
+                Text("Token use")
+            } footer: {
+                Text("Biggest savings: give simple bots a cheaper model (e.g. sonnet or haiku) in the bot editor, only turn on the apps a bot needs, keep hand-off limits low, and use Compact on long chats.")
+            }
+
             TeamNotesSection()
 
             MacSettingsSection()

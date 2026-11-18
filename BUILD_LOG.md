@@ -1537,3 +1537,10 @@ option existed on the Bots and Groups pages only, and was hidden entirely until 
 
 Tests: none new (UI only). Suite 597, 0 failures, 3 skips. Not tried in the running app: the three menus, the add-first
 item, and the group-instead item for a bot in a group.
+
+### Workspaces: duplicate a group, and "is this team here?" (2026-11-18)
+Oscar wants the same team (the Dev team) in Biscuit as in Launchpad. The team card said "Open" because a team was installed in another workspace.
+- `duplicate(group:into:name:)` copies a group and every member bot into a workspace: own folders, own empty memory, no sessions, empty project folder, fresh summary. Lead and member order are kept, a deleted member is left out, and a failure part-way removes the copies it made. A taken group name becomes "Name (2)"; so do bot names, so mentions stay unambiguous. An explicit `name` must be free. Refused while the workspaces file is unreadable.
+- Each copy records `GroupOrigin` (copied from, and the root). `familyId(ofGroup:)` is the original group's id through copies of copies; `team(family:in:)` is "is this team in workspace X"; `workspaces(holding:)` says where else it is.
+- `addTeam(pack, to:)` for the team card: already there is `.alreadyThere` (Open), in another workspace is `.copied`, nowhere is `.installed` from the pack then placed there.
+- Tests: 13 new; suite 604, 0 failures, 3 skips. Not hand-tested.

@@ -35,6 +35,14 @@ public struct BotOrigin: Codable, Hashable, Sendable {
 }
 
 /// `.launchpad/workspaces.json`.
+/// A group made by "Duplicate group into workspace" (or "Add to <workspace>" on a team card): where it came from.
+/// `rootId` is the original group's id however many copies of copies there are, so "is this team already here?" can match.
+public struct GroupOrigin: Codable, Hashable, Sendable {
+    public var groupId: String
+    public var workspaceId: String
+    public var rootId: String
+}
+
 public struct WorkspaceLayout: Codable, Equatable, Sendable {
     /// In the order they're shown. General is always first.
     public var workspaces: [Workspace]
@@ -42,17 +50,19 @@ public struct WorkspaceLayout: Codable, Equatable, Sendable {
     public var groups: [String: String]
     public var bots: [String: String]
     public var origins: [String: BotOrigin]
+    public var groupOrigins: [String: GroupOrigin]
 
     public init(workspaces: [Workspace] = [.general], groups: [String: String] = [:], bots: [String: String] = [:],
-                origins: [String: BotOrigin] = [:]) {
+                origins: [String: BotOrigin] = [:], groupOrigins: [String: GroupOrigin] = [:]) {
         self.workspaces = workspaces
         self.groups = groups
         self.bots = bots
         self.origins = origins
+        self.groupOrigins = groupOrigins
         normalise()
     }
 
-    enum CodingKeys: String, CodingKey { case workspaces, groups, bots, origins }
+    enum CodingKeys: String, CodingKey { case workspaces, groups, bots, origins, groupOrigins }
     // Decoding is strict: a key that's missing is fine, one with the wrong type makes the file unreadable (never silently dropped).
 
     public init(from decoder: Decoder) throws {
@@ -61,6 +71,7 @@ public struct WorkspaceLayout: Codable, Equatable, Sendable {
         groups = (try c.decodeIfPresent([String: String].self, forKey: .groups)) ?? [:]
         bots = (try c.decodeIfPresent([String: String].self, forKey: .bots)) ?? [:]
         origins = (try c.decodeIfPresent([String: BotOrigin].self, forKey: .origins)) ?? [:]
+        groupOrigins = (try c.decodeIfPresent([String: GroupOrigin].self, forKey: .groupOrigins)) ?? [:]
         normalise()
     }
 
@@ -311,6 +322,7 @@ public final class WorkspaceStore: @unchecked Sendable {
                 for (k, v) in l.groups where v == id { l.groups[k] = destination }
                 for (k, v) in l.bots where v == id { l.bots[k] = destination }
                 for (k, o) in l.origins where o.workspaceId == id { l.origins[k]?.workspaceId = destination }
+                for (k, o) in l.groupOrigins where o.workspaceId == id { l.groupOrigins[k]?.workspaceId = destination }
             }
             l.workspaces.removeAll { $0.id == id }
         }
@@ -383,14 +395,15 @@ public final class WorkspaceStore: @unchecked Sendable {
     /// A copy of a bot in `workspaceId`: same name, role, engine, rules, connectors, skills and instructions, but its own
     /// folder, its own memory (starting empty) and no sessions, so it knows nothing the original does.
     @discardableResult
-    public func duplicate(bot botId: String, into workspaceId: String) throws -> Bot {
+    public func duplicate(bot botId: String, into workspaceId: String, named newName: String? = nil) throws -> Bot {
         try requireReadable()
         let source = try botStore.load(id: botId)
         guard load().workspaces.contains(where: { $0.id == workspaceId }) else { throw WorkspaceError.notFound(workspaceId) }
         try paths.ensureStructure(fileManager: fm)
         let taken = Set((try? fm.contentsOfDirectory(atPath: paths.bots.path)) ?? [])
         var copy = source
-        copy.id = Slug.unique(source.name, taken: taken)
+        copy.id = Slug.unique(newName ?? source.name, taken: taken)
+        if let newName { copy.name = newName }
         copy.createdAt = Date()
         try fm.createDirectory(at: paths.workspace(copy.id), withIntermediateDirectories: true)
         try botStore.save(copy)
@@ -401,6 +414,123 @@ public final class WorkspaceStore: @unchecked Sendable {
             l.origins[copy.id] = BotOrigin(botId: source.id, workspaceId: l.bots[source.id] ?? Workspace.generalId)
         }
         return copy
+    }
+
+    // MARK: Duplicating a group
+
+    public enum TeamAdded: Sendable { case alreadyThere, copied, installed }
+
+    /// The id every copy of a team shares: the original group's id, followed back through copies of copies.
+    public func familyId(ofGroup id: String) -> String { load().groupOrigins[id]?.rootId ?? id }
+
+    public func origin(ofGroup id: String) -> GroupOrigin? { load().groupOrigins[id] }
+
+    /// The team (by family id: a pack's group id, or any group's id) as it is in this workspace, if it's there.
+    public func team(family: String, in workspaceId: String) -> BotGroup? {
+        let l = load()
+        return groupStore.loadAll().first { g in
+            (l.groups[g.id] ?? Workspace.generalId) == workspaceId && (l.groupOrigins[g.id]?.rootId ?? g.id) == family
+        }
+    }
+
+    /// Workspaces that already hold this team, in display order.
+    public func workspaces(holding family: String) -> [String] {
+        let l = load()
+        let held = Set(groupStore.loadAll().filter { (l.groupOrigins[$0.id]?.rootId ?? $0.id) == family }.map { l.groups[$0.id] ?? Workspace.generalId })
+        return l.workspaces.map(\.id).filter(held.contains)
+    }
+
+    /// A name not used by any group in the workspace: "Dev Team", then "Dev Team (2)", "Dev Team (3)".
+    private func freeGroupName(_ base: String, in workspaceId: String) -> String {
+        let taken = groups(in: workspaceId).map { $0.name.lowercased() }
+        var name = base, n = 2
+        while taken.contains(name.lowercased()) { name = "\(base) (\(n))"; n += 1 }
+        return name
+    }
+
+    private func freeBotName(_ base: String, in workspaceId: String, also used: Set<String>) -> String {
+        let taken = Set(bots(in: workspaceId).map { $0.name.lowercased() }).union(used)
+        var name = base, n = 2
+        while taken.contains(name.lowercased()) { name = "\(base) (\(n))"; n += 1 }
+        return name
+    }
+
+    public struct DuplicatedGroup: Sendable {
+        public var group: BotGroup
+        /// Original bot id to its copy's id.
+        public var bots: [String: String]
+        /// The group got a different name because the workspace already had one with that name.
+        public var renamed: Bool
+    }
+
+    /// A copy of a group, and of every bot in it, in `workspaceId`. Nothing is shared with the original: the copies have
+    /// their own folders, their own empty memory, no sessions and an empty shared project folder. Lead and member order
+    /// are kept. A name already used in the workspace becomes "Name (2)" (or pass `name`, which must be free).
+    @discardableResult
+    public func duplicate(group groupId: String, into workspaceId: String, name: String? = nil) throws -> DuplicatedGroup {
+        try requireReadable()
+        let source = try groupStore.load(id: groupId)
+        guard load().workspaces.contains(where: { $0.id == workspaceId }) else { throw WorkspaceError.notFound(workspaceId) }
+        let wanted = (name ?? source.name).trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard !wanted.isEmpty else { throw WorkspaceError.emptyName }
+        let finalName: String
+        if name != nil {
+            if groups(in: workspaceId).contains(where: { Self.sameName($0.name, wanted) }) { throw WorkspaceError.nameTaken(wanted) }
+            finalName = wanted
+        } else {
+            finalName = freeGroupName(wanted, in: workspaceId)
+        }
+
+        var made: [String: String] = [:]
+        var usedNames = Set<String>()
+        do {
+            for id in source.everyone where made[id] == nil {
+                guard let original = try? botStore.load(id: id) else { continue }   // a deleted member is left out
+                let n = freeBotName(original.name, in: workspaceId, also: usedNames)
+                usedNames.insert(n.lowercased())
+                made[id] = try duplicate(bot: id, into: workspaceId, named: n == original.name ? nil : n).id
+            }
+            try paths.ensureStructure(fileManager: fm)
+            let takenIds = Set((try? fm.contentsOfDirectory(atPath: paths.groups.path)) ?? [])
+            var copy = source
+            copy.id = Slug.unique(finalName, taken: takenIds)
+            copy.name = finalName
+            copy.members = source.members.compactMap { made[$0] }
+            copy.lead = source.lead.flatMap { made[$0] } ?? copy.members.first
+            // Keep the source's convention: the lead is listed in members only if it was in the original.
+            if let lead = copy.lead, source.lead.map(source.members.contains) == true, !copy.members.contains(lead) { copy.members.insert(lead, at: 0) }
+            copy.createdAt = Date()
+            try fm.createDirectory(at: groupStore.workspace(copy.id), withIntermediateDirectories: true)
+            try groupStore.save(copy)
+            try Data(GroupStore.summaryTemplate(copy).utf8).write(to: groupStore.summary(copy.id), options: .atomic)
+            try mutate { l in
+                Self.assign(&l.groups, copy.id, workspaceId)
+                l.groupOrigins[copy.id] = GroupOrigin(groupId: source.id, workspaceId: l.groups[source.id] ?? Workspace.generalId,
+                                                      rootId: l.groupOrigins[source.id]?.rootId ?? source.id)
+            }
+            return DuplicatedGroup(group: copy, bots: made, renamed: finalName != wanted)
+        } catch {
+            // Undo: the copies are ours, so removing them loses nothing.
+            let copies = Array(made.values)
+            for id in copies { try? fm.removeItem(at: paths.botDir(id)) }
+            try? mutate { l in for id in copies { l.bots.removeValue(forKey: id); l.origins.removeValue(forKey: id) } }
+            throw error
+        }
+    }
+
+    /// "Add to <workspace>" on a team card. Already there: nothing changes. In another workspace: a full copy here.
+    /// Nowhere yet: installed from the pack, then placed here.
+    @discardableResult
+    public func addTeam(_ pack: TeamPack, to workspaceId: String) throws -> (group: BotGroup, how: TeamAdded) {
+        try requireReadable()
+        guard load().workspaces.contains(where: { $0.id == workspaceId }) else { throw WorkspaceError.notFound(workspaceId) }
+        if let here = team(family: pack.groupId, in: workspaceId) { return (here, .alreadyThere) }
+        if let elsewhere = workspaces(holding: pack.groupId).first, let from = team(family: pack.groupId, in: elsewhere) {
+            return (try duplicate(group: from.id, into: workspaceId).group, .copied)
+        }
+        let (_, group) = try Hiring(paths: paths).hireTeam(pack)
+        try move(group: group.id, to: workspaceId, shared: .duplicate)
+        return (try groupStore.load(id: group.id), .installed)
     }
 
     // MARK: Internals

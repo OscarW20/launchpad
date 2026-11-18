@@ -298,12 +298,29 @@ extension AppModel {
 
     // MARK: Quick switcher (⌘K)
 
-    func switcherItems() -> [SwitcherItem] {
-        var items: [SwitcherItem] = chats.map {
+    /// Which workspace a ⌘K result is in; nil for pages and actions, which are the same everywhere.
+    func workspaceId(of item: SwitcherItem) -> String? {
+        let center = WorkspaceCenter.shared
+        let value = String(item.id.split(separator: ":", maxSplits: 1).last ?? "")
+        switch item.kind {
+        case .chat, .message: return item.chatId.flatMap { chat($0) }.map { center.id(for: $0) }
+        case .bot: return center.id(forBot: value)
+        case .group: return center.id(forGroup: value)
+        case .page, .action: return nil
+        }
+    }
+
+    /// - Parameter allWorkspaces: false (the default) searches only the workspace you're in.
+    func switcherItems(allWorkspaces: Bool = false) -> [SwitcherItem] {
+        let center = WorkspaceCenter.shared
+        let shownChats = allWorkspaces ? chats : chats.filter { center.id(for: $0) == center.currentId }
+        let shownBots = allWorkspaces ? bots : workspaceBots
+        let shownGroups = allWorkspaces ? groups : workspaceGroups
+        var items: [SwitcherItem] = shownChats.map {
             SwitcherItem(id: "chat:\($0.id)", kind: .chat, title: $0.title, detail: $0.lastPreview ?? "", chatId: $0.id, date: $0.updatedAt)
         }
-        items += bots.map { SwitcherItem(id: "bot:\($0.id)", kind: .bot, title: $0.name, detail: $0.role) }
-        items += groups.map { SwitcherItem(id: "group:\($0.id)", kind: .group, title: $0.displayName, detail: $0.rules) }
+        items += shownBots.map { SwitcherItem(id: "bot:\($0.id)", kind: .bot, title: $0.name, detail: $0.role) }
+        items += shownGroups.map { SwitcherItem(id: "group:\($0.id)", kind: .group, title: $0.displayName, detail: $0.rules) }
         items += SidebarSection.allCases.map { SwitcherItem(id: "page:\($0.rawValue)", kind: .page, title: $0.title, detail: $0.blurb) }
         items += [
             SwitcherItem(id: "action:newBot", kind: .action, title: "New bot", detail: "Create a bot"),
@@ -314,8 +331,10 @@ extension AppModel {
     }
 
     /// Every chat with its messages, for searching message text.
-    func switcherChats() -> [(meta: ChatMeta, messages: [ChatMessage])] {
-        chats.map { ($0, messages[$0.id] ?? chatStore.messages(chatId: $0.id)) }
+    func switcherChats(allWorkspaces: Bool = false) -> [(meta: ChatMeta, messages: [ChatMessage])] {
+        let center = WorkspaceCenter.shared
+        return chats.filter { allWorkspaces || center.id(for: $0) == center.currentId }
+            .map { ($0, messages[$0.id] ?? chatStore.messages(chatId: $0.id)) }
     }
 
     func open(_ item: SwitcherItem) {

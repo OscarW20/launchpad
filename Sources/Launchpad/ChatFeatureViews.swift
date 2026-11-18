@@ -684,20 +684,34 @@ struct QuickSwitcherSheet: View {
     @State private var selection = 0
     @State private var items: [SwitcherItem] = []
     @State private var chats: [(meta: ChatMeta, messages: [ChatMessage])] = []
+    /// Search every workspace, not just this one. Only offered once you have more than General.
+    @State private var everywhere = false
     @FocusState private var focused: Bool
 
     var body: some View {
         let results = Array(QuickSearch.search(query, items: items, chats: chats, name: model.authorName).prefix(40))
+        let center = WorkspaceCenter.shared
         VStack(spacing: 0) {
-            TextField("Jump to a chat, bot, page or message…", text: $query)
-                .textFieldStyle(.plain)
-                .font(.title3)
-                .padding(14)
-                .focused($focused)
-                .onSubmit { open(results) }
-                .onKeyPress(.downArrow) { selection = min(selection + 1, max(0, results.count - 1)); return .handled }
-                .onKeyPress(.upArrow) { selection = max(selection - 1, 0); return .handled }
-                .onChange(of: query) { selection = 0 }
+            HStack(spacing: 8) {
+                TextField(center.isInUse && !everywhere ? "Search \(center.current.name): chats, bots, pages, messages…"
+                                                         : "Jump to a chat, bot, page or message…", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .focused($focused)
+                    .onSubmit { open(results) }
+                    .onKeyPress(.downArrow) { selection = min(selection + 1, max(0, results.count - 1)); return .handled }
+                    .onKeyPress(.upArrow) { selection = max(selection - 1, 0); return .handled }
+                    .onChange(of: query) { selection = 0 }
+                if center.isInUse {
+                    Toggle("All workspaces", isOn: $everywhere)
+                        .toggleStyle(.checkbox)
+                        .font(.caption)
+                        .fixedSize()
+                        .help("Search every workspace instead of only \(center.current.name)")
+                        .onChange(of: everywhere) { reload() }
+                }
+            }
+            .padding(14)
             Divider()
             ScrollViewReader { proxy in
                 List {
@@ -711,6 +725,14 @@ struct QuickSwitcherSheet: View {
                                 }
                             }
                             Spacer()
+                            // Which workspace, when you're searching them all: two bots can share a name.
+                            if everywhere, let wsId = model.workspaceId(of: item), let ws = center.workspace(wsId) {
+                                HStack(spacing: 4) {
+                                    WorkspaceTile(workspace: ws, size: 18)
+                                    Text(ws.name).font(.caption).foregroundStyle(Theme.secondary).lineLimit(1)
+                                }
+                                .accessibilityLabel("In \(ws.name)")
+                            }
                         }
                         .padding(.vertical, 2)
                         .listRowBackground(
@@ -731,11 +753,16 @@ struct QuickSwitcherSheet: View {
         .frame(width: 560, height: 420)
         .sheetBackground()
         .onAppear {
-            items = model.switcherItems()
-            chats = model.switcherChats()
+            reload()
             focused = true
         }
         .onExitCommand { dismiss() }
+    }
+
+    private func reload() {
+        items = model.switcherItems(allWorkspaces: everywhere)
+        chats = model.switcherChats(allWorkspaces: everywhere)
+        selection = 0
     }
 
     private func open(_ results: [SwitcherItem]) {

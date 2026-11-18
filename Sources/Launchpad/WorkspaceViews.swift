@@ -150,12 +150,23 @@ private struct WorkspaceList: View {
 
 // MARK: - First run
 
-/// Shown once while General is the only workspace.
+/// Shown when the workspaces file is damaged (with Reset), and once while General is the only workspace.
 struct WorkspaceBanner: View {
     @AppStorage(WorkspaceCenter.bannerKey) private var dismissed = false
 
     var body: some View {
-        if !dismissed, !WorkspaceCenter.shared.isInUse {
+        if WorkspaceCenter.shared.damaged {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                Label("Workspaces file is damaged", systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text)
+                Text("Everything shows in General for now, and moving or adding workspaces is paused so nothing is lost. Reset keeps the old file and starts you again from General.")
+                    .font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                Button("Reset Workspaces") { WorkspaceCenter.shared.resetDamaged() }
+                    .buttonStyle(PillButtonStyle()).controlSize(.small)
+            }
+            .padding(Theme.Space.m)
+            .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+        } else if !dismissed, !WorkspaceCenter.shared.isInUse {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 Text("Sort your bots into workspaces").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text)
                 Text("Keep Biscuit, Launchpad and your own apps apart: each shows only its own bots and groups.")

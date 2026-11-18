@@ -51,6 +51,8 @@ final class WorkspaceCenter {
 
     private(set) var layout = WorkspaceLayout()
     private(set) var currentId = Workspace.generalId
+    /// The workspaces file exists but can't be read: everything shows in General, and changes are refused until it's reset.
+    private(set) var damaged = false
     var sheet: Sheet?
     private var store: WorkspaceStore?
     private weak var model: AppModel?
@@ -74,6 +76,7 @@ final class WorkspaceCenter {
     func reload() {
         guard let store else { return }
         layout = store.load()
+        damaged = store.isUnreadable
         if !layout.workspaces.contains(where: { $0.id == currentId }) { currentId = Workspace.generalId }
     }
 
@@ -243,6 +246,7 @@ final class WorkspaceCenter {
         } catch WorkspaceError.sharedBots(let bots) {
             return .sharedBots(bots)
         } catch {
+            if case WorkspaceError.unreadable = error { damaged = true }
             return .failed(error.localizedDescription)
         }
         syncKnown()
@@ -259,7 +263,23 @@ final class WorkspaceCenter {
         return (model?.bot(o.botId)?.name ?? o.botId, ws)
     }
 
-    private func report(_ error: Error) { model?.alertMessage = error.localizedDescription }
+    /// The Reset button for a damaged workspaces file: sets it aside (kept, never deleted) so everything starts in General.
+    func resetDamaged() {
+        guard let store, let model else { return }
+        do {
+            if let aside = try store.resetUnreadable() {
+                model.alertMessage = "The old file is kept as \(aside.lastPathComponent), next to where it was, in case you want it back. Everything is in General now: add your workspaces again and move your groups."
+            }
+        } catch {
+            model.alertMessage = "Couldn't reset the workspaces file: \(error.localizedDescription)"
+        }
+        reload()
+    }
+
+    private func report(_ error: Error) {
+        if case WorkspaceError.unreadable = error { damaged = true }
+        model?.alertMessage = error.localizedDescription
+    }
 }
 
 extension AppModel {

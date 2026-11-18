@@ -47,9 +47,15 @@ struct AppsPage: View {
                 Text("Apps")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundStyle(Theme.text)
-                Text("Give your bots apps and services. Keys stay in your Keychain." + (WorkspaceCenter.shared.isInUse ? " Shared across all workspaces." : ""))
+                Text("Give your bots apps and services. Keys stay in your Keychain.")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.secondary)
+                if WorkspaceCenter.shared.isInUse {
+                    Label("Shared across all workspaces: an app you turn on for a bot works the same wherever that bot lives.",
+                          systemImage: "square.on.square")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.secondary)
+                }
             }
             Spacer()
             SearchField(text: $search, prompt: "Search apps")

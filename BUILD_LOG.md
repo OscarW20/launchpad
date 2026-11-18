@@ -1495,3 +1495,25 @@ its popover, the sheets, moving and duplicating, the shared-bots choice, ⌘1 to
 - An unreadable `workspaces.json` is reported (`isUnreadable`), changes are refused (`unreadable`, before any copy is made) and it is only set aside by `resetUnreadable()` (kept as `workspaces.unreadable-<time>.json`).
 - Workspace names are unique ignoring case (`nameTaken`, so no second "General"). Deleting into itself says `sameWorkspace`.
 - Tests: 4 new/changed; suite 591, 0 failures, 3 skips.
+
+## Workspaces: damaged-file banner, scoped search, Apps note (2026-11-18)
+
+Three loose ends from the workspaces UI.
+
+- **Damaged workspaces file** (`WorkspaceCenter.damaged`, `WorkspaceBanner`): when the file that says which workspace each
+  bot and group is in exists but can't be read, a banner in the sidebar says so and offers **Reset Workspaces**. Until then
+  everything shows in General and moves, Add Workspace and Duplicate are refused (Backend's `unreadable`), so nothing is
+  overwritten. Reset calls `resetUnreadable()`: the old file is set aside and kept, never deleted, and a message names it.
+  A move that fails for this reason also raises the banner.
+- **⌘K search** (`switcherItems(allWorkspaces:)`, `QuickSwitcherSheet`): searches only the workspace you're in, and says so
+  in its placeholder. An **All workspaces** checkbox (shown once you have more than General) widens it, and then every chat,
+  bot, group and message hit carries its workspace's tile and name, so two bots with one name can be told apart. Pages and
+  actions are the same everywhere. Opening a result from another workspace switches to it.
+- **Apps**: a plain line under the page title, "Shared across all workspaces", shown once you have more than General.
+
+### Decisions
+- Reset is one click with no confirmation, because it deletes nothing: the old file is kept beside the new one.
+- A result's workspace is worked out from its chat, bot or group, not stored on the result, so the search core is unchanged.
+
+Tests: none new (UI only; the core behaviour is covered by Backend's tests). Not tried in the running app: the banner and
+Reset, the scoped search and its checkbox, the tiles on results, and the Apps line.

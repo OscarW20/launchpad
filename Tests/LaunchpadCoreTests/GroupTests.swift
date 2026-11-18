@@ -241,3 +241,64 @@ private extension BotGroup {
         return g
     }
 }
+
+final class DirectMentionTests: XCTestCase {
+    let bots = [Bot(id: "lead", name: "Lead"), Bot(id: "frontend", name: "Frontend"), Bot(id: "backend", name: "Backend")]
+    var group: BotGroup { BotGroup(id: "g", name: "g", members: ["lead", "frontend", "backend"], lead: "lead") }
+
+    func testMentionedBotAnswersFirstAndLeadStaysOut() async {
+        let team = ScriptedTeam(["backend": ["Signed in, forwarding works."]])
+        let o = GroupOrchestrator(group: group, bots: bots, history: [ChatMessage(role: .user, text: "@backend I've signed up, open the browser")],
+                                  summaryPath: "s", workspacePath: "w", runTurn: { await team.run($0) })
+        let outcome = await o.runTask()
+        XCTAssertEqual(outcome, .done)
+        XCTAssertEqual(team.order, ["backend"])
+        XCTAssertEqual(team.calls.first?.kind, .fromYou)
+    }
+
+    func testNoMentionStillStartsWithTheLead() async {
+        let team = ScriptedTeam(["lead": ["On it, no hand-off needed."]])
+        let o = GroupOrchestrator(group: group, bots: bots, history: [ChatMessage(role: .user, text: "How's it going?")],
+                                  summaryPath: "s", workspacePath: "w", runTurn: { await team.run($0) })
+        _ = await o.runTask()
+        XCTAssertEqual(team.order, ["lead"])
+    }
+
+    func testMessageSentMidRunIsAnsweredByTheBotYouTagged() async {
+        final class Box: @unchecked Sendable { var o: GroupOrchestrator? }
+        let box = Box()
+        let team = ScriptedTeam([
+            "lead": ["@frontend build the page", "All done."],
+            "frontend": ["Page built."],
+            "backend": ["Got it, signing in now."],
+        ])
+        let o = GroupOrchestrator(group: group, bots: bots, history: [ChatMessage(role: .user, text: "Build it")],
+                                  summaryPath: "s", workspacePath: "w") { req in
+            // While Frontend works, you tag Backend.
+            if req.bot.id == "frontend" { box.o?.interject(ChatMessage(role: .user, text: "@backend I've signed up")) }
+            return await team.run(req)
+        }
+        box.o = o
+        let outcome = await o.runTask()
+        XCTAssertEqual(outcome, .done)
+        XCTAssertEqual(team.order, ["lead", "frontend", "backend", "lead"], "Backend answers right after Frontend's turn, then the team carries on")
+        XCTAssertEqual(team.calls[2].kind, .fromYou)
+        XCTAssertTrue(team.calls[2].prompt.contains("I've signed up"))
+        XCTAssertTrue(o.history.contains { $0.text == "@backend I've signed up" })
+    }
+
+    func testUntaggedMidRunMessageGoesToTheLead() async {
+        final class Box: @unchecked Sendable { var o: GroupOrchestrator? }
+        let box = Box()
+        let team = ScriptedTeam(["lead": ["@frontend go", "Noted, will do.", "Done."], "frontend": ["ok"]])
+        let o = GroupOrchestrator(group: group, bots: bots, history: [ChatMessage(role: .user, text: "Build it")],
+                                  summaryPath: "s", workspacePath: "w") { req in
+            if req.bot.id == "frontend" { box.o?.interject(ChatMessage(role: .user, text: "Use blue buttons please")) }
+            return await team.run(req)
+        }
+        box.o = o
+        _ = await o.runTask()
+        XCTAssertEqual(team.order, ["lead", "frontend", "lead", "lead"])
+        XCTAssertEqual(team.calls[2].kind, .fromYou)
+    }
+}

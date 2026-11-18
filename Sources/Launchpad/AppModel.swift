@@ -220,6 +220,8 @@ final class AppModel {
     }
     /// Group chats that got a message while busy: run the group again when it's free.
     @ObservationIgnored var pendingGroupRun: Set<String> = []
+    /// The running group for each busy group chat, so what you write mid-run reaches it.
+    @ObservationIgnored var runningGroups: [String: GroupOrchestrator] = [:]
     @ObservationIgnored var usageTimer: Timer?
 
     // Mac features
@@ -1046,7 +1048,12 @@ final class AppModel {
         append(message, to: chatId)
         if meta.kind == .group {
             if isRunning(chatId) {
-                pendingGroupRun.insert(chatId)
+                if let running = runningGroups[chatId] {
+                    // The bot you @mentioned (or the lead) answers as soon as the current turn ends.
+                    running.interject(ChatMessage(id: message.id, role: .user, text: prompt, createdAt: message.createdAt))
+                } else {
+                    pendingGroupRun.insert(chatId)
+                }
             } else {
                 startGroup(chatId) { await $0.runTask() }
             }
@@ -1169,8 +1176,11 @@ final class AppModel {
         )
         busyChats.insert(chatId)
         workingChanged()
+        runningGroups[chatId] = orchestrator
         let task = Task { @MainActor [weak self] in
             let outcome = await body(orchestrator)
+            if self?.runningGroups[chatId] === orchestrator { self?.runningGroups[chatId] = nil }
+            if orchestrator.hasUnanswered { self?.pendingGroupRun.insert(chatId) }
             self?.groupFinished(chatId, group: group, outcome: outcome)
             self?.chatTasks[chatId] = nil
             self?.busyChats.remove(chatId)

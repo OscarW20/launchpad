@@ -271,10 +271,20 @@ struct ContextChip: View {
     }
 }
 
+/// How far the bottom of the chat is from the bottom of the window (lazy rows off screen report "far").
+private struct ChatBottomKey: PreferenceKey {
+    static var defaultValue: CGFloat = .greatestFiniteMagnitude
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
 struct MessagesList: View {
     @Environment(AppModel.self) private var model
     let chatId: String
     @State private var highlighted: String?
+    /// Following new messages only while you're at (or near) the bottom; scrolled up, it stays put.
+    @State private var atBottom = true
+    @State private var viewport: CGFloat = 0
+    @State private var unseen = false
 
     var body: some View {
         let messages = model.messages(for: chatId)
@@ -324,16 +334,52 @@ struct MessagesList: View {
                     Color.clear
                         .frame(height: 1)
                         .id("bottom")
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: ChatBottomKey.self, value: g.frame(in: .named("chatScroll")).maxY)
+                        })
                 }
                 .padding(.horizontal, 24)
                 .padding(.vertical, 20)
                 .frame(maxWidth: 860)
                 .frame(maxWidth: .infinity)
             }
+            .coordinateSpace(name: "chatScroll")
+            .background(GeometryReader { g in
+                Color.clear
+                    .onAppear { viewport = g.size.height }
+                    .onChange(of: g.size.height) { viewport = g.size.height }
+            })
+            .onPreferenceChange(ChatBottomKey.self) { bottom in
+                let near = bottom <= viewport + 120
+                if near != atBottom { atBottom = near }
+                if near { unseen = false }
+            }
+            .overlay(alignment: .bottom) {
+                if unseen && !atBottom {
+                    Button {
+                        unseen = false
+                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                    } label: {
+                        Label("New messages", systemImage: "arrow.down")
+                            .font(.system(size: 13, weight: .semibold))
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .background(Capsule().fill(Theme.accentStrong))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
             .onAppear {
                 if !jumpIfAsked(proxy) { proxy.scrollTo("bottom", anchor: .bottom) }
             }
-            .onChange(of: messages.count) { scrollDown(proxy) }
+            .onChange(of: messages.count) {
+                // Your own message always takes you down; anything else only if you were already at the bottom.
+                scrollDown(proxy, force: messages.last?.role == .user)
+            }
             .onChange(of: liveLength) { scrollDown(proxy) }
             .onChange(of: model.jump) { _ = jumpIfAsked(proxy) }
         }
@@ -351,7 +397,11 @@ struct MessagesList: View {
         return true
     }
 
-    private func scrollDown(_ proxy: ScrollViewProxy) {
+    private func scrollDown(_ proxy: ScrollViewProxy, force: Bool = false) {
+        guard atBottom || force else {
+            unseen = true
+            return
+        }
         withAnimation(.easeOut(duration: 0.15)) {
             proxy.scrollTo("bottom", anchor: .bottom)
         }

@@ -64,6 +64,8 @@ public enum GroupTurnKind: Equatable, Sendable {
     case view
     case summary
     case resume(note: String)
+    /// You wrote to this bot directly (by @mention, or the lead when you didn't name anyone).
+    case fromYou
 }
 
 public struct GroupTurnRequest: Sendable {
@@ -166,6 +168,11 @@ public struct GroupPrompts {
             return "Everyone has given their view (above). Sum it up for me in a few bullet points and give your recommendation. Don't @mention anyone. Note any decision in \(summaryPath)."
         case .resume(let note):
             return note
+        case .fromYou:
+            return """
+            I (the user) wrote to you directly: my latest message above. Answer me first and do what I asked. \
+            Keep it short. Only @mention a teammate if they need to act on it.
+            """
         }
     }
 
@@ -204,10 +211,71 @@ public final class GroupOrchestrator: @unchecked Sendable {
         history.append(message)
     }
 
+    /// Messages you sent while the group is working, not yet answered.
+    private var inbox: [ChatMessage] = []
+
+    /// You wrote while the group works. Everyone sees it from their next turn, and as soon as the current turn
+    /// ends the bot you @mentioned (or the lead) answers you before the team carries on.
+    public func interject(_ message: ChatMessage) {
+        lock.lock(); defer { lock.unlock() }
+        history.append(message)
+        inbox.append(message)
+    }
+
+    private func takeInbox() -> [ChatMessage] {
+        lock.lock(); defer { lock.unlock() }
+        let out = inbox
+        inbox = []
+        return out
+    }
+
+    /// Who your messages are for: the bots you @mentioned, in order, or the lead.
+    private func addressees(of messages: [ChatMessage]) -> [Bot] {
+        var ids: [String] = []
+        for m in messages {
+            for id in GroupPlan.mentions(in: m.text, group: group, bots: bots, speaker: nil) where !ids.contains(id) {
+                ids.append(id)
+            }
+        }
+        if ids.isEmpty, let lead { ids = [lead.id] }
+        return ids.compactMap { bots[$0] }
+    }
+
+    /// Answers anything you wrote mid-run. Returns an outcome only if the group has to stop.
+    private func answerYou() async -> GroupOutcome? {
+        // Keep going until nothing you wrote is waiting (you may write again while a bot answers).
+        while true {
+            let waiting = takeInbox()
+            guard !waiting.isEmpty else { return nil }
+            for bot in addressees(of: waiting) {
+                let r = await turn(bot, .fromYou)
+                if let stop = outcome(of: r) { return stop }
+            }
+        }
+    }
+
+    /// Something you wrote arrived too late for this run to answer (the app starts another run for it).
+    public var hasUnanswered: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return !inbox.isEmpty
+    }
+
     private var lead: Bot? { group.lead.flatMap { bots[$0] } }
 
     /// You posted a task (already recorded). The lead goes first.
     public func runTask() async -> GroupOutcome {
+        // You @mentioned someone: they answer you directly; the lead doesn't step in unless they hand work on.
+        if let yours = currentHistory().last(where: { $0.role == .user }) {
+            let named = GroupPlan.mentions(in: yours.text, group: group, bots: bots, speaker: nil)
+            if let first = named.first.flatMap({ bots[$0] }) {
+                var outcome = await drive(from: first, kind: .fromYou, leadReviews: false)
+                for id in named.dropFirst() where outcome == .done {
+                    guard let bot = bots[id] else { continue }
+                    outcome = await drive(from: bot, kind: .fromYou, leadReviews: false)
+                }
+                return outcome
+            }
+        }
         guard let lead else { return .noLead }
         return await drive(from: lead, kind: .leadStart)
     }
@@ -241,12 +309,13 @@ public final class GroupOrchestrator: @unchecked Sendable {
 
     // MARK: - The loop
 
-    private func drive(from first: Bot, kind: GroupTurnKind) async -> GroupOutcome {
+    private func drive(from first: Bot, kind: GroupTurnKind, leadReviews: Bool = true) async -> GroupOutcome {
         var handoffs = 0
         var speaker = first
         var reply = await turn(first, kind)
         while true {
             if let stop = outcome(of: reply) { return stop }
+            if let stop = await answerYou() { return stop }
             var next = GroupPlan.mentions(in: reply.text, group: group, bots: bots, speaker: speaker.id)
             let isLead = speaker.id == group.lead
             if isLead {
@@ -278,12 +347,14 @@ public final class GroupOrchestrator: @unchecked Sendable {
                         return out.sorted { $0.0 < $1.0 }.map(\.1)
                     }
                     replies.forEach(record)
+                    if let stop = await answerYou() { return stop }
                 } else {
                     var out: [ChatMessage] = []
                     for bot in batch {
                         let r = await turn(bot, .member(handedOnBy: handedBy))
                         out.append(r)
                         if outcome(of: r) != nil { break }
+                        if let stop = await answerYou() { return stop }
                     }
                     replies = out
                 }
@@ -301,7 +372,7 @@ public final class GroupOrchestrator: @unchecked Sendable {
                 parallel = false
             }
 
-            guard let lead else { return .done }
+            guard let lead, leadReviews || speaker.id == lead.id || handoffs > 0 else { return .done }
             speaker = lead
             reply = await turn(lead, .leadReview)
         }

@@ -30,6 +30,10 @@ public struct GuardConfig: Equatable, Sendable {
     /// Names (never values) of the variables this run holds secrets in: connector tokens and the like. A command that
     /// mentions one by name is refused (`GuardEngine.environmentReadReason`).
     public var secretVariables: [String] = []
+    /// Where credentials are kept (`CredentialFiles`): a bot may not read or change anything in these.
+    public var credentialRoots: [String] = CredentialFiles.roots(home: NSHomeDirectory())
+    /// The home folder `~` means, for `credentialRoots`.
+    public var home = NSHomeDirectory()
     /// Where the app writes your answers to approval cards: a folder the bot can't write, so a bot can't approve
     /// its own request.
     public var answers = ""
@@ -58,6 +62,9 @@ public struct GuardConfig: Equatable, Sendable {
         locked = json["locked"] as? [String] ?? []
         protected = json["protected"] as? [String] ?? []
         secretVariables = json["secretVariables"] as? [String] ?? []
+        // A rules file written before this existed protects your real home folder rather than nothing.
+        home = json["home"] as? String ?? NSHomeDirectory()
+        credentialRoots = json["credentialRoots"] as? [String] ?? CredentialFiles.roots(home: home)
         answers = json["answers"] as? String ?? ""
         noAlwaysForWrites = json["noAlwaysForWrites"] as? Bool ?? false
         changePatterns = json["changePatterns"] as? [String] ?? []
@@ -69,7 +76,7 @@ public struct GuardConfig: Equatable, Sendable {
 
     public var json: [String: Any] {
         ["bot": bot, "folder": folder, "roots": roots, "rules": rules, "alwaysAllowed": alwaysAllowed,
-         "locked": locked, "protected": protected, "secretVariables": secretVariables, "answers": answers, "noAlwaysForWrites": noAlwaysForWrites,
+         "locked": locked, "protected": protected, "secretVariables": secretVariables, "credentialRoots": credentialRoots, "home": home, "answers": answers, "noAlwaysForWrites": noAlwaysForWrites,
          "changePatterns": changePatterns, "trustedServers": trustedServers, "computerServers": computerServers,
          "dataFolderName": dataFolderName, "fullFreedom": fullFreedom]
     }
@@ -112,6 +119,7 @@ public enum GuardEngine {
 
     /// Locked skills and Launchpad's own files: always denied.
     public static func blocked(tool: String, input: [String: Any], cwd: String, config: GuardConfig) -> String? {
+        if let reason = credentialReason(tool: tool, input: input, cwd: cwd, config: config) { return reason }
         if fileTools.contains(tool), let raw = (input["file_path"] as? String) ?? (input["notebook_path"] as? String) {
             let path = ShellPath.resolve(raw, cwd: cwd)
             if let skill = config.locked.first(where: { ShellPath.inside(path, $0) }) { return lockedReason(skill) }

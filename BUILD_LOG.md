@@ -1333,3 +1333,37 @@ Claude with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, Codex with `-c model_auto_compact
 Tests: 33 new in `ContextCompactionTests` (settings, what each engine is told and through a real invocation, the event
 parser and message builder, the split, the prompt, cleaning and capping the summary, records and marking, the advisor's
 decisions including never-while-running, applying and the group case, the recap, and a local model's history).
+
+## The guard refuses credential files and the Keychain tool (2026-11-18)
+
+Tester found that in Ask mode a bot could read `~/.aws/credentials`, `~/.ssh/id_ed25519` and `~/.config/gh/hosts.yml`,
+run `security find-generic-password -w`, and read the same files with the Read tool. (Sending data out still asked, so this was
+reading it back, but it would also have exposed a file-based Vault.)
+
+- **Where** (`CredentialFiles`): SSH and GPG keys, AWS, Azure, Google Cloud, Kubernetes, OCI, GitHub CLI, `.netrc`, `.npmrc`,
+  `.pypirc`, git, Docker, Cargo, RubyGems and Terraform credentials, the AI tools' own sign-in files (`~/.claude.json`,
+  `~/.claude/.credentials.json`, `~/.codex/auth.json`), the Keychain folder, cookies, Safari, and the profile folders of
+  Chrome, Chromium, Brave, Edge, Vivaldi, Arc and Firefox, plus the Claude desktop app's folder.
+- **How** (`GuardEngine.credentialReason`, always denied like the protected-files rule, so whatever the rules or Full freedom
+  say): for shell commands, any word that is or resolves into one of those places, following `~`, `$HOME`, `..`, links in
+  the bot's own folder, globs (a shell `*` never matches a dot-folder, so `cat ~/*.txt` is fine but `~/.s*/id` isn't),
+  `{ssh,aws}` braces and `cd`; the same places found in the text of a command (variables, quotes, here-documents, inline Python
+  or Node); the Keychain tool's printing, exporting and unlocking commands; commands that print a sign-in from the tool that
+  holds it (`gh auth token`, `aws configure get`/`export-credentials`, `gcloud auth print-access-token`, `git credential`,
+  `op read`, `kubectl config view --raw`…); and recursive readers aimed at a folder that holds them (`grep -r … ~`, `cp -r ~`,
+  `tar … ~`, `find / -exec cat`). For the file tools (Read, Write, Edit, MultiEdit, NotebookEdit, Grep, Glob): their path.
+  Writing there is refused too: `~/.ssh/authorized_keys` is a way in, not a read.
+- A rules file from before this existed has no list, so it falls back to your real home folder instead of protecting nothing.
+
+### Decisions
+- **Friction, not a boundary.** A script file that opens one of these, an encoding trick, or an MCP server with file access isn't
+  seen. The boundary for secrets is the Vault design: a bot never holds the value.
+- **Any mention is refused, even `ls ~/.ssh`.** Listing names isn't harmful, but a bot never has a reason to be there.
+- **It also covers the Claude desktop app's folder**, which holds its cookies and local storage. That's where the Jira
+  ticket skill was read from; the app's importer does that, not a bot.
+- `ls ~/.*rc` is refused because that pattern also selects `~/.netrc` and `~/.npmrc`.
+
+Tests: 8 new in `CredentialGuardTests`: Tester's four cases and the same paths through the file tools, about 150 ways around
+(wrappers, nesting, substitutions, variables, globs, braces, links, inline code, recursive copies and searches, the Keychain
+tool and sign-in printers), about 75 ordinary commands that must still run, Full freedom with every rule set to allow, an
+old rules file, and a link in the bot's folder into a protected folder.

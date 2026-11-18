@@ -301,6 +301,8 @@ public enum GuardRulesFile {
         }
         c.noAlwaysForWrites = !writesOK
         c.secretVariables = secretVariables.sorted()
+        c.home = home.path
+        c.credentialRoots = CredentialFiles.roots(home: home.path)
         c.locked = lockedSkillDirs
         c.changePatterns = bot.rules.changePatterns
         c.trustedServers = trustedServers

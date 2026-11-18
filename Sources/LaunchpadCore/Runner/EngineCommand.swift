@@ -60,6 +60,10 @@ public struct RunOptions: Equatable, Sendable {
     /// the built-in tools bots use. Cuts a turn's prompt from ~44k to ~9k tokens and stops personal hooks busting
     /// the prompt cache every run. Launchpad's own guard (`--settings`), MCP apps and skills still apply.
     public var lean = false
+    /// Model for bots that don't name one (e.g. "sonnet"). nil = Claude Code's own default (usually the top model).
+    public var defaultModel: String?
+    /// Claude thinking effort for the run ("low", "medium", "high"); nil = Claude Code's default.
+    public var effort: String?
     /// No tools at all (e.g. a background memory review). Claude: `--tools ""`. Codex has no such switch; it runs
     /// read-only there.
     public var quiet = false
@@ -142,7 +146,10 @@ public enum EngineCommand {
             planned = id
         }
         if options.ephemeral { args.append("--no-session-persistence") }
-        if let model, !model.isEmpty { args += ["--model", model] }
+        if let model = (model?.isEmpty == false ? model : options.defaultModel), !model.isEmpty {
+            args += ["--model", model]
+        }
+        if let effort = options.effort, !effort.isEmpty, !options.quiet { args += ["--effort", effort] }
         if options.quiet {
             args += ["--tools", ""]
         } else if options.lean {

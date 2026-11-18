@@ -152,6 +152,10 @@ struct MessageMeta: View {
             if message.saved == true { Image(systemName: "bookmark.fill") }
             Text(TimeLabel.clock(message.createdAt))
             if ChatOps.isEdited(message) { Text("· edited") }
+            if let cost = message.costUSD, cost >= 0.005 {
+                Text("· ≈ $\(String(format: cost < 1 ? "%.2f" : "%.1f", cost))")
+                    .help("What this reply would cost at Claude API prices. On a Claude plan it's a guide to how much of your limit it used.")
+            }
         }
         .font(.system(size: 11))
         .foregroundStyle(Theme.secondary)

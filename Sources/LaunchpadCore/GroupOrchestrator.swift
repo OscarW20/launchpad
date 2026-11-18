@@ -169,7 +169,7 @@ public struct GroupPrompts {
         }
     }
 
-    private func clip(_ s: String, max: Int = 6000) -> String {
+    private func clip(_ s: String, max: Int = 2500) -> String {
         s.count > max ? String(s.prefix(max)) + "\n… (cut)" : s
     }
 }
@@ -332,7 +332,7 @@ public final class GroupOrchestrator: @unchecked Sendable {
         if session, let last = history.lastIndex(where: { $0.role == .bot && $0.botId == bot.id }) {
             start = last + 1
         }
-        let slice = Array(history[start...].suffix(40))
+        let slice = Array(history[start...].suffix(16))
         let prompt = prompts.prompt(for: bot, kind: kind, newMessages: slice, firstTurn: !session)
         return GroupTurnRequest(bot: bot, kind: kind, prompt: prompt)
     }

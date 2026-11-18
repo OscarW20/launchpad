@@ -235,6 +235,16 @@ final class AppModel {
     /// Groups in "Full freedom" (`ApprovalModes`).
     var fullFreedomGroups: Set<String> = []
     /// Settings: let "Always allow" cover sends, deletes, spending and changes.
+    /// Model for Claude bots that don't name their own. "" = Claude Code's default (the top model).
+    var botModel: String = UserDefaults.standard.string(forKey: "botModel") ?? "sonnet" {
+        didSet { UserDefaults.standard.set(botModel, forKey: "botModel") }
+    }
+
+    /// Claude thinking effort for bot replies. "" = Claude Code's default.
+    var botEffort: String = UserDefaults.standard.string(forKey: "botEffort") ?? "medium" {
+        didSet { UserDefaults.standard.set(botEffort, forKey: "botEffort") }
+    }
+
     /// Lean bot runs (see RunOptions.lean). On by default.
     var leanRuns: Bool = UserDefaults.standard.object(forKey: "leanRuns") as? Bool ?? true {
         didSet { UserDefaults.standard.set(leanRuns, forKey: "leanRuns") }
@@ -1236,6 +1246,10 @@ final class AppModel {
             return setup
         }
         o.lean = leanRuns
+        if bot.engine == .claude {
+            o.defaultModel = botModel.isEmpty ? nil : botModel
+            o.effort = botEffort.isEmpty ? nil : botEffort
+        }
 
         let available = Set(skills.map(\.id))
         let botSkills = SkillLinker.effectiveSkills(for: bot, groups: groups).filter(available.contains)

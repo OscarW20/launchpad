@@ -166,3 +166,19 @@ final class LeanRunTests: XCTestCase {
         XCTAssertFalse(cx.contains("--setting-sources"))
     }
 }
+
+final class ModelAndEffortTests: XCTestCase {
+    func testDefaultModelAndEffortApplyUnlessTheBotPicksItsOwn() {
+        var o = RunOptions()
+        o.defaultModel = "sonnet"
+        o.effort = "medium"
+        let dir = URL(fileURLWithPath: "/b")
+        let a = EngineCommand.invocation(for: Bot(id: "b", name: "B"), prompt: "x", botDirectory: dir, sessionId: nil, options: o).arguments
+        XCTAssertEqual(a[a.firstIndex(of: "--model")! + 1], "sonnet")
+        XCTAssertEqual(a[a.firstIndex(of: "--effort")! + 1], "medium")
+        let own = EngineCommand.invocation(for: Bot(id: "b", name: "B", model: "opus"), prompt: "x", botDirectory: dir, sessionId: nil, options: o).arguments
+        XCTAssertEqual(own[own.firstIndex(of: "--model")! + 1], "opus", "a bot's own model wins")
+        let none = EngineCommand.invocation(for: Bot(id: "b", name: "B"), prompt: "x", botDirectory: dir, sessionId: nil).arguments
+        XCTAssertFalse(none.contains("--model") || none.contains("--effort"))
+    }
+}

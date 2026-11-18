@@ -89,6 +89,30 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker(selection: Binding(get: { model.botModel }, set: { model.botModel = $0 })) {
+                    Text("Sonnet (recommended)").tag("sonnet")
+                    Text("Haiku (cheapest)").tag("haiku")
+                    Text("Opus").tag("opus")
+                    Text("Claude Code's default (top model, uses the most)").tag("")
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Model for bots")
+                        Text("For bots that don't pick their own model in the bot editor.")
+                            .font(.caption).foregroundStyle(Theme.secondary)
+                    }
+                }
+                Picker(selection: Binding(get: { model.botEffort }, set: { model.botEffort = $0 })) {
+                    Text("Low").tag("low")
+                    Text("Medium (recommended)").tag("medium")
+                    Text("High").tag("high")
+                    Text("Claude Code's default").tag("")
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Thinking effort")
+                        Text("How hard Claude bots think before answering. Higher uses more of your plan.")
+                            .font(.caption).foregroundStyle(Theme.secondary)
+                    }
+                }
                 Toggle(isOn: Binding(get: { !model.leanRuns }, set: { model.leanRuns = !$0 })) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Bots use my personal Claude Code setup")

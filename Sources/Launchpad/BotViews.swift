@@ -101,10 +101,14 @@ struct BotFormSections: View {
                 }
             }
             .pickerStyle(.segmented)
-            TextField("Model", text: Binding(
-                get: { bot.model ?? "" },
-                set: { bot.model = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-            ), prompt: Text(Self.modelPrompt(bot.engine)))
+            if bot.engine == .local {
+                TextField("Model", text: Binding(
+                    get: { bot.model ?? "" },
+                    set: { bot.model = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+                ), prompt: Text(Self.modelPrompt(bot.engine)))
+            } else {
+                ModelPicker(engine: bot.engine, model: $bot.model)
+            }
             if bot.engine == .local {
                 LocalServerFields(baseURL: $bot.localBaseURL)
                 if bot.model == nil {
@@ -366,6 +370,62 @@ struct NewBotSheet: View {
             }
             drafting = false
         }
+    }
+}
+
+// MARK: - Model picker
+
+/// A menu of models instead of a free-text box, with "Other…" for anything else.
+struct ModelPicker: View {
+    @Environment(AppModel.self) private var model
+    let engine: BotEngine
+    @Binding var model_: String?
+    @State private var typingOther = false
+
+    init(engine: BotEngine, model: Binding<String?>) {
+        self.engine = engine
+        self._model_ = model
+    }
+
+    static let claudeModels: [(id: String, title: String)] = [
+        ("sonnet", "Sonnet: good all-rounder"),
+        ("haiku", "Haiku: fastest, uses the least"),
+        ("opus", "Opus: strongest, uses the most"),
+    ]
+
+    private var choices: [(id: String, title: String)] { engine == .claude ? Self.claudeModels : [] }
+    private var current: String { model_ ?? "" }
+    private var isOther: Bool { typingOther || (!current.isEmpty && !choices.contains { $0.id == current }) }
+
+    var body: some View {
+        Picker("Model", selection: Binding(
+            get: { isOther ? "__other" : current },
+            set: { value in
+                if value == "__other" {
+                    typingOther = true
+                } else {
+                    typingOther = false
+                    model_ = value.isEmpty ? nil : value
+                }
+            }
+        )) {
+            Text(defaultTitle).tag("")
+            ForEach(choices, id: \.id) { Text($0.title).tag($0.id) }
+            Divider()
+            Text("Other…").tag("__other")
+        }
+        if isOther {
+            TextField("Model name", text: Binding(
+                get: { current },
+                set: { model_ = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+            ), prompt: Text(engine == .claude ? "e.g. claude-sonnet-5-5" : "e.g. gpt-5-codex"))
+        }
+    }
+
+    private var defaultTitle: String {
+        guard engine == .claude else { return "Default (Codex's own setting)" }
+        let name = Self.claudeModels.first { $0.id == model.botModel }?.title.components(separatedBy: ":").first
+        return model.botModel.isEmpty ? "Default (Claude Code's default)" : "Default (\(name ?? model.botModel), from Settings)"
     }
 }
 

@@ -314,6 +314,7 @@ final class AppModel {
         savedPrompts = savedPromptsStore.load()
         reloadAll()
         removeBlankConnectors()
+        warmUpBrowser()
         usage = usageStore.load()
         selectedChatId = chats.first?.id
 
@@ -890,6 +891,13 @@ final class AppModel {
         if let groupId, let g = group(groupId), g.connectors.contains(preset.id) != on { toggle(connector: preset.id, forGroup: groupId) }
     }
 
+    /// Starts the shared browser early when you have the Browser app, so a bot's first page doesn't wait.
+    func warmUpBrowser() {
+        if let browser = connectors.first(where: SharedBrowser.isBrowser) {
+            _ = SharedBrowserHost.shared.readyURL(for: browser, locator: runner.locator, paths: paths)
+        }
+    }
+
     /// Removes empty "New connector" entries made by the old Add button.
     func removeBlankConnectors() {
         for c in connectors where c.name == "New connector" && (c.url ?? "https://") == "https://" && (c.command ?? "").isEmpty {
@@ -1270,6 +1278,10 @@ final class AppModel {
         o.contextWindow = contextByChat[chat.id]?.window
         o.connectors = MCPConfig.effective(for: bot, groups: groups, all: connectors)
         o.environment = MCPConfig.environment(o.connectors, secrets: secrets, engine: bot.engine)
+        // The Browser app goes through Launchpad's long-lived browser, so it stays open after the reply.
+        if let browser = o.connectors.first(where: SharedBrowser.isBrowser) {
+            o.sharedBrowserURL = SharedBrowserHost.shared.readyURL(for: browser, locator: runner.locator, paths: paths)
+        }
         if chat.kind == .group, let gid = chat.groupId {
             try? FileManager.default.createDirectory(at: groupStore.workspace(gid), withIntermediateDirectories: true)
             o.addDirectories = [groupStore.dir(gid)]

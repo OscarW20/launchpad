@@ -182,3 +182,33 @@ final class ModelAndEffortTests: XCTestCase {
         XCTAssertFalse(none.contains("--model") || none.contains("--effort"))
     }
 }
+
+final class SharedBrowserTests: XCTestCase {
+    let browser = Connector(id: "playwright", name: "Browser", kind: .stdio, command: "npx", args: ["-y", "@playwright/mcp@latest", "--isolated"])
+
+    func testServerArgumentsShareOneBrowserWithASavedProfile() {
+        XCTAssertEqual(SharedBrowser.serverArguments(from: browser, port: 8931, profileDir: "/p"),
+                       ["-y", "@playwright/mcp@latest", "--port", "8931", "--shared-browser-context", "--user-data-dir", "/p"])
+    }
+
+    func testRunsConnectToTheSharedBrowserWhenItIsUp() throws {
+        var o = RunOptions()
+        o.manageConnectors = true
+        o.connectors = [browser, Connector(id: "notion", name: "Notion", kind: .http, url: "https://mcp.notion.com/mcp")]
+        o.sandboxProfile = "(version 1)(allow default)"
+        o.sharedBrowserURL = SharedBrowser.url(port: 8931)
+        let a = EngineCommand.invocation(for: Bot(id: "t", name: "T"), prompt: "x", botDirectory: URL(fileURLWithPath: "/b"), sessionId: nil, options: o).arguments
+        let json = a[a.firstIndex(of: "--mcp-config")! + 1]
+        let servers = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])?["mcpServers"] as? [String: Any])
+        let pw = try XCTUnwrap(servers["playwright"] as? [String: Any])
+        XCTAssertEqual(pw["url"] as? String, "http://localhost:8931/mcp")
+        XCTAssertEqual(pw["type"] as? String, "http")
+        XCTAssertNotNil(servers["notion"], "other apps are untouched")
+        // Same server name, so tool names and permissions don't change.
+        XCTAssertTrue(a[a.firstIndex(of: "--allowedTools")! + 1].contains("mcp__playwright"))
+    }
+
+    func testWithoutTheSharedBrowserItStillWorksPerRun() {
+        XCTAssertEqual(MCPConfig.adjusted([browser], sandboxed: true).first?.args.last, "--no-sandbox")
+    }
+}

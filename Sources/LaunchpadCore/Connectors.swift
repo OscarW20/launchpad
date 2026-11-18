@@ -162,7 +162,9 @@ public enum MCPConfig {
     /// sandbox inside another ("sandbox initialization failed: Operation not permitted"), so under Launchpad's
     /// sandbox it starts with `--no-sandbox`. The bot's whole process tree, browser included, stays inside
     /// Launchpad's sandbox, which is the stricter of the two.
-    public static func adjusted(_ connectors: [Connector], sandboxed: Bool) -> [Connector] {
+    public static func adjusted(_ connectors: [Connector], sandboxed: Bool, sharedBrowserURL: String? = nil) -> [Connector] {
+        // The app's shared browser (see SharedBrowser) is preferred: it outlives the reply.
+        if let url = sharedBrowserURL { return SharedBrowser.pointed(connectors, at: url) }
         guard sandboxed else { return connectors }
         return connectors.map { c in
             guard c.kind == .stdio, c.args.contains(where: { $0.hasPrefix("@playwright/mcp") }),

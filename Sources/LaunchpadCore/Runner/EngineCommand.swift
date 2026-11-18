@@ -60,6 +60,8 @@ public struct RunOptions: Equatable, Sendable {
     /// the built-in tools bots use. Cuts a turn's prompt from ~44k to ~9k tokens and stops personal hooks busting
     /// the prompt cache every run. Launchpad's own guard (`--settings`), MCP apps and skills still apply.
     public var lean = false
+    /// The app's long-lived browser server (SharedBrowser). When set, the Browser app connects to it.
+    public var sharedBrowserURL: String?
     /// Model for bots that don't name one (e.g. "sonnet"). nil = Claude Code's own default (usually the top model).
     public var defaultModel: String?
     /// Claude thinking effort for the run ("low", "medium", "high"); nil = Claude Code's default.
@@ -186,7 +188,7 @@ public enum EngineCommand {
             args += ["--append-system-prompt", append]
         }
         if options.manageConnectors {
-            args += ["--strict-mcp-config", "--mcp-config", MCPConfig.claudeJSON(MCPConfig.adjusted(options.connectors, sandboxed: options.sandboxProfile != nil))]
+            args += ["--strict-mcp-config", "--mcp-config", MCPConfig.claudeJSON(MCPConfig.adjusted(options.connectors, sandboxed: options.sandboxProfile != nil, sharedBrowserURL: options.sharedBrowserURL))]
         }
         if let settings = GuardHookSetup.claudeSettings(hook: options.guardHook, legacyCommand: options.guardCommand,
                                                         sandboxed: options.sandboxProfile != nil) {
@@ -228,7 +230,7 @@ public enum EngineCommand {
             let roots = options.addDirectories.map { MCPConfig.toml($0.path) }.joined(separator: ",")
             args += ["-c", "sandbox_workspace_write.writable_roots=[\(roots)]"]
         }
-        args += MCPConfig.codexArgs(MCPConfig.adjusted(options.connectors, sandboxed: options.sandboxProfile != nil))
+        args += MCPConfig.codexArgs(MCPConfig.adjusted(options.connectors, sandboxed: options.sandboxProfile != nil, sharedBrowserURL: options.sharedBrowserURL))
         args += EngineCompaction.codexArguments(settings: options.autoCompact, window: options.contextWindow)
         if let effort = options.reasoningEffort, !effort.isEmpty {
             args += ["-c", "model_reasoning_effort=\(MCPConfig.toml(effort))"]

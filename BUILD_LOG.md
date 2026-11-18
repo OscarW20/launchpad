@@ -1618,3 +1618,11 @@ Oscar: "full freedom doesn't seem to be working, they are still asking me for pe
 
 ### Approval card says which mode the chat is in (2026-11-18)
 `LiveApprovalCardView` shows a small line under the category: "Group mode: <Full freedom / Ask me>" in a group chat, "One-to-one chats always ask" in a one-to-one chat (nothing for a chat the app can't find, such as a Create ticket run). So a card that still appears says at once which mode applied. Untested in the running app.
+
+### Keep Full freedom? when copying a group (2026-11-18)
+A copied group starts in Ask me, so it never quietly gets a looser setting. When the original is in Full freedom, the copy now asks:
+- **Duplicate Group into Workspace** (`MoveSheet`): a radio choice, "Start in Ask me" (default) or "Keep Full freedom", shown only for a group in Full freedom.
+- **Add to <workspace>** on a team card: the copy confirm gets two buttons, "Add a Copy, Start in Ask me" and "Add a Copy, Keep Full freedom", only when the team it copies is in Full freedom. A fresh install has no original, so it asks nothing.
+- The choice is applied with the existing `setApprovalMode`, after the copy exists. Groups in Ask me are unchanged and aren't asked.
+
+Not tried in the running app: both prompts and that the copy's mode comes out as chosen.

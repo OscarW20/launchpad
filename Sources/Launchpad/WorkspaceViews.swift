@@ -639,6 +639,13 @@ struct MoveSheet: View {
     let move: WorkspaceMove
     @State private var shared: [SharedBot] = []
     @State private var problem: String?
+    @State private var keepFullFreedom = false
+
+    /// Only a group that's in Full freedom raises the question; a copy otherwise starts in Ask me.
+    private var asksAboutFreedom: Bool {
+        if case .duplicateGroup(let g) = move.kind { return model.approvalMode(for: g.id) == .fullFreedom }
+        return false
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -651,6 +658,13 @@ struct MoveSheet: View {
             } else {
                 Text("\(shared.map { model.bot($0.botId)?.name ?? $0.botId }.joined(separator: ", ")) also \(shared.count == 1 ? "belongs" : "belong") to other groups that aren't moving: \(sharedGroups). A bot lives in one workspace, so choose:")
                     .foregroundStyle(Theme.text).fixedSize(horizontal: false, vertical: true)
+            }
+            if asksAboutFreedom, shared.isEmpty {
+                Picker("Keep Full freedom?", selection: $keepFullFreedom) {
+                    Text("Start in Ask me").tag(false)
+                    Text("Keep Full freedom").tag(true)
+                }
+                .pickerStyle(.radioGroup)
             }
             if let problem { Text(problem).font(.callout).foregroundStyle(Theme.warning).fixedSize(horizontal: false, vertical: true) }
             HStack {
@@ -699,7 +713,7 @@ struct MoveSheet: View {
     }
 
     private func run(_ policy: SharedBotPolicy) {
-        switch WorkspaceCenter.shared.perform(move, shared: policy) {
+        switch WorkspaceCenter.shared.perform(move, shared: policy, keepFullFreedom: keepFullFreedom) {
         case .done: dismiss()
         case .failed(let message): problem = message
         case .sharedBots(let found): shared = found

@@ -56,10 +56,16 @@ struct MarketplaceView: View {
             titleVisibility: .visible,
             presenting: confirmingPack
         ) { pack in
-            Button("Add a Copy") { WorkspaceCenter.shared.addTeam(pack) }
+            if let source = WorkspaceCenter.shared.copySource(family: pack.groupId, in: model.groups), model.approvalMode(for: source.id) == .fullFreedom {
+                // The original is in Full freedom: ask, with Ask me as the first choice.
+                Button("Add a Copy, Start in Ask me") { WorkspaceCenter.shared.addTeam(pack) }
+                Button("Add a Copy, Keep Full freedom") { WorkspaceCenter.shared.addTeam(pack, keepFullFreedom: true) }
+            } else {
+                Button("Add a Copy") { WorkspaceCenter.shared.addTeam(pack) }
+            }
             Button("Cancel", role: .cancel) {}
         } message: { pack in
-            Text("This makes your own copy of \(pack.name) here: its own bots, empty memory and chats. It never touches the one in your other workspace.")
+            Text("This makes your own copy of \(pack.name) here: its own bots, empty memory and chats. It never touches the one in your other workspace. A copy starts in Ask me unless you choose to keep Full freedom.")
         }
     }
 

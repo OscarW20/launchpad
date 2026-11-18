@@ -299,14 +299,15 @@ final class WorkspaceCenter {
         case sharedBots([SharedBot])
     }
 
-    func perform(_ move: WorkspaceMove, shared policy: SharedBotPolicy = .ask) -> Outcome {
+    func perform(_ move: WorkspaceMove, shared policy: SharedBotPolicy = .ask, keepFullFreedom: Bool = false) -> Outcome {
         guard let store, let model else { return .failed("Launchpad isn't ready yet.") }
+        var copied: BotGroup?
         do {
             switch move.kind {
             case .group(let g): try store.move(group: g.id, to: move.destination.id, shared: policy)
             case .bot(let b): try store.move(bot: b.id, to: move.destination.id)
             case .duplicate(let b): try store.duplicate(bot: b.id, into: move.destination.id)
-            case .duplicateGroup(let g): try store.duplicate(group: g.id, into: move.destination.id)
+            case .duplicateGroup(let g): copied = try store.duplicate(group: g.id, into: move.destination.id).group
             }
         } catch WorkspaceError.sharedBots(let bots) {
             return .sharedBots(bots)
@@ -317,6 +318,8 @@ final class WorkspaceCenter {
         syncKnown()
         model.reloadAll()
         reload()
+        // A copy starts in Ask me; only an explicit choice carries Full freedom over.
+        if keepFullFreedom, let copied { model.setApprovalMode(.fullFreedom, for: copied) }
         if let b = model.selectedBotId, id(forBot: b) != currentId { model.selectedBotId = nil }
         if let g = model.selectedGroupId, id(forGroup: g) != currentId { model.selectedGroupId = nil }
         if let c = model.selectedChatId, let chat = model.chat(c), id(for: chat) != currentId { model.selectedChatId = nil }
@@ -359,13 +362,22 @@ final class WorkspaceCenter {
     }
 
     /// "Add to <workspace>" on a team card: opens the team if it's here, copies it from another workspace, or installs it.
-    func addTeam(_ pack: TeamPack) {
+    /// The group "Add to <workspace>" would copy, when another workspace has this team (the first one, in display order).
+    func copySource(family: String, in groups: [BotGroup]) -> BotGroup? {
+        for ws in workspaces where ws.id != currentId {
+            if let g = groups.first(where: { id(forGroup: $0.id) == ws.id && (layout.groupOrigins[$0.id]?.rootId ?? $0.id) == family }) { return g }
+        }
+        return nil
+    }
+
+    func addTeam(_ pack: TeamPack, keepFullFreedom: Bool = false) {
         guard let store, let model else { return }
         do {
             let result = try store.addTeam(pack, to: currentId)
             syncKnown()
             model.reloadAll()
             reload()
+            if keepFullFreedom, result.how == .copied { model.setApprovalMode(.fullFreedom, for: result.group) }
             model.openChat(with: result.group)
         } catch {
             report(error)

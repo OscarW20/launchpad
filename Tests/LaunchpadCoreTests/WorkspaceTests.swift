@@ -450,4 +450,81 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(bots.loadAll().count, botCount + pack.everyone.count)
         XCTAssertTrue(store.problems().isEmpty)
     }
+
+    // MARK: Renaming a group
+
+    func testRenameTrimsAndKeepsIdFolderChatsAndRoutineTargets() throws {
+        let a = try bot("Ava")
+        let g = try group("Dev Team", [a])
+        let chats = ChatStore(paths: paths)
+        let chat = try chats.createChat(with: g)
+        var custom = ChatMeta(title: "My own title", kind: .group, groupId: g.id); custom.sessions = ["x": "s1"]
+        try chats.save(custom)
+        try Data("# #Dev Team: summary\n\nKept by the lead.\n\n## Decisions\n- ship it\n".utf8).write(to: groups.summary(g.id))
+
+        let renamed = try store.rename(group: g.id, to: "  #Biscuit Dev  ")
+        XCTAssertEqual(renamed.name, "Biscuit Dev")
+        XCTAssertEqual(try groups.load(id: g.id).name, "Biscuit Dev")
+        // Same id and folder; members and lead untouched.
+        XCTAssertEqual(renamed.id, g.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: groups.dir(g.id).path))
+        XCTAssertEqual(renamed.members, g.members)
+        XCTAssertEqual(renamed.lead, g.lead)
+        XCTAssertEqual(groups.loadAll().count, 1)
+        // Chats keep their group id and history; only the default title follows.
+        let after = chats.loadAll()
+        XCTAssertEqual(after.first { $0.id == chat.id }?.title, "#Biscuit Dev")
+        XCTAssertEqual(after.first { $0.id == chat.id }?.groupId, g.id)
+        XCTAssertEqual(after.first { $0.id == custom.id }?.title, "My own title")
+        XCTAssertEqual(after.first { $0.id == custom.id }?.sessions, ["x": "s1"])
+        // The summary keeps what the lead wrote; only the heading follows.
+        XCTAssertEqual(try String(contentsOf: groups.summary(g.id), encoding: .utf8),
+                       "# #Biscuit Dev: summary\n\nKept by the lead.\n\n## Decisions\n- ship it\n")
+        // A routine that targets the group still does, and still sits in its workspace.
+        XCTAssertEqual(Routine.Target.group(g.id).id, g.id)
+        XCTAssertEqual(store.workspaceId(for: .group(g.id)), "general")
+    }
+
+    func testRenameNeedsANameAndOnlyHasToBeUniqueInItsWorkspace() throws {
+        let a = try bot("Ava"), b = try bot("Ben")
+        let one = try group("Dev Team", [a]), two = try group("Ops", [b])
+        try store.create(name: "Biscuit")
+        XCTAssertThrowsError(try store.rename(group: one.id, to: "  # ")) { XCTAssertEqual($0 as? WorkspaceError, .emptyName) }
+        XCTAssertThrowsError(try store.rename(group: one.id, to: "ops")) { XCTAssertEqual($0 as? WorkspaceError, .nameTaken("ops")) }
+        XCTAssertEqual(try groups.load(id: one.id).name, "Dev Team")   // nothing changed
+        XCTAssertThrowsError(try store.rename(group: "ghost", to: "X"))
+        // Its own name in another case is fine, and renaming to the same text changes nothing.
+        XCTAssertEqual(try store.rename(group: one.id, to: "DEV TEAM").name, "DEV TEAM")
+        XCTAssertEqual(try store.rename(group: one.id, to: "DEV TEAM").name, "DEV TEAM")
+        // Another workspace can use a name that's taken elsewhere.
+        try store.move(group: two.id, to: "biscuit")
+        XCTAssertEqual(try store.rename(group: two.id, to: "Dev Team").name, "Dev Team")
+        XCTAssertEqual(store.workspaceId(forGroup: two.id), "biscuit")
+        // ...but not one that's taken in its own workspace.
+        let three = try group("Third", [try bot("Cy")])
+        try store.move(group: three.id, to: "biscuit")
+        XCTAssertThrowsError(try store.rename(group: three.id, to: "dev team")) { XCTAssertEqual($0 as? WorkspaceError, .nameTaken("dev team")) }
+    }
+
+    func testRenamedCopyKeepsItsCopiedFromNote() throws {
+        let t = try team()
+        let copy = try store.duplicate(group: t.group.id, into: "biscuit").group
+        try store.rename(group: copy.id, to: "Biscuit Dev")
+        try store.rename(group: t.group.id, to: "Launchpad Dev")
+        let origin = try XCTUnwrap(store.origin(ofGroup: copy.id))
+        XCTAssertEqual(origin.groupId, t.group.id)                                   // points at the id, not a name
+        XCTAssertEqual(try groups.load(id: origin.groupId).name, "Launchpad Dev")    // so the note reads the new name
+        XCTAssertEqual(store.familyId(ofGroup: copy.id), t.group.id)
+        XCTAssertEqual(store.team(family: t.group.id, in: "biscuit")?.id, copy.id)   // still recognised as the same team
+        // Copying again after a rename numbers against the new names.
+        XCTAssertEqual(try store.duplicate(group: t.group.id, into: "biscuit").group.name, "Launchpad Dev")
+    }
+
+    func testRenameRefusesAnUnreadableFile() throws {
+        let g = try group("Dev Team", [try bot("Ava")])
+        try FileManager.default.createDirectory(at: store.file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: store.file)
+        XCTAssertThrowsError(try store.rename(group: g.id, to: "New")) { XCTAssertEqual($0 as? WorkspaceError, .unreadable) }
+        XCTAssertEqual(try groups.load(id: g.id).name, "Dev Team")
+    }
 }

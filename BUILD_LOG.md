@@ -1558,3 +1558,10 @@ Oscar was in Biscuit, wanted his own Dev team there, and the Marketplace card sa
 - **Copied from <group> in <workspace>** under the group's name in its info, like bots already show.
 
 Tests: none new (UI only; the core is covered by Backend's tests).
+
+### Workspaces: renaming a group (2026-11-18)
+Each workspace can name its copy of a group differently. `WorkspaceStore.rename(group:to:)`:
+- Trims the name and drops a leading "#"; empty is refused (`emptyName`). It only has to be unique among the groups in the same workspace, ignoring case (`nameTaken`); another workspace may use the same name, and changing only the case of its own name is fine. Refused while the workspaces file is unreadable.
+- Safe by design: the group's id and folder never change, and routines, hand-offs, chats and "Copied from" notes all point at the id, so they follow. The group's chats keep any title you gave them and follow the default "#Name"; the heading the app wrote in SUMMARY.md follows, and nothing the lead wrote is touched.
+- Note: the app's group edit sheet saved the name straight through `GroupStore.save`, with no uniqueness check; it should call this instead.
+- Tests: 4 new; suite 608, 0 failures, 3 skips. Not hand-tested.

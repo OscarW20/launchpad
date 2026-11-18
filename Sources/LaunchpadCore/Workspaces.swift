@@ -416,6 +416,45 @@ public final class WorkspaceStore: @unchecked Sendable {
         return copy
     }
 
+    // MARK: Renaming a group
+
+    /// Renames a group. The name is trimmed (and a leading "#" dropped), can't be empty, and only has to be different from
+    /// the other groups in the same workspace (ignoring case), so each workspace can name its own copy. Changing only the
+    /// case of its own name is fine. The group's id and folder never change, so routines, hand-offs and "Copied from" notes
+    /// (which all point at the id) follow it. Its group chats keep any title you gave them but follow the old default
+    /// "#Name", and the heading of SUMMARY.md follows too. Returns the saved group.
+    @discardableResult
+    public func rename(group groupId: String, to newName: String) throws -> BotGroup {
+        try requireReadable()
+        let clean = newName.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { throw WorkspaceError.emptyName }
+        var group = try groupStore.load(id: groupId)
+        let old = group
+        if old.name == clean { return group }
+        let mine = workspaceId(forGroup: groupId)
+        if groups(in: mine).contains(where: { $0.id != groupId && Self.sameName($0.name, clean) }) { throw WorkspaceError.nameTaken(clean) }
+
+        group.name = clean
+        try groupStore.save(group)
+
+        // SUMMARY.md: only the heading the app wrote, never anything the lead added.
+        let summary = groupStore.summary(groupId)
+        if let text = try? String(contentsOf: summary, encoding: .utf8) {
+            let oldHeading = "# \(old.displayName): summary", newHeading = "# \(group.displayName): summary"
+            if text.hasPrefix(oldHeading) {
+                try? Data((newHeading + text.dropFirst(oldHeading.count)).utf8).write(to: summary, options: .atomic)
+            }
+        }
+        // Group chats still carrying the default title.
+        let chatStore = ChatStore(paths: paths, fileManager: fm)
+        for var chat in chatStore.loadAll() where chat.kind == .group && chat.groupId == groupId && chat.title == old.displayName {
+            chat.title = group.displayName
+            try? chatStore.save(chat)
+        }
+        return group
+    }
+
     // MARK: Duplicating a group
 
     public enum TeamAdded: Sendable { case alreadyThere, copied, installed }

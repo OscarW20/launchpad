@@ -56,9 +56,15 @@ main() {
     fail "this checkout and GitHub's main have gone separate ways (diverged). In $(pwd -P) run: git pull --rebase"
   fi
 
-  # The build script may be newer than the one that was here when this started; run the new one.
-  ./scripts/make-app.sh --install
-  say "==> Done: Launchpad is up to date at $(git rev-parse --short HEAD)"
+  # The build script may be newer than the one that was here when this started; run the new one. It leaves a note on
+  # whether macOS will ask for your Keychain password again, which goes on the end of the Done line so the app shows it.
+  NOTE_FILE="$LOG.note"
+  rm -f "$NOTE_FILE"
+  LAUNCHPAD_NOTE_FILE="$NOTE_FILE" ./scripts/make-app.sh --install
+  NOTE=""
+  if [[ -s "$NOTE_FILE" ]]; then NOTE=" $(head -n 1 "$NOTE_FILE")"; fi
+  rm -f "$NOTE_FILE"
+  say "==> Done: Launchpad is up to date at $(git rev-parse --short HEAD).${NOTE}"
 }
 
 main "$@"

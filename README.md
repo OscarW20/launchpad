@@ -42,8 +42,21 @@ Or just build `dist/Launchpad.app` and open it:
 ./scripts/make-app.sh --open
 ```
 
-The app is ad-hoc signed by default, which runs on your Mac only. To sign it with a Developer ID certificate from
-your keychain (hardened runtime, ready to notarise), name the certificate:
+**Why macOS keeps asking for your Keychain password after an update.** Your connector tokens and secrets live in the
+login Keychain, and macOS decides whether an app may read them by the app's code signature. An ad-hoc signature is just
+the hash of that one build, so every update looks like a different app and the Keychain asks again, even if you chose
+Always Allow last time. Builds are therefore signed with a certificate whenever there is one: your "Apple Development"
+certificate (Xcode makes it when you sign in with your Apple ID), else the local one from `scripts/setup-signing.sh`.
+The first update signed this way may ask once more (choose Always Allow, once per saved secret); after that the
+signature is the same every time. Every update ends with a line saying whether macOS should ask again (it is in
+`~/Library/Logs/Launchpad/update.log` and shown by the app). With no certificate at all the build is ad-hoc signed and
+the line says so. `LAUNCHPAD_LOCAL_SIGNING=off` forces ad-hoc.
+
+Installing never needs an admin password: Launchpad goes into `/Applications` if your user can write there, else
+`~/Applications`.
+
+To sign with a Developer ID certificate from your keychain instead (hardened runtime, ready to notarise), name the
+certificate:
 
 ```bash
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/make-app.sh

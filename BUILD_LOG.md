@@ -1400,3 +1400,47 @@ The app now uses the compaction core (`Context/`). Claude and Codex already comp
 Tests: 3 new in `ContextCompactionTests` (who writes the summary, when a summary still applies, the group preface).
 Not tried in the running app: a real summary run, the engines honouring the threshold, a bot restarting from the
 summary in a one-to-one chat and in a group, the dimmed messages and the summary line, the Compact button and Settings.
+
+## Why every update asks for the Keychain password, and the fix (2026-11-18)
+
+The prompt was "Launchpad wants to use your confidential information stored in 'Launchpad' in your keychain" (enter the
+login keychain password; Always Allow, Deny, Allow). It is the login Keychain, not an admin or install password.
+
+**Cause.** The app's secrets are in the login Keychain (`KeychainSecretStore`, service "Launchpad"), where macOS lets an app
+read an item by the app's code signature. Builds were ad-hoc signed, and an ad-hoc signature is the hash of that one build:
+the installed app's designated requirement was a bare `cdhash`, two builds a commit apart had different ones, and a test item
+created by an ad-hoc program in a throwaway keychain listed exactly that `cdhash` as its trusted app. So every update was a
+different app to macOS, and Always Allow only ever covered the build it was clicked on.
+
+- **Signing** (`scripts/make-app.sh`): local builds are now signed with a certificate whenever there is one, so the identity is
+  the same every build. Order: `SIGN_IDENTITY` (Developer ID, hardened, unchanged), then an "Apple Development" certificate
+  from the keychain (it carries a Team ID; Xcode makes it when you sign in with your Apple ID), then the local certificate
+  from `scripts/setup-signing.sh`, then ad-hoc. No hardened runtime and no entitlements for local builds, as before, and
+  `--timestamp=none` so an update works offline. `LAUNCHPAD_LOCAL_IDENTITY` names a certificate and
+  `LAUNCHPAD_LOCAL_SIGNING=off` forces ad-hoc.
+- **A certificate that won't sign doesn't lose the update.** Each signing call gives up after 120 s
+  (`LAUNCHPAD_SIGN_TIMEOUT`): the first use of a certificate's key makes macOS ask "codesign wants to sign using key…", and an
+  update nobody is watching shouldn't wait for that for ever. A failure or a timeout falls back to ad-hoc and says so.
+- **It checks itself** (`designated`, `signature_note`): an install compares the designated requirement of the app it replaces
+  with the new one and ends with one plain line: same signature (no prompt expected), first update signed this way (may ask
+  once, choose Always Allow), ad-hoc (will ask every update, and how to fix it), or couldn't sign. It is printed as
+  `==> Note:`, and `update.sh` puts it on the end of the `==> Done:` line, so the app shows it.
+- **No admin password to install**: `/Applications` if your user can write there, else `~/Applications` (with a note, and a
+  pointer to an older copy left in `/Applications`). A failure to delete the old copy no longer fails the install.
+
+### Decisions
+- **Apple Development before the local certificate**, which reverses the "left as it is" decision in the install entry above.
+  macOS also records a partition for each item's trust; one built from a Team ID is stable, and I believe one for code with no
+  Team ID (a self-signed certificate) is not, but I couldn't test that, so the certificate with a Team ID goes first. The
+  local certificate stays as the choice for a Mac with no Apple certificate.
+- **Not run by me:** `setup-signing.sh`, and signing with the real certificate. Both use the Keychain tool, which the guard
+  now refuses to bots, and the first signing with a key may need you to click Always Allow.
+- The Apple Development certificate lasts a year. When it lapses the note says the build is ad-hoc.
+
+Tests: no Swift changes. Two real ad-hoc builds installed to a temporary folder: different requirements (`cdhash …24dd…` and
+`…9bfe…`), note says it will ask every update. With a stand-in `codesign` that only records and never signs: the Apple
+Development certificate is picked on this Mac and signs the two helpers and the app (3 calls, no hardened runtime, no
+timestamp server); same signature gives "no prompt", ad-hoc to stable gives "may ask once more"; an unusable certificate and a
+signing step that hangs both fall back to ad-hoc with the note (the hang after the 3 s limit used in the test); the
+Developer ID path is unchanged (3 hardened calls, entitlements on the app). Not tested: a real signing with the certificate, that the prompt
+actually stops after Always Allow, and an update started by the Update button.

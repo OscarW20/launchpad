@@ -1275,7 +1275,8 @@ final class AppModel {
         let free = ApprovalModes.mode(for: chat, free: fullFreedomGroups).skipsApprovals(for: bot)
         var liveApprovals = false
         if bot.engine == .claude {
-            if let guardURL = guardExecutable, let rules = writeGuardRules(for: bot, fullFreedom: free) {
+            let ticketAllowances = TicketCenter.shared.guardAllowances(forChat: chat.id)
+            if let guardURL = guardExecutable, let rules = writeGuardRules(for: bot, fullFreedom: free, ticketAllowances: ticketAllowances) {
                 let base = inbox.base(chatId: chat.id, runId: runId)
                 o.guardHook = GuardHookSetup(helper: guardURL.path, rulesFile: rules.path, askBase: base.path,
                                              approvalsDir: grants.directory.path)
@@ -1649,7 +1650,9 @@ final class AppModel {
 
     /// Writes the bot's rules file for the guard. nil if it couldn't be written.
     @discardableResult
-    func writeGuardRules(for bot: Bot, fullFreedom: Bool = false) -> URL? {
+    /// - Parameter ticketAllowances: for a Create ticket run in "File without asking" mode: the Jira create call is
+    ///   allowed without a card, in a rules file of its own so the bot's other runs never see it.
+    func writeGuardRules(for bot: Bot, fullFreedom: Bool = false, ticketAllowances: [String] = []) -> URL? {
         let skillIds = SkillLinker.effectiveSkills(for: bot, groups: groups)
         let lockedDirs = SkillLocks.lockedDirs(skillIds: skillIds, locked: lockedSkills, paths: paths, botId: bot.id)
         // Every group folder it works in, so a rules file written for one chat suits the others too.
@@ -1657,8 +1660,8 @@ final class AppModel {
         // Team notes (Shared/TEAM.md) are every bot's to edit; the chat tools never need asking.
         let cfg = GuardRulesFile.config(for: bot, paths: paths, extraRoots: extra + [paths.shared], lockedSkillDirs: lockedDirs,
                                         alwaysForWrites: alwaysForWrites, trustedServers: [ChatToolsSetup.serverKey],
-                                        fullFreedom: fullFreedom)
-        return try? GuardRulesFile.write(cfg, botId: bot.id, paths: paths)
+                                        fullFreedom: fullFreedom, extraAlwaysAllowed: ticketAllowances)
+        return try? GuardRulesFile.write(cfg, botId: bot.id, paths: paths, variant: ticketAllowances.isEmpty ? nil : TicketGuard.variant)
     }
 
     func rewriteAllGuardRules() {

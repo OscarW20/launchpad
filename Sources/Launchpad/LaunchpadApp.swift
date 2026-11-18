@@ -73,6 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.applicationIconImage = icon
         }
         NSApp.activate(ignoringOtherApps: true)
+        // Right-click › Services › "Create ticket with Claude" (NSServices in Info.plist).
+        NSApp.servicesProvider = TicketServiceProvider.shared
     }
 
     /// With the menu bar icon on, closing the window keeps Launchpad (and your bots) running.

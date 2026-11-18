@@ -64,6 +64,16 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSAppleEventsUsageDescription</key><string>A bot working in Launchpad wants to control another app.</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSServices</key>
+  <array>
+    <dict>
+      <key>NSMenuItem</key><dict><key>default</key><string>Create ticket with Claude</string></dict>
+      <key>NSMessage</key><string>createTicket</string>
+      <key>NSPortName</key><string>Launchpad</string>
+      <key>NSSendTypes</key>
+      <array><string>NSStringPboardType</string><string>public.utf8-plain-text</string></array>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST

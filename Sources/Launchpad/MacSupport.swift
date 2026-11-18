@@ -175,8 +175,27 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         UNUserNotificationCenter.current().add(request) { _ in }
     }
 
+    /// A ticket was filed: says so (even with Launchpad in front, since you're usually in another app) and opens the
+    /// ticket when clicked. Only Create ticket calls this, with a link it has checked.
+    @MainActor
+    func postTicket(_ result: TicketResult, duplicate: Bool) {
+        guard Self.available, Self.enabled else { return }
+        let content = UNMutableNotificationContent()
+        content.title = duplicate ? "Already in Jira: \(result.key)" : "Ticket created: \(result.key)"
+        content.body = "The link is on your clipboard. Click to open it."
+        content.sound = .default
+        content.userInfo = ["ticketURL": result.url.absoluteString]
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)) { _ in }
+    }
+
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
+        if let link = response.notification.request.content.userInfo["ticketURL"] as? String,
+           let url = URL(string: link), url.scheme == "https" {
+            if response.actionIdentifier != UNNotificationDismissActionIdentifier { NSWorkspace.shared.open(url) }
+            completionHandler()
+            return
+        }
         let chatId = response.notification.request.content.userInfo["chatId"] as? String
         let text = (response as? UNTextInputNotificationResponse)?.userText.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let action = response.actionIdentifier

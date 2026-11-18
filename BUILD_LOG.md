@@ -1177,3 +1177,43 @@ service, hotkey and capture panel come next). All in `Sources/LaunchpadCore/Tick
 Tests: 35 new (`TicketTests`, `SkillImportTests`): settings, cleaning and cutting, the fence, the result checks
 (including look-alike hosts, other tickets' links and credentials in links), the guard in both modes, a bot's attempts to
 edit the settings file, and the importer (copy, no replace, links refused, nothing left behind, finding it on disk).
+
+## Create ticket: Service, hotkey, panel and run (2026-11-18)
+
+The app side of Create ticket, on Backend's core (`Sources/LaunchpadCore/Tickets/`). Select text in any app, then
+right-click › Services › **Create ticket with Claude** or press **⌃⌥T**; a panel opens, a bot drafts the ticket with
+the skill and files it in Jira.
+
+- **Service** (`NSServices` in `make-app.sh`'s Info.plist, `TicketServiceProvider`): the selection arrives on the
+  pasteboard, so it needs no permission. It shows in Services once the app is in Applications and macOS has refreshed
+  the list (log out and in, or run `/System/Library/CoreServices/pbs -update`).
+- **Hotkey** (`TicketCenter`, ⌃⌥ plus a letter chosen in Settings, B left out for Quick Ask): reads the selection through
+  Accessibility, else presses ⌘C and puts the clipboard back. Both need Accessibility; without it the panel opens empty
+  with a button that opens System Settings, and Settings says so too. The window title is read the same way and is
+  only ever best effort.
+- **Panel** (`TicketPanelView`, modelled on Quick Ask): the selected text (editable, so a ticket can be typed when
+  nothing was selected), who to assign it to, a note, the Ask / Skip label, and the core's warnings (cut to fit, looks
+  like a secret). Banners for Jira not connected (Open Apps), skill missing (Import Skill) and a bad project key.
+- **Run**: a chat of its own with the chosen bot (a Claude bot with the Jira connector: a Codex bot has no guard, so
+  "Ask me first" couldn't be enforced). The chat shows a short message; the bot gets `TicketPrompt.build`. In Ask mode
+  the Jira create call raises an approval card, shown in the panel and in the chat. In Skip mode the chat gets a rules
+  file with only that call allowed (`TicketGuard.allowances`), for the length of the run.
+- **Result**: only a key in the project plus a link on your Jira site counts (`TicketOutcome.parse`). Then the link is
+  copied, a notification opens it, and the panel offers Open Ticket. A failure keeps the draft and offers Try Again,
+  whose prompt checks for an existing ticket first. The run is followed by `TicketCenter`, so closing the panel
+  doesn't lose the notification.
+- **Settings › Create ticket**: hotkey on/off and letter, Accessibility status, Jira project and site, bot, skill (with
+  Import from this Mac), approval mode (with the warning), longest selection, and the assignee list.
+
+### Decisions
+- Quick Ask's hotkey handler answered every hot key; it now only answers its own, or Create ticket's would have
+  toggled Quick Ask as well.
+- `TicketSettings.cleanHost` is now public, for the Jira site field.
+- The Skip allowance applies only to a chat with a ticket being filed, and ends with the run, so chatting with that bot
+  later never loosens anything.
+- A selection is shown to you in the panel before anything is sent; Skip mode only skips the card, not the panel.
+
+Tests: 11 new in `TicketRunTests` (hotkey letters, which bots can file tickets, the chat text, and that the Services
+plist and the Swift handler agree on the message name). Nothing was tried in the running app: the Service entry, the
+hotkey and Accessibility, the panel, a real run against Jira, the approval card in the panel, the notification and
+the clipboard.

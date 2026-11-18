@@ -297,6 +297,7 @@ extension AppModel {
         Notifier.shared.install(model: self)
         ComputerUseController.shared.start(locator: runner.locator)
         Updater.shared.start()
+        TicketCenter.shared.install(model: self)
     }
 }
 #endif

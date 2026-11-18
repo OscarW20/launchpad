@@ -133,6 +133,8 @@ struct SettingsView: View {
 
             MacSettingsSection()
 
+            TicketSettingsSection()
+
             ComputerUseSection()
 
             Section {

@@ -31,7 +31,12 @@ final class QuickAsk {
         guard on else { return }
         if !handlerInstalled {
             var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-            InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
+            InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+                // Only ⌃⌥B is Quick Ask's: leave any other hot key (Create ticket's) to its own handler.
+                var id = EventHotKeyID()
+                GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
+                                  MemoryLayout<EventHotKeyID>.size, nil, &id)
+                guard id.signature == OSType(0x4C50_5141) else { return OSStatus(eventNotHandledErr) }
                 DispatchQueue.main.async { MainActor.assumeIsolated { QuickAsk.shared.toggle() } }
                 return noErr
             }, 1, &type, nil, nil)

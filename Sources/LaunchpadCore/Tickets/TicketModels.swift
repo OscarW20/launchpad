@@ -124,7 +124,7 @@ public struct TicketSettings: Codable, Equatable, Sendable {
         return list.filter { $0.isValid && seen.insert($0.id).inserted }
     }
 
-    static func cleanHost(_ host: String?) -> String? {
+    public static func cleanHost(_ host: String?) -> String? {
         guard var h = host?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !h.isEmpty else { return nil }
         for prefix in ["https://", "http://"] where h.hasPrefix(prefix) { h.removeFirst(prefix.count) }
         h = String(h.prefix { $0 != "/" })

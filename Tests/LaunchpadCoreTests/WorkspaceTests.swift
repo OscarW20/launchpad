@@ -527,4 +527,183 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertThrowsError(try store.rename(group: g.id, to: "New")) { XCTAssertEqual($0 as? WorkspaceError, .unreadable) }
         XCTAssertEqual(try groups.load(id: g.id).name, "Dev Team")
     }
+
+    // MARK: Teams: no role twice (Oscar's 15-member group)
+
+    private let pack = TeamPacks.dev
+
+    private func expectOneOfEach(_ g: BotGroup, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(g.everyone.count, pack.everyone.count, "members: \(g.everyone)", file: file, line: line)
+        XCTAssertEqual(Set(g.everyone).count, g.everyone.count, file: file, line: line)
+        let roles = g.everyone.map { store.load().rootBot($0) }
+        XCTAssertEqual(roles, pack.everyone, file: file, line: line)           // same roles, same order, lead first
+        XCTAssertEqual(g.lead, g.everyone.first, file: file, line: line)
+    }
+
+    /// The dev team in General, plus another group that shares some of its bots (like "dev team - launchpad").
+    private func devTeamWithAnotherGroup() throws -> BotGroup {
+        let (_, g) = try Hiring(paths: paths).hireTeam(pack)
+        let other = try bots.create(name: "Chief")
+        try groups.create(name: "Other", members: [other.id, "tester", "shipper", "planner", "designer", "frontend", "backend", "lead"], lead: other.id)
+        return g
+    }
+
+    func testReAddingATeamAfterMovingItDoesNotAddTheOriginalsAgain() throws {
+        let g = try devTeamWithAnotherGroup()
+        try store.create(name: "SLS")
+        // Move it while its bots are shared with the other group: the moving group gets its own copies.
+        try store.move(group: g.id, to: "sls", shared: .duplicate)
+        expectOneOfEach(try groups.load(id: g.id))
+        // This is what used to put the originals back: 8 copies + 7 originals = 15.
+        let again = try Hiring(paths: paths).hireTeam(pack)
+        expectOneOfEach(again.group)
+        expectOneOfEach(try groups.load(id: g.id))
+        XCTAssertTrue(store.problems().isEmpty)
+        XCTAssertEqual(try Hiring(paths: paths).hireTeam(pack).group.members, again.group.members)   // and again: nothing changes
+    }
+
+    func testAddTeamCopiesExactlyOnceEachAndTwiceChangesNothing() throws {
+        let g = try devTeamWithAnotherGroup()
+        try store.create(name: "SLS"); try store.create(name: "Biscuit")
+        try store.move(group: g.id, to: "sls", shared: .duplicate)
+        _ = try Hiring(paths: paths).hireTeam(pack)                    // the step that corrupted Oscar's source
+
+        let first = try store.addTeam(pack, to: "biscuit")
+        XCTAssertEqual(first.how, .copied)
+        expectOneOfEach(first.group)
+        XCTAssertEqual(store.workspaceId(forGroup: first.group.id), "biscuit")
+        for id in first.group.everyone { XCTAssertEqual(store.workspaceId(forBot: id), "biscuit") }
+        XCTAssertTrue(store.problems().isEmpty)
+
+        let botCount = bots.loadAll().count, groupCount = groups.loadAll().count
+        let second = try store.addTeam(pack, to: "biscuit")
+        XCTAssertEqual(second.how, .alreadyThere)
+        XCTAssertEqual(second.group.id, first.group.id)
+        XCTAssertEqual(bots.loadAll().count, botCount)
+        XCTAssertEqual(groups.loadAll().count, groupCount)
+        expectOneOfEach(try groups.load(id: first.group.id))
+    }
+
+    func testFreshInstallIntoAWorkspaceHasOneOfEachAndTouchesNothingElsewhere() throws {
+        // Lone bots with the same names in General and another workspace must neither be reused nor moved.
+        let loneLead = try bots.create(name: "Lead")
+        try store.create(name: "Biscuit"); try store.create(name: "Launchpad")
+        try store.move(bot: loneLead.id, to: "launchpad")
+        let before = bots.loadAll().count
+
+        let r = try store.addTeam(pack, to: "biscuit")
+        XCTAssertEqual(r.how, .installed)
+        expectOneOfEach(r.group)
+        XCTAssertEqual(bots.loadAll().count, before + pack.everyone.count)
+        XCTAssertEqual(store.workspaceId(forBot: loneLead.id), "launchpad")
+        XCTAssertFalse(r.group.everyone.contains(loneLead.id))
+        for id in r.group.everyone { XCTAssertEqual(store.workspaceId(forBot: id), "biscuit") }
+        XCTAssertEqual(r.group.id, pack.groupId)
+        XCTAssertEqual(store.team(family: pack.groupId, in: "biscuit")?.id, r.group.id)
+        XCTAssertEqual(try store.addTeam(pack, to: "biscuit").how, .alreadyThere)
+        XCTAssertEqual(bots.loadAll().count, before + pack.everyone.count)
+        XCTAssertTrue(store.problems().isEmpty)
+        // The same pack into a second workspace is its own team.
+        let other = try store.addTeam(pack, to: "launchpad")
+        XCTAssertEqual(other.how, .copied)
+        expectOneOfEach(other.group)
+        XCTAssertNotEqual(other.group.id, r.group.id)
+    }
+
+    func testTheFirstInstallStillWorksInGeneralAndReusesGeneralBots() throws {
+        let lead = try bots.create(name: "Lead")           // id "lead", in General
+        let (team, group) = try Hiring(paths: paths).hireTeam(pack)
+        XCTAssertEqual(team.first?.id, lead.id)
+        expectOneOfEach(group)
+        XCTAssertEqual(bots.loadAll().count, pack.everyone.count)
+    }
+
+    // MARK: Repair
+
+    /// Oscar's data: the source group got its originals back (15 members), and the Biscuit copy copied all 15.
+    private func corruptedLikeOscars() throws -> (source: BotGroup, copy: BotGroup, originals: [String]) {
+        let g = try devTeamWithAnotherGroup()
+        let originals = g.everyone
+        try store.create(name: "SLS"); try store.create(name: "Biscuit")
+        try store.move(group: g.id, to: "sls", shared: .duplicate)
+        var bad = try groups.load(id: g.id)
+        bad.members += originals.filter { !bad.members.contains($0) && $0 != bad.lead }        // what hireTeam used to do
+        try groups.save(bad)
+        XCTAssertEqual(bad.everyone.count, 15)
+        let copy = try store.duplicate(group: g.id, into: "biscuit").group
+        XCTAssertEqual(copy.everyone.count, 15)
+        return (try groups.load(id: g.id), copy, originals)
+    }
+
+    func testRepairPlanFindsBothBrokenGroupsAndChangesNothing() throws {
+        let c = try corruptedLikeOscars()
+        let botsBefore = bots.loadAll().count
+        let plan = store.repairPlan()
+        XCTAssertEqual(Set(plan.fixes.map(\.groupId)), [c.source.id, c.copy.id])
+        XCTAssertEqual(plan.fixes.first { $0.groupId == c.source.id }?.removeIds.count, 7)   // originals from another workspace
+        XCTAssertTrue(plan.fixes.first { $0.groupId == c.source.id }!.remove.values.allSatisfy { $0 == .otherWorkspace })
+        XCTAssertEqual(plan.fixes.first { $0.groupId == c.copy.id }?.removeIds.count, 7)     // the copied-again extras
+        XCTAssertTrue(plan.fixes.first { $0.groupId == c.copy.id }!.remove.values.allSatisfy { $0 == .duplicateRole })
+        XCTAssertEqual(plan.unusedCopies.count, 7)
+        XCTAssertEqual(try groups.load(id: c.copy.id).everyone.count, 15)      // nothing has changed yet
+        XCTAssertEqual(bots.loadAll().count, botsBefore)
+    }
+
+    func testApplyingTheRepairLeavesOneOfEachKeepsEveryBotAndABackup() throws {
+        let c = try corruptedLikeOscars()
+        let botsBefore = bots.loadAll().map(\.id).sorted()
+        let changed = try store.applyRepair(store.repairPlan())
+        XCTAssertEqual(Set(changed), [c.source.id, c.copy.id])
+        expectOneOfEach(try groups.load(id: c.source.id))
+        expectOneOfEach(try groups.load(id: c.copy.id))
+        XCTAssertEqual(try groups.load(id: c.source.id).lead, c.source.lead)           // leads untouched
+        XCTAssertEqual(bots.loadAll().map(\.id).sorted(), botsBefore)                    // no bot deleted by the repair
+        XCTAssertTrue(store.problems().isEmpty)
+        for g in [c.source, c.copy] {
+            let backup = groups.dir(g.id).appendingPathComponent("group.before-repair.json")
+            let old = try JSONCoding.decoder().decode(BotGroup.self, from: Data(contentsOf: backup))
+            XCTAssertEqual(old.everyone.count, 15)                                       // the old group is kept
+        }
+        // The team card still recognises the repaired copy, and running the repair again finds nothing to change.
+        XCTAssertEqual(store.team(family: pack.groupId, in: "biscuit")?.id, c.copy.id)
+        XCTAssertTrue(store.repairPlan().fixes.isEmpty)
+        XCTAssertEqual(try store.applyRepair(store.repairPlan()), [])
+    }
+
+    func testUnusedCopiesAreOnlyRemovedWhenNothingUsesThemAndTheyGoToTheTrash() throws {
+        let c = try corruptedLikeOscars()
+        try store.applyRepair(store.repairPlan())
+        let plan = store.repairPlan()
+        XCTAssertEqual(plan.unusedCopies.count, 7)
+        // One of them has since been talked to: it's kept.
+        let used = plan.unusedCopies[0]
+        try ChatStore(paths: paths).save(ChatMeta(title: "x", kind: .bot, botId: used))
+        XCTAssertEqual(store.repairPlan().unusedCopies.count, 6)
+        // One has memory of its own: it's kept too.
+        let learned = plan.unusedCopies[1]
+        try Data("# memory\n- something worth keeping\n".utf8).write(to: paths.memoryMD(learned))
+        // Asking to remove all seven only removes the five that are really unused.
+        let removed = try store.removeUnusedCopies(plan.unusedCopies)
+        XCTAssertEqual(removed.count, 5)
+        XCTAssertFalse(removed.contains(used)); XCTAssertFalse(removed.contains(learned))
+        XCTAssertNotNil(try? bots.load(id: used)); XCTAssertNotNil(try? bots.load(id: learned))
+        // Bots in a group, and the originals, can never be removed this way.
+        let members = try groups.load(id: c.copy.id).everyone
+        XCTAssertEqual(try store.removeUnusedCopies(members + c.originals), [])
+        for id in members { XCTAssertNotNil(try? bots.load(id: id)) }
+        XCTAssertTrue(store.problems().isEmpty)
+    }
+
+    func testRepairNeverTakesTheLeadOutAndIsRefusedWhileTheFileIsUnreadable() throws {
+        let c = try corruptedLikeOscars()
+        var plan = store.repairPlan()
+        // Even a plan that names the lead can't remove it.
+        plan.fixes = plan.fixes.map { f in var f = f; f.remove[c.source.lead!] = .duplicateRole; return f }
+        try store.applyRepair(plan)
+        XCTAssertEqual(try groups.load(id: c.source.id).lead, c.source.lead)
+        XCTAssertTrue(try groups.load(id: c.source.id).everyone.contains(c.source.lead!))
+        try Data("not json".utf8).write(to: store.file)
+        XCTAssertThrowsError(try store.applyRepair(store.repairPlan())) { XCTAssertEqual($0 as? WorkspaceError, .unreadable) }
+        XCTAssertThrowsError(try store.removeUnusedCopies(["x"])) { XCTAssertEqual($0 as? WorkspaceError, .unreadable) }
+    }
 }

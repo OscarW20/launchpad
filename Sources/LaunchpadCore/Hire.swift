@@ -201,12 +201,14 @@ public enum HireCatalog {
 
 /// Adds templates to your Launchpad folder.
 public struct Hiring {
+    let paths: LaunchpadPaths
     let bots: BotStore
     let groups: GroupStore
     let skills: SkillStore
     let connectors: ConnectorStore
 
     public init(paths: LaunchpadPaths) {
+        self.paths = paths
         bots = BotStore(paths: paths)
         groups = GroupStore(paths: paths)
         skills = SkillStore(paths: paths)
@@ -233,7 +235,33 @@ public struct Hiring {
     /// except re-hiring a bot you deleted and putting it back in the group.
     @discardableResult
     public func hireTeam(_ pack: TeamPack) throws -> (bots: [Bot], group: BotGroup) {
-        var existing = bots.loadAll()
+        let workspaces = WorkspaceStore(paths: paths)
+        let layout = workspaces.load()
+        // The pack's group may already exist, in any workspace, and its members may be copies of the pack's bots (a team
+        // moved to another workspace gets its own). Only roles it has neither the bot nor a copy for are added, and
+        // anything added goes in the group's own workspace, so a group never ends up with a role twice.
+        if var group = groups.loadAll().first(where: { $0.id == pack.groupId }) {
+            let home = layout.groups[group.id] ?? Workspace.generalId
+            let have = Set(group.everyone.map { layout.rootBot($0) })
+            var added = false
+            for id in pack.everyone where !have.contains(id) {
+                let bot: Bot
+                if let found = bots.loadAll().first(where: { $0.id == id && (layout.bots[$0.id] ?? Workspace.generalId) == home }) {
+                    bot = found
+                } else {
+                    guard let t = HireCatalog.template(id) else { throw BotStoreError.notFound(id) }
+                    bot = try hire(t)
+                    try workspaces.place(bot: bot.id, in: home, role: id)
+                }
+                if !group.members.contains(bot.id), group.lead != bot.id { group.members.append(bot.id); added = true }
+            }
+            if added { try groups.save(group) }
+            return (group.everyone.compactMap { try? bots.load(id: $0) }, group)
+        }
+
+        // A new group: reuse bots you already have with the same id, but only ones that are in General (where a new group
+        // starts), so it never reaches into another workspace.
+        var existing = bots.loadAll().filter { (layout.bots[$0.id] ?? Workspace.generalId) == Workspace.generalId }
         var team: [Bot] = []
         for id in pack.everyone {
             if let found = existing.first(where: { $0.id == id }) {
@@ -241,20 +269,14 @@ public struct Hiring {
             } else {
                 guard let t = HireCatalog.template(id) else { throw BotStoreError.notFound(id) }
                 let bot = try hire(t)
+                try workspaces.noteRole(bot: bot.id, role: id)
                 existing.append(bot)
                 team.append(bot)
             }
         }
         let ids = team.map(\.id)
-        let leadId = team.first { $0.id == pack.lead }?.id ?? ids.first
-        if var group = groups.loadAll().first(where: { $0.id == pack.groupId }) {
-            let missing = ids.filter { !group.members.contains($0) && group.lead != $0 }
-            if !missing.isEmpty {
-                group.members += missing
-                try groups.save(group)
-            }
-            return (team, group)
-        }
+        // `team` follows `pack.everyone`, so the lead is the bot made (or reused) for the lead's role, whatever its id.
+        let leadId = pack.everyone.firstIndex(of: pack.lead).flatMap { $0 < ids.count ? ids[$0] : nil } ?? ids.first
         var group = try groups.create(name: pack.groupId, emoji: pack.emoji, members: ids, lead: leadId,
                                       rules: pack.rules, handoffLimit: pack.handoffLimit, id: pack.groupId)
         if !pack.groupSkills.isEmpty {

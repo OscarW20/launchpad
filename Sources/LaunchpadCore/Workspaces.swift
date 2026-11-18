@@ -51,18 +51,21 @@ public struct WorkspaceLayout: Codable, Equatable, Sendable {
     public var bots: [String: String]
     public var origins: [String: BotOrigin]
     public var groupOrigins: [String: GroupOrigin]
+    /// A bot hired from a team template under a numbered id ("lead-2", because "lead" was taken) to the template's id, so it still counts as that role.
+    public var roles: [String: String]
 
     public init(workspaces: [Workspace] = [.general], groups: [String: String] = [:], bots: [String: String] = [:],
-                origins: [String: BotOrigin] = [:], groupOrigins: [String: GroupOrigin] = [:]) {
+                origins: [String: BotOrigin] = [:], groupOrigins: [String: GroupOrigin] = [:], roles: [String: String] = [:]) {
         self.workspaces = workspaces
         self.groups = groups
         self.bots = bots
         self.origins = origins
         self.groupOrigins = groupOrigins
+        self.roles = roles
         normalise()
     }
 
-    enum CodingKeys: String, CodingKey { case workspaces, groups, bots, origins, groupOrigins }
+    enum CodingKeys: String, CodingKey { case workspaces, groups, bots, origins, groupOrigins, roles }
     // Decoding is strict: a key that's missing is fine, one with the wrong type makes the file unreadable (never silently dropped).
 
     public init(from decoder: Decoder) throws {
@@ -72,7 +75,16 @@ public struct WorkspaceLayout: Codable, Equatable, Sendable {
         bots = (try c.decodeIfPresent([String: String].self, forKey: .bots)) ?? [:]
         origins = (try c.decodeIfPresent([String: BotOrigin].self, forKey: .origins)) ?? [:]
         groupOrigins = (try c.decodeIfPresent([String: GroupOrigin].self, forKey: .groupOrigins)) ?? [:]
+        roles = (try c.decodeIfPresent([String: String].self, forKey: .roles)) ?? [:]
         normalise()
+    }
+
+    /// The bot a copy was made from, through copies of copies: "lead-3" -> "lead". A bot that isn't a copy is its own root,
+    /// and one hired from a team template under a numbered id counts as the template's role.
+    public func rootBot(_ id: String) -> String {
+        var current = id, steps = 0
+        while let from = origins[current]?.botId, steps < 32 { current = from; steps += 1 }
+        return roles[current] ?? current
     }
 
     /// General exists and comes first, ids are unique, and assignments to General or to a missing workspace are dropped.
@@ -567,9 +579,153 @@ public final class WorkspaceStore: @unchecked Sendable {
         if let elsewhere = workspaces(holding: pack.groupId).first, let from = team(family: pack.groupId, in: elsewhere) {
             return (try duplicate(group: from.id, into: workspaceId).group, .copied)
         }
-        let (_, group) = try Hiring(paths: paths).hireTeam(pack)
-        try move(group: group.id, to: workspaceId, shared: .duplicate)
-        return (try groupStore.load(id: group.id), .installed)
+        return (try install(pack, in: workspaceId), .installed)
+    }
+
+    /// Installs a pack straight into one workspace: every role is a bot of that workspace (reusing one that's already
+    /// there, otherwise a new one), so nothing is shared with, moved from or copied out of another workspace.
+    private func install(_ pack: TeamPack, in workspaceId: String) throws -> BotGroup {
+        let hiring = Hiring(paths: paths)
+        let layout = load()
+        let here = bots(in: workspaceId)
+        var team: [Bot] = []
+        var created: [String] = []
+        do {
+            for id in pack.everyone {
+                if let found = here.first(where: { layout.rootBot($0.id) == id }) {
+                    team.append(found)
+                } else {
+                    guard let t = HireCatalog.template(id) else { throw BotStoreError.notFound(id) }
+                    let bot = try hiring.hire(t)
+                    created.append(bot.id)
+                    try place(bot: bot.id, in: workspaceId, role: id)
+                    team.append(bot)
+                }
+            }
+            let ids = team.map(\.id)
+            let taken = Set((try? fm.contentsOfDirectory(atPath: paths.groups.path)) ?? [])
+            let groupId = Slug.unique(pack.groupId, taken: taken)
+            var group = try groupStore.create(name: pack.groupId, emoji: pack.emoji, members: ids, lead: ids.first,
+                                              rules: pack.rules, handoffLimit: pack.handoffLimit, id: groupId)
+            if !pack.groupSkills.isEmpty {
+                for id in pack.groupSkills { try hiring.skills.installIfMissing(id) }
+                group.skills = pack.groupSkills
+                try groupStore.save(group)
+            }
+            try mutate { l in
+                Self.assign(&l.groups, group.id, workspaceId)
+                // A group whose id had to be numbered is still this team.
+                if group.id != pack.groupId { l.groupOrigins[group.id] = GroupOrigin(groupId: pack.groupId, workspaceId: Workspace.generalId, rootId: pack.groupId) }
+            }
+            return group
+        } catch {
+            for id in created { try? fm.removeItem(at: paths.botDir(id)) }
+            try? mutate { l in for id in created { l.bots.removeValue(forKey: id) } }
+            throw error
+        }
+    }
+
+    /// Puts a bot in a workspace without any of the group rules (for a bot that was just made and isn't in a group yet).
+    func place(bot botId: String, in workspaceId: String, role: String? = nil) throws {
+        try mutate { l in
+            guard l.workspaces.contains(where: { $0.id == workspaceId }) else { throw WorkspaceError.notFound(workspaceId) }
+            Self.assign(&l.bots, botId, workspaceId)
+            if let role, role != botId { l.roles[botId] = role }
+        }
+    }
+
+    /// Notes that a bot hired under a numbered id is the template's role.
+    func noteRole(bot botId: String, role: String) throws {
+        guard role != botId else { return }
+        try mutate { l in l.roles[botId] = role }
+    }
+
+    // MARK: Repairing groups
+
+    public struct GroupRepair: Hashable, Sendable {
+        public enum Reason: Sendable { case otherWorkspace, duplicateRole }
+        public var groupId: String
+        public var groupName: String
+        /// Members to take out of the group (the bots themselves are kept).
+        public var remove: [String: Reason]
+        public var removeIds: [String] { remove.keys.sorted() }
+    }
+
+    public struct RepairPlan: Sendable {
+        public var fixes: [GroupRepair]
+        /// Copies that nothing uses once the fixes are applied: not in a group, no chats, memory still empty.
+        public var unusedCopies: [String]
+        public var isEmpty: Bool { fixes.isEmpty && unusedCopies.isEmpty }
+    }
+
+    /// Groups that hold a role twice (a bot and its copy, or two copies of one bot) or a member from another workspace,
+    /// which is what a workspace move followed by re-adding a team could do. Nothing changes until `applyRepair`.
+    public func repairPlan() -> RepairPlan {
+        let layout = load()
+        var fixes: [GroupRepair] = []
+        var after: [String: Set<String>] = [:]   // members that stay, per group
+        for g in groupStore.loadAll() {
+            let home = layout.groups[g.id] ?? Workspace.generalId
+            var seen = Set<String>(), remove: [String: GroupRepair.Reason] = [:]
+            for id in g.everyone {
+                let root = layout.rootBot(id)
+                if id == g.lead {                                   // the lead always stays
+                    seen.insert(root); continue
+                }
+                if (layout.bots[id] ?? Workspace.generalId) != home { remove[id] = .otherWorkspace; continue }
+                if !seen.insert(root).inserted { remove[id] = .duplicateRole }
+            }
+            after[g.id] = Set(g.everyone).subtracting(remove.keys)
+            if !remove.isEmpty { fixes.append(GroupRepair(groupId: g.id, groupName: g.name, remove: remove)) }
+        }
+        let inAGroup = after.values.reduce(into: Set<String>()) { $0.formUnion($1) }
+        let unused = botStore.loadAll().map(\.id).filter { !inAGroup.contains($0) && isUnusedCopy($0, layout: layout, inGroups: inAGroup) }
+        return RepairPlan(fixes: fixes, unusedCopies: unused)
+    }
+
+    /// Takes the planned members out of their groups. Nothing is deleted: each group's old file is kept next to it as
+    /// `group.before-repair.json`, and the bots stay (they show up as unused copies, which you can remove separately).
+    @discardableResult
+    public func applyRepair(_ plan: RepairPlan) throws -> [String] {
+        try requireReadable()
+        var changed: [String] = []
+        for fix in plan.fixes {
+            var group = try groupStore.load(id: fix.groupId)
+            let drop = Set(fix.removeIds).subtracting([group.lead].compactMap { $0 })   // never the lead
+            guard !drop.isEmpty else { continue }
+            let backup = groupStore.dir(group.id).appendingPathComponent("group.before-repair.json")
+            if !fm.fileExists(atPath: backup.path) { try? fm.copyItem(at: groupStore.json(group.id), to: backup) }
+            group.members.removeAll { drop.contains($0) }
+            try groupStore.save(group)
+            changed.append(group.id)
+        }
+        return changed
+    }
+
+    /// A copy nobody uses: made by a duplicate, in no group, with no chat of its own and its memory still the empty one.
+    private func isUnusedCopy(_ id: String, layout: WorkspaceLayout, inGroups: Set<String>? = nil) -> Bool {
+        guard layout.origins[id] != nil, let bot = try? botStore.load(id: id) else { return false }
+        if let inGroups { if inGroups.contains(id) { return false } }
+        else if groupStore.loadAll().contains(where: { $0.everyone.contains(id) }) { return false }
+        if ChatStore(paths: paths, fileManager: fm).loadAll().contains(where: { $0.botId == id || $0.sessions[id] != nil }) { return false }
+        let memory = (try? String(contentsOf: paths.memoryMD(id), encoding: .utf8)) ?? ""
+        return memory == Instructions.memoryTemplate(for: bot)
+    }
+
+    /// Moves unused copies to the Trash (so they can be put back). Each one is checked again first; anything that has
+    /// since gained a group, a chat or memory is left alone. Returns the ids removed.
+    @discardableResult
+    public func removeUnusedCopies(_ ids: [String]) throws -> [String] {
+        try requireReadable()
+        var removed: [String] = []
+        for id in ids where isUnusedCopy(id, layout: load()) {
+            try botStore.delete(id: id)
+            removed.append(id)
+        }
+        if !removed.isEmpty {
+            try mutate { l in for id in removed { l.bots.removeValue(forKey: id) } }   // lineage (origins) stays, so copies of copies still resolve
+        }
+        return removed
     }
 
     // MARK: Internals

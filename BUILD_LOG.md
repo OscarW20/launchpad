@@ -1579,3 +1579,10 @@ Oscar wants each workspace to name its own copy of a group differently.
   workspaces) are fine.
 
 Tests: none new (UI only; the core is covered by Backend's tests).
+
+### Workspaces: the 15-member team (2026-11-18)
+Oscar added the Dev team to Biscuit and it showed 15 members, each role twice ("Lead" and "Lead (2)").
+- **Root cause.** The source group was already broken, and the copy faithfully copied it. Moving the team to a workspace while its bots were shared with another group gave the moving group its own copies (8). Then `Hiring.hireTeam` ran again for the pack: it only checked whether each *original* bot id was in the group, saw it wasn't (the group now held copies), and added the 7 originals back, which also sit in another workspace: 8 + 7 = 15. `addTeam` then copied that 15-member group.
+- **Fix.** `hireTeam` on an existing group now counts a role as present if the group has the bot or a copy of it (`WorkspaceLayout.rootBot` follows copies of copies; a bot hired under a numbered id is noted in `roles`), and only adds a missing role from, or hires it into, the group's own workspace. A new group only reuses General bots. `addTeam` installing a team nowhere else now builds it straight in the target workspace (reusing that workspace's bots, otherwise new ones), so a lone bot elsewhere is never reused or moved.
+- **Repair (nothing is deleted without asking).** `repairPlan()` lists, per group, members from another workspace or a role held twice, and the copies nobody then uses (in no group, no chat, memory still empty). `applyRepair` only takes those members out of the group (never the lead; the old group file is kept as `group.before-repair.json`; every bot stays). `removeUnusedCopies(ids)` re-checks each and moves them to the Trash, so they can be put back. On Oscar's real data the plan is 7 + 7 members and 7 unused copies; the originals in Launchpad are untouched.
+- **Tests.** 8 new (Oscar's sequence, one of each in order, lead once, `addTeam` twice adds nothing, fresh install, repair plan/apply/backup/unused/lead). Suite 616, 0 failures, 3 skips. Not hand-tested.

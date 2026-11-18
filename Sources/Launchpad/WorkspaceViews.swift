@@ -225,6 +225,7 @@ struct BotWorkspaceMenu: View {
                 // A bot in a group can't move alone: offer to move the group, which takes it along.
                 ForEach(inGroups) { group in
                     Menu("Move \(group.displayName) and its bots to Workspace") { destinations(others) { .group(group) } }
+                    Menu("Duplicate \(group.displayName) into Workspace") { destinations(others) { .duplicateGroup(group) } }
                 }
             }
             Menu("Duplicate \(bot.name) into Workspace") { destinations(others) { .duplicate(bot) } }
@@ -242,6 +243,7 @@ struct GroupWorkspaceMenu: View {
             AddWorkspaceFirst()
         } else {
             Menu("Move \(group.displayName) and its bots to Workspace") { destinations(others) { .group(group) } }
+            Menu("Duplicate \(group.displayName) into Workspace") { destinations(others) { .duplicateGroup(group) } }
         }
     }
 }
@@ -260,6 +262,7 @@ struct ChatWorkspaceMenu: View {
             AddWorkspaceFirst()
         } else if chat.kind == .group, let group = model.group(chat.groupId) {
             Menu("Move \(group.displayName) and its bots to Workspace") { destinations(others) { .group(group) } }
+            Menu("Duplicate \(group.displayName) into Workspace") { destinations(others) { .duplicateGroup(group) } }
         } else if let bot = model.bot(chat.botId) {
             let inGroups = model.groups(containing: bot.id).filter { center.id(forGroup: $0.id) == here }
             if inGroups.isEmpty {
@@ -267,6 +270,7 @@ struct ChatWorkspaceMenu: View {
             } else {
                 ForEach(inGroups) { group in
                     Menu("Move \(group.displayName) and its bots to Workspace") { destinations(others) { .group(group) } }
+                    Menu("Duplicate \(group.displayName) into Workspace") { destinations(others) { .duplicateGroup(group) } }
                 }
             }
             Menu("Duplicate \(bot.name) into Workspace") { destinations(others) { .duplicate(bot) } }
@@ -515,6 +519,7 @@ struct MoveSheet: View {
         case .group(let g): return "Move \(g.name) and its \(g.everyone.count) bot\(g.everyone.count == 1 ? "" : "s") to \(move.destination.name)?"
         case .bot(let b): return "Move \(b.name) to \(move.destination.name)?"
         case .duplicate(let b): return "Duplicate \(b.name) into \(move.destination.name)?"
+        case .duplicateGroup(let g): return "Duplicate \(g.name) and its \(g.everyone.count) bot\(g.everyone.count == 1 ? "" : "s") into \(move.destination.name)?"
         }
     }
 
@@ -522,12 +527,13 @@ struct MoveSheet: View {
         switch move.kind {
         case .group, .bot: return "Their chats, memory and routines go with them, and they keep everything they know. They'll show in \(move.destination.name) and no longer in this workspace."
         case .duplicate: return "Makes a copy with the same setup and instructions, but its own empty memory and its own chats. The original is unchanged, and the two won't share anything from here on."
+        case .duplicateGroup: return "Makes a copy of the group and of every bot in it, with the same setup, lead and order. The copies have their own empty memory, chats and project folder. The original is unchanged, and the two won't share anything from here on. A name already used in \(move.destination.name) gets a number."
         }
     }
 
     private var buttonTitle: String {
         switch move.kind {
-        case .duplicate: return "Duplicate"
+        case .duplicate, .duplicateGroup: return "Duplicate"
         default: return "Move"
         }
     }

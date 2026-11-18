@@ -1544,3 +1544,17 @@ Oscar wants the same team (the Dev team) in Biscuit as in Launchpad. The team ca
 - Each copy records `GroupOrigin` (copied from, and the root). `familyId(ofGroup:)` is the original group's id through copies of copies; `team(family:in:)` is "is this team in workspace X"; `workspaces(holding:)` says where else it is.
 - `addTeam(pack, to:)` for the team card: already there is `.alreadyThere` (Open), in another workspace is `.copied`, nowhere is `.installed` from the pack then placed there.
 - Tests: 13 new; suite 604, 0 failures, 3 skips. Not hand-tested.
+
+### Workspaces: the same team in more than one workspace (2026-11-18)
+Oscar was in Biscuit, wanted his own Dev team there, and the Marketplace card said "Open" and opened the one in Launchpad.
+- **Team card** (`MarketplaceView`): "Open #<group>" only when that team is in the workspace you're in (matched by family, so
+  a copy counts as the same team). Otherwise "Add to <workspace>" (plain "Add team" while only General exists). If another
+  workspace already has the team, a short confirm says it makes your own copy; if nothing has it yet, it installs straight
+  away. Both go through Backend's `addTeam`, which replaces the old `AppModel.hireTeam` (removed).
+- **Duplicate <group> into Workspace**: on a group's right-click menu in the Chats list (group chats), the Groups page and
+  the Bots page (for a bot in a group). The current workspace is left out of the destinations. The confirm sheet
+  (`MoveSheet`, new `duplicateGroup` kind) says what's copied: bots, lead and order, with their own empty memory, chats and
+  project folder, and that a taken name gets a number.
+- **Copied from <group> in <workspace>** under the group's name in its info, like bots already show.
+
+Tests: none new (UI only; the core is covered by Backend's tests).

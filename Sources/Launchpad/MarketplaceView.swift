@@ -14,6 +14,7 @@ struct MarketplaceView: View {
     @State private var tab: Tab = .teams
     @State private var search = ""
     @State private var installing: ConnectorPreset?
+    @State private var confirmingPack: TeamPack?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +50,17 @@ struct MarketplaceView: View {
         .sheet(item: $installing) { preset in
             AppDetailSheet(preset: preset)
         }
+        .confirmationDialog(
+            confirmingPack.map { "Add \($0.name) to \(WorkspaceCenter.shared.current.name)?" } ?? "",
+            isPresented: Binding(get: { confirmingPack != nil }, set: { if !$0 { confirmingPack = nil } }),
+            titleVisibility: .visible,
+            presenting: confirmingPack
+        ) { pack in
+            Button("Add a Copy") { WorkspaceCenter.shared.addTeam(pack) }
+            Button("Cancel", role: .cancel) {}
+        } message: { pack in
+            Text("This makes your own copy of \(pack.name) here: its own bots, empty memory and chats. It never touches the one in your other workspace.")
+        }
     }
 
     private func matches(_ parts: String...) -> Bool {
@@ -62,7 +74,10 @@ struct MarketplaceView: View {
 
     @ViewBuilder private var teams: some View {
         ForEach(TeamPacks.all.filter { matches($0.name, $0.tagline) }) { pack in
-            let hired = model.group(pack.groupId) != nil
+            let center = WorkspaceCenter.shared
+            let here = center.team(family: pack.groupId, from: model.groups)
+            let hired = here != nil
+            let label = hired ? "Open #\(here?.id ?? pack.groupId)" : (center.isInUse ? "Add to \(center.current.name)" : "Add team")
             HStack(alignment: .center, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("\(pack.emoji) \(pack.name)")
@@ -84,9 +99,15 @@ struct MarketplaceView: View {
                 }
                 Spacer()
                 Button {
-                    model.hireTeam(pack)
+                    if let here {
+                        model.openChat(with: here)
+                    } else if center.isElsewhere(family: pack.groupId, in: model.groups) {
+                        confirmingPack = pack
+                    } else {
+                        center.addTeam(pack)
+                    }
                 } label: {
-                    Label(hired ? "Open #\(pack.groupId)" : "Add team", systemImage: hired ? "bubble.left.and.bubble.right.fill" : "person.3.fill")
+                    Label(label, systemImage: hired ? "bubble.left.and.bubble.right.fill" : "person.3.fill")
                 }
                 .buttonStyle(PillButtonStyle())
                 .controlSize(.large)

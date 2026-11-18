@@ -663,16 +663,6 @@ final class AppModel {
         }
     }
 
-    func hireTeam(_ pack: TeamPack) {
-        do {
-            let (_, group) = try Hiring(paths: paths).hireTeam(pack)
-            reloadAll()
-            openChat(with: group)
-        } catch {
-            alertMessage = "Couldn't add \(pack.name): \(error.localizedDescription)"
-        }
-    }
-
     func installSkill(_ skill: CatalogSkill) {
         do {
             _ = try skillStore.install(skill)

@@ -188,6 +188,11 @@ struct GroupDetailView: View {
                             Text("~/Launchpad/groups/\(groupId)")
                                 .font(.system(.caption, design: .monospaced))
                                 .foregroundStyle(Theme.secondary)
+                            if let origin = WorkspaceCenter.shared.origin(ofGroup: groupId) {
+                                Text("Copied from \(origin.group) in \(origin.workspace.name). The two are separate.")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.secondary)
+                            }
                         }
                         Spacer()
                         Button { model.summaryGroupId = groupId } label: { Label("Summary", systemImage: "doc.text") }

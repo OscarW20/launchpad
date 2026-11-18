@@ -10,7 +10,7 @@ import LaunchpadCore
 
 /// A thing the Move or Duplicate sheet is asking about.
 struct WorkspaceMove: Identifiable {
-    enum Kind { case group(BotGroup), bot(Bot), duplicate(Bot) }
+    enum Kind { case group(BotGroup), bot(Bot), duplicate(Bot), duplicateGroup(BotGroup) }
     let kind: Kind
     let destination: Workspace
     var id: String {
@@ -18,6 +18,7 @@ struct WorkspaceMove: Identifiable {
         case .group(let g): return "group-\(g.id)-\(destination.id)"
         case .bot(let b): return "bot-\(b.id)-\(destination.id)"
         case .duplicate(let b): return "dup-\(b.id)-\(destination.id)"
+        case .duplicateGroup(let g): return "dupgroup-\(g.id)-\(destination.id)"
         }
     }
 }
@@ -242,6 +243,7 @@ final class WorkspaceCenter {
             case .group(let g): try store.move(group: g.id, to: move.destination.id, shared: policy)
             case .bot(let b): try store.move(bot: b.id, to: move.destination.id)
             case .duplicate(let b): try store.duplicate(bot: b.id, into: move.destination.id)
+            case .duplicateGroup(let g): try store.duplicate(group: g.id, into: move.destination.id)
             }
         } catch WorkspaceError.sharedBots(let bots) {
             return .sharedBots(bots)
@@ -261,6 +263,35 @@ final class WorkspaceCenter {
     func origin(ofBot botId: String) -> (bot: String, workspace: Workspace)? {
         guard let o = layout.origins[botId], let ws = workspace(o.workspaceId) else { return nil }
         return (model?.bot(o.botId)?.name ?? o.botId, ws)
+    }
+
+    func origin(ofGroup groupId: String) -> (group: String, workspace: Workspace)? {
+        guard let o = layout.groupOrigins[groupId], let ws = workspace(o.workspaceId) else { return nil }
+        return (model?.group(o.groupId)?.name ?? o.groupId, ws)
+    }
+
+    /// A team card's team (by the pack's group id) as it is in the workspace you're in, if it's there.
+    func team(family: String, from groups: [BotGroup]) -> BotGroup? {
+        groups.first { id(forGroup: $0.id) == currentId && (layout.groupOrigins[$0.id]?.rootId ?? $0.id) == family }
+    }
+
+    /// Whether another workspace already holds this team, so adding it here makes a copy.
+    func isElsewhere(family: String, in groups: [BotGroup]) -> Bool {
+        groups.contains { id(forGroup: $0.id) != currentId && (layout.groupOrigins[$0.id]?.rootId ?? $0.id) == family }
+    }
+
+    /// "Add to <workspace>" on a team card: opens the team if it's here, copies it from another workspace, or installs it.
+    func addTeam(_ pack: TeamPack) {
+        guard let store, let model else { return }
+        do {
+            let result = try store.addTeam(pack, to: currentId)
+            syncKnown()
+            model.reloadAll()
+            reload()
+            model.openChat(with: result.group)
+        } catch {
+            report(error)
+        }
     }
 
     /// The Reset button for a damaged workspaces file: sets it aside (kept, never deleted) so everything starts in General.

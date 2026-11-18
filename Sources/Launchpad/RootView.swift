@@ -34,7 +34,6 @@ struct RootView: View {
         .padding(.horizontal, Theme.Space.m)
         .padding(.bottom, Theme.Space.m)
         .padding(.top, Theme.Space.xs)
-        .safeAreaInset(edge: .top, spacing: 0) { UpdateBanner() }
         .background(GlowBackground())
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -58,6 +57,7 @@ struct RootView: View {
                 .keyboardShortcut("s", modifiers: [.control, .command])
             }
             ToolbarItem(placement: .navigation) { HistoryButtons() }
+            ToolbarItem(placement: .primaryAction) { UpdateToolbarButton() }
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .background(WindowReader { MainWindow.window = $0 })

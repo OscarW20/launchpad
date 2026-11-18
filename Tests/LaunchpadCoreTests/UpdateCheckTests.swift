@@ -28,6 +28,15 @@ final class UpdateCheckTests: XCTestCase {
         return (BuildStamp(commit: "aaa111", source: root), check, calls)
     }
 
+    func testComingBackToTheAppChecksAtMostEveryFewMinutes() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertTrue(UpdateCheck.isDue(lastChecked: nil, now: now))
+        XCTAssertFalse(UpdateCheck.isDue(lastChecked: now.addingTimeInterval(-60), now: now))
+        XCTAssertFalse(UpdateCheck.isDue(lastChecked: now.addingTimeInterval(-UpdateCheck.activationInterval + 1), now: now))
+        XCTAssertTrue(UpdateCheck.isDue(lastChecked: now.addingTimeInterval(-UpdateCheck.activationInterval), now: now))
+        XCTAssertTrue(UpdateCheck.isDue(lastChecked: now.addingTimeInterval(-30), now: now, minimum: 30))
+    }
+
     func testAnUnstampedBuildCantCheck() {
         let check = UpdateCheck { _, _ in XCTFail("git shouldn't run"); return (0, "") }
         guard case .cantCheck(let reason) = check.check(stamp: nil) else { return XCTFail() }

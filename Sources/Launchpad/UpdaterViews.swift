@@ -25,8 +25,6 @@ final class Updater {
     private(set) var finished: String?
     /// Bots are working: "Update now and stop them, or wait?"
     var confirming = false
-    /// The status the banner's Later button hid; a different one (more commits) shows it again.
-    private var dismissed: UpdateStatus?
     private var started = false
 
     private let stamp = BuildStamp(info: Bundle.main.infoDictionary)
@@ -41,14 +39,12 @@ final class Updater {
             && ["/Applications", home.path].contains(app.deletingLastPathComponent().path)
     }
 
-    /// What the main window's banner shows, if anything.
-    var showsBanner: Bool {
-        if isUpdating || failure != nil || finished != nil { return true }
-        guard let status, status.isAvailable else { return false }
-        return status != dismissed
+    /// The toolbar's Update button shows when this build is behind, while an update runs, and after one ends.
+    var showsButton: Bool {
+        isUpdating || failure != nil || finished != nil || status?.isAvailable == true
     }
 
-    /// A quiet check now and every few hours.
+    /// A quiet check now, every few hours, and whenever you come back to Launchpad (at most every few minutes).
     func start() {
         guard !started else { return }
         started = true
@@ -56,6 +52,12 @@ final class Updater {
             while !Task.isCancelled {
                 self?.check(quiet: true)
                 try? await Task.sleep(nanoseconds: UInt64(Self.interval * 1_000_000_000))
+            }
+        }
+        Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: NSApplication.didBecomeActiveNotification) {
+                guard let self else { return }
+                if UpdateCheck.isDue(lastChecked: self.lastChecked) { self.check(quiet: true) }
             }
         }
     }
@@ -71,17 +73,16 @@ final class Updater {
             lastChecked = Date()
             if case .cantCheck = result, quiet { return }
             status = result
-            if !quiet { dismissed = nil }
         }
     }
 
-    func later() {
-        dismissed = status
+    /// Clears a failed or finished update's message (the button goes back to "Update", or away).
+    func clearResult() {
         failure = nil
         finished = nil
     }
 
-    /// The Update button: asks first when bots are working.
+    /// Update Now in Settings: asks first when bots are working.
     func requestUpdate(model: AppModel) {
         guard !isUpdating else { return }
         if model.anyoneWorking { confirming = true } else { update() }
@@ -154,103 +155,178 @@ final class Updater {
     }
 }
 
-// MARK: - Main window banner
+// MARK: - Toolbar button
 
-/// "3 updates available" across the top of the main window, with What's New, Update and Later; then the update's
-/// progress, or why it failed. Nothing at all when there's nothing to say.
-struct UpdateBanner: View {
+/// The Update button in the main window's top right corner. It appears by itself when GitHub's `main` is ahead
+/// of this build, shows progress while an update runs, and turns into a warning if one fails. Hidden otherwise.
+struct UpdateToolbarButton: View {
     @Environment(AppModel.self) private var model
-    @State private var showingNew = false
-    @State private var showingDetail = false
+    @State private var showing = false
 
     var body: some View {
         let updater = Updater.shared
-        if updater.showsBanner {
-            HStack(spacing: Theme.Space.m) {
-                content(updater)
-            }
-            .font(.system(size: 13))
-            .padding(.horizontal, Theme.Space.l)
-            .padding(.vertical, Theme.Space.s)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.line))
-            .padding(.horizontal, Theme.Space.m)
-            .padding(.bottom, Theme.Space.s)
+        if updater.showsButton {
+            Button { showing.toggle() } label: { label(updater) }
+                .buttonStyle(PillButtonStyle(kind: updater.failure == nil ? .primary : .plain))
+                .controlSize(.small)
+                .fixedSize()
+                .help(help(updater))
+                .accessibilityLabel(help(updater))
+                .popover(isPresented: $showing, arrowEdge: .bottom) {
+                    UpdatePopover { showing = false }
+                        .environment(model)
+                }
         }
     }
 
-    @ViewBuilder private func content(_ updater: Updater) -> some View {
-        if let step = updater.progress {
-            ProgressView().controlSize(.small)
-            Text("Updating Launchpad: \(step)").foregroundStyle(Theme.text).lineLimit(1)
-            Spacer()
-            Text("Launchpad reopens by itself when it's done.").foregroundStyle(Theme.secondary).lineLimit(1)
-        } else if let failure = updater.failure {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
-            Text("The update didn't finish, so you're still on the version you had. \(failure.reason)")
-                .foregroundStyle(Theme.text)
-                .lineLimit(2)
-            Spacer()
-            if !failure.detail.isEmpty {
-                Button("Show Details") { showingDetail = true }
-                    .buttonStyle(SoftButtonStyle())
-                    .controlSize(.small)
-                    .popover(isPresented: $showingDetail, arrowEdge: .bottom) {
-                        ScrollView {
-                            Text(failure.detail)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(Theme.text)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(Theme.Space.l)
-                        }
-                        .frame(width: 560, height: 260)
-                    }
+    @ViewBuilder private func label(_ updater: Updater) -> some View {
+        if updater.isUpdating {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small).tint(.white)
+                Text("Updating…")
             }
-            Button("Try Again") { updater.requestUpdate(model: model) }
-                .buttonStyle(PillButtonStyle())
-                .controlSize(.small)
-            Button("Dismiss") { updater.later() }
-                .buttonStyle(PillButtonStyle(kind: .plain))
-                .controlSize(.small)
-        } else if let finished = updater.finished {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.success)
-            Text("\(finished). Quit and reopen Launchpad to use it.").foregroundStyle(Theme.text).lineLimit(1)
-            Spacer()
-            Button("Dismiss") { updater.later() }
-                .buttonStyle(PillButtonStyle(kind: .plain))
-                .controlSize(.small)
-        } else if case .available(let count, let subjects) = updater.status {
-            Image(systemName: "arrow.down.circle.fill").foregroundStyle(Theme.accent)
-            Text(count == 1 ? "1 update available" : "\(count) updates available")
-                .fontWeight(.semibold)
-                .foregroundStyle(Theme.text)
-                .fixedSize()
-            if let newest = subjects.first {
-                Text(newest).foregroundStyle(Theme.secondary).lineLimit(1)
+        } else if updater.failure != nil {
+            Label("Update Failed", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(Theme.warning)
+        } else if updater.finished != nil {
+            Label("Updated", systemImage: "checkmark.circle.fill")
+        } else if case .available(let count, _) = updater.status {
+            HStack(spacing: 6) {
+                Label("Update", systemImage: "arrow.down.circle.fill")
+                Text("\(count)")
+                    .font(.system(size: 11, weight: .bold))
+                    .monospacedDigit()
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Color.white.opacity(0.25)))
             }
-            Spacer()
-            if !subjects.isEmpty {
-                Button("What's New") { showingNew = true }
-                    .buttonStyle(SoftButtonStyle())
-                    .controlSize(.small)
-                    .popover(isPresented: $showingNew, arrowEdge: .bottom) {
-                        ScrollView {
-                            WhatsNewList(count: count, subjects: subjects).padding(Theme.Space.l)
-                        }
-                        .frame(width: 420)
-                        .frame(maxHeight: 360)
-                    }
-            }
-            Button("Update") { updater.requestUpdate(model: model) }
-                .buttonStyle(PillButtonStyle())
-                .controlSize(.small)
-                .help("Gets the latest code, rebuilds Launchpad and reopens it. Takes a minute or two.")
-            Button("Later") { updater.later() }
-                .buttonStyle(PillButtonStyle(kind: .plain))
-                .controlSize(.small)
         }
+    }
+
+    private func help(_ updater: Updater) -> String {
+        if let step = updater.progress { return "Updating Launchpad: \(step)" }
+        if updater.failure != nil { return "The last update didn't finish. Click to see why" }
+        if updater.finished != nil { return "Launchpad was updated. Quit and reopen it to use the new version" }
+        if case .available(let count, _) = updater.status {
+            return count == 1 ? "1 update available. Click to see what's new" : "\(count) updates available. Click to see what's new"
+        }
+        return "Update Launchpad"
+    }
+}
+
+/// What the Update button opens: what's new with Update Now, the update's progress, or why it failed.
+struct UpdatePopover: View {
+    @Environment(AppModel.self) private var model
+    let close: () -> Void
+    @State private var showingDetail = false
+    /// Bots are working: the question is asked here, in the popover, rather than in a dialog over it.
+    @State private var confirming = false
+
+    var body: some View {
+        let updater = Updater.shared
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            if confirming, !updater.isUpdating {
+                title("Bots are working")
+                Text("Updating restarts Launchpad, which stops whatever your bots are doing. Update now and stop them, or wait until they've finished?")
+                    .foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Spacer()
+                    Button("Wait") { confirming = false }
+                        .buttonStyle(PillButtonStyle(kind: .plain))
+                        .keyboardShortcut(.cancelAction)
+                    Button("Update Now and Stop Them") {
+                        confirming = false
+                        model.stopEveryone()
+                        updater.update()
+                    }
+                    .buttonStyle(PillButtonStyle(kind: .destructive))
+                }
+                .controlSize(.small)
+            } else if let step = updater.progress {
+                title("Updating Launchpad")
+                HStack(spacing: Theme.Space.s) {
+                    ProgressView().controlSize(.small)
+                    Text(step).foregroundStyle(Theme.text).fixedSize(horizontal: false, vertical: true)
+                }
+                Text("This takes a minute or two. Launchpad quits and reopens by itself when it's done.")
+                    .foregroundStyle(Theme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let failure = updater.failure {
+                title("The update didn't finish")
+                Text("You're still on the version you had. \(failure.reason)")
+                    .foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                if showingDetail, !failure.detail.isEmpty {
+                    ScrollView {
+                        Text(failure.detail)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Theme.text)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(Theme.Space.s)
+                    }
+                    .frame(height: 180)
+                    .background(Theme.field, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+                }
+                HStack {
+                    if !failure.detail.isEmpty {
+                        Button(showingDetail ? "Hide Details" : "Show Details") { showingDetail.toggle() }
+                            .buttonStyle(SoftButtonStyle())
+                    }
+                    Spacer()
+                    Button("Dismiss") { updater.clearResult(); close() }
+                        .buttonStyle(PillButtonStyle(kind: .plain))
+                    Button("Try Again") { start(updater) }
+                        .buttonStyle(PillButtonStyle())
+                }
+                .controlSize(.small)
+            } else if let finished = updater.finished {
+                title("Launchpad was updated")
+                Text("\(finished). Quit and reopen Launchpad to use it.")
+                    .foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Spacer()
+                    Button("OK") { updater.clearResult(); close() }
+                        .buttonStyle(PillButtonStyle(kind: .plain))
+                        .controlSize(.small)
+                }
+            } else if case .available(let count, let subjects) = updater.status {
+                title(count == 1 ? "1 update available" : "\(count) updates available")
+                if !subjects.isEmpty {
+                    ScrollView {
+                        WhatsNewList(count: count, subjects: subjects)
+                    }
+                    .frame(maxHeight: 280)
+                }
+                HStack {
+                    Text("Takes a minute or two, then Launchpad reopens.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondary)
+                    Spacer()
+                    Button("Update Now") { start(updater) }
+                        .buttonStyle(PillButtonStyle())
+                        .controlSize(.small)
+                        .keyboardShortcut(.defaultAction)
+                }
+            } else {
+                // The check came back up to date while this was open.
+                title("Launchpad is up to date")
+            }
+        }
+        .font(.system(size: 13))
+        .padding(Theme.Space.l)
+        .frame(width: 400, alignment: .leading)
+    }
+
+    /// Starts the update, asking first when bots are working.
+    private func start(_ updater: Updater) {
+        if model.anyoneWorking { confirming = true } else { updater.update() }
+    }
+
+    private func title(_ text: String) -> some View {
+        Text(text).font(.system(size: 14, weight: .bold)).foregroundStyle(Theme.text)
     }
 }
 
@@ -320,7 +396,8 @@ struct UpdateSettingsRows: View {
 }
 
 extension View {
-    /// "Update now and stop them, or wait?", asked when the Update button is pressed while bots are working.
+    /// "Update now and stop them, or wait?", asked when Update Now in Settings is pressed while bots are working.
+    /// (The toolbar button's popover asks the same thing inline.)
     func updateConfirmation(model: AppModel) -> some View {
         let updater = Updater.shared
         return confirmationDialog(

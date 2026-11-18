@@ -1114,3 +1114,24 @@ The app side of skill capture, on top of `SkillCapture.swift`.
   bot's suggestion.
 
 Tests: 1 new (`testGroupHistoryGetsTheSkillOnlyForYourMessages`). Nothing on screen was tried in the running app.
+
+## Update button in the top right corner (2026-11-18)
+
+The update banner is gone. In its place, an Update button appears by itself in the main window's toolbar (top
+right) whenever GitHub's `main` is ahead of the build that's running, and is hidden when the app is up to date or
+the check can't run.
+
+- **Button** (`UpdateToolbarButton`): a blue "Update" pill with the number of waiting updates. While an update runs
+  it reads "Updating…" with a spinner; if one fails it reads "Update Failed" until dismissed.
+- **Popover** (`UpdatePopover`): what's new (the commit subjects) and Update Now; then the update's steps; or why it
+  failed, with Show Details (the end of the build output), Try Again and Dismiss.
+- **Bots working**: the popover asks "Update now and stop them, or wait?" inline, so no dialog opens over it.
+  Settings › Updates is unchanged and keeps its dialog.
+- **Checking sooner**: as well as at launch and every three hours, the app checks when you come back to it, at most
+  every 10 minutes (`UpdateCheck.isDue`), since each check is a `git fetch`.
+
+### Decisions
+- One place to look: the banner and its Later button were removed rather than kept alongside the button. The
+  button can't be dismissed while the app is behind.
+
+Tests: 1 new (`testComingBackToTheAppChecksAtMostEveryFewMinutes`). Nothing was tried in the running app.

@@ -65,6 +65,15 @@ public struct UpdateCheck: Sendable {
         return .available(count: max(count, subjects.count, 1), subjects: subjects)
     }
 
+    /// The shortest gap between the checks made when you come back to the app (each one is a `git fetch`).
+    public static let activationInterval: TimeInterval = 10 * 60
+
+    /// Whether coming back to the app should check again: never checked, or not within `minimum`.
+    public static func isDue(lastChecked: Date?, now: Date = Date(), minimum: TimeInterval = activationInterval) -> Bool {
+        guard let lastChecked else { return true }
+        return now.timeIntervalSince(lastChecked) >= minimum
+    }
+
     /// How long one git command may take before it's stopped (a fetch on a dead connection can hang).
     public static let timeout: TimeInterval = 30
 
@@ -106,7 +115,7 @@ public struct UpdateCheck: Sendable {
 }
 
 extension UpdateStatus {
-    /// One line for the banner or Settings: "3 updates available", "Launchpad is up to date", or the reason.
+    /// One line for Settings: "3 updates available", "Launchpad is up to date", or the reason.
     public var summary: String {
         switch self {
         case .upToDate: return "Launchpad is up to date"

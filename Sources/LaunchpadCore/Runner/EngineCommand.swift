@@ -79,6 +79,10 @@ public struct RunOptions: Equatable, Sendable {
     public var instructions: String?
     /// Local engine only: an API key for servers that want one (from the Keychain; never saved).
     public var localAPIKey: String?
+    /// When to compact the engine's own session by itself (`EngineCompaction`). nil: leave the engine's default.
+    public var autoCompact: ContextSettings?
+    /// The model's window as last reported, for Codex's token limit (nil: its typical size).
+    public var contextWindow: Int?
 
     public init() {}
 }
@@ -189,7 +193,8 @@ public enum EngineCommand {
             args += ["--settings", settings]
         }
         return EngineInvocation(engine: .claude, arguments: args, stdin: prompt, workingDirectory: botDirectory,
-                                plannedSessionId: planned, environment: options.environment,
+                                plannedSessionId: planned,
+                                environment: EngineCompaction.environment(options.environment, engine: .claude, settings: options.autoCompact),
                                 sandboxProfile: options.sandboxProfile)
     }
 
@@ -224,6 +229,7 @@ public enum EngineCommand {
             args += ["-c", "sandbox_workspace_write.writable_roots=[\(roots)]"]
         }
         args += MCPConfig.codexArgs(MCPConfig.adjusted(options.connectors, sandboxed: options.sandboxProfile != nil))
+        args += EngineCompaction.codexArguments(settings: options.autoCompact, window: options.contextWindow)
         if let effort = options.reasoningEffort, !effort.isEmpty {
             args += ["-c", "model_reasoning_effort=\(MCPConfig.toml(effort))"]
         }

@@ -17,6 +17,8 @@ public enum RunEvent: Equatable, Sendable {
     case todos([TodoItem])
     /// How full the model's context window is now.
     case context(ContextUsage)
+    /// The engine compacted its own session (Claude's `compact_boundary`).
+    case compacted(ContextCompaction)
     /// The run finished. `resultText` is the engine's final answer, if it reports one.
     case finished(resultText: String?)
     /// Raw error text reported by the engine. The runner turns this into `.failed`.

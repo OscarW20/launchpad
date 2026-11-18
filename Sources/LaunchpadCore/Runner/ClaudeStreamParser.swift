@@ -30,6 +30,15 @@ public final class ClaudeStreamParser: StreamParser {
                 announcedSession = true
                 return [.sessionStarted(sid)]
             }
+            if obj["subtype"] as? String == "compact_boundary" {
+                // {"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto","pre_tokens":…}}
+                let meta = (obj["compact_metadata"] ?? obj["compactMetadata"]) as? [String: Any] ?? [:]
+                func number(_ keys: String...) -> Int? { keys.lazy.compactMap { (meta[$0] as? NSNumber)?.intValue }.first }
+                let after = number("post_tokens", "postTokens")
+                contextUsed = after ?? 0   // so the next call's size is reported even if it matches the old one
+                return [.compacted(ContextCompaction(engine: .claude, trigger: (meta["trigger"] as? String) == "manual" ? .manual : .auto,
+                                                     tokensBefore: number("pre_tokens", "preTokens"), tokensAfter: after))]
+            }
             return []
 
         case "stream_event":

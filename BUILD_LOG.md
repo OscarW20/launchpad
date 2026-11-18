@@ -1283,3 +1283,53 @@ Tests: 11 new in `EngineEnvironmentTests` and `EnvironmentReadGuardTests`, inclu
 engine with dummy secrets in Launchpad's own environment, 45 ways of printing it that are refused and 40 ordinary commands
 that still run. All values are dummies. Checked by hand: the real `claude --version` and `claude auth status` still work
 (signed in) under the smaller environment. Not checked: a full run with a model call.
+
+## Auto-compacting long chats: the core (2026-11-18)
+
+A chat near the top of the model's window re-sends everything on every message, which is where the tokens go.
+
+**What already existed:** a context meter (`ContextUsage`: each model call's input, including cached input, against the
+window the engine reports), a manual Compact (`ThreadStore.compact`: drops the bots' sessions and re-seeds from the last
+12 messages, each cut to 1,500 characters, so the bot forgets everything older), and a suggestion at 80%. Nothing
+triggered it, nothing summarised, nothing was marked, and a group had one reading for the chat though each bot has its own
+session.
+
+**What the engines do on their own:** Claude Code and Codex both compact their own session, but by default only at the very
+top (a Claude session was seen compacting at 998,221 tokens on a 1M window). Both can be told a lower point from outside:
+Claude with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, Codex with `-c model_auto_compact_token_limit=N`; the installed CLIs
+(Claude 2.1.311 and Codex) both contain these settings. That works mid-run, which an app-level step can't.
+
+- **Setting** (`ContextSettings`, `.launchpad/context-settings.json`, protected from bots): auto-compact on by default,
+  threshold 75% (30 to 95%), 8 recent messages kept word for word.
+- **Engines** (`EngineCompaction`, `RunOptions.autoCompact`): every Claude run gets the percentage and every Codex run
+  the token limit (75% of its window, or its typical 272K). Wired in `prepareRun`.
+- **Seeing it happen** (`RunEvent.compacted`, `ContextCompaction`): Claude's `compact_boundary` event becomes a notice in
+  the chat ("Claude compacted Scout's memory automatically: it was at 750K tokens and is now about 18K…"), so it's never
+  silent. The bot's last reading is saved at the end of each run (`CompactionLog.saveReading`) so the meter survives a
+  restart.
+- **The app's own step** (`ChatCompaction`, `ContextAdvisor`, `ChatCompactor`, `LocalContext`): splits a chat into older
+  turns to summarise and the latest to keep; builds the summariser's prompt (decisions, state, names and links; never
+  secrets) and brings an earlier summary up to date instead of redoing it; turns the answer into a record (redacted,
+  hidden characters removed, capped); saves it and restarts only the bots that were too full from the summary plus the newer
+  messages (`ConversationRecap.compactedPrompt`). For a local model, `LocalContext.history` builds the history from the
+  summary plus what fits.
+
+### Decisions
+- **Never while a bot is replying.** `ContextAdvisor.decide` returns `.skipped(.running)` for auto and manual alike, and
+  `ChatCompactor.apply` asks again under a lock right before writing: if a bot is replying, nothing is written and the
+  session is untouched. (An engine compacting itself mid-run is the engine's own business.)
+- **Nothing is lost silently.** The messages stay in the chat's log word for word. A record (`.launchpad/compactions/`,
+  which bots can't write, because the summary is put in front of a bot later) says which message the summary runs up to so
+  the app can mark what's summarised (`CompactionLog.summarizedIds`), and every compaction is kept. If a chat is so
+  long that the oldest messages couldn't be shown to the summariser, that's counted and the notice says so.
+- **The app steps in only as a fallback for Claude and Codex**: 10 points past the threshold (at most 97%) and still full
+  means the engine's own setting didn't do it. A local model has no compaction of its own, so the app acts at the threshold.
+- **Only the bots that are too full restart** in a group; the Compact button restarts all.
+- **Not wired: local-model trimming.** Its window size isn't known (the meter assumes 8K), and trimming to a guess would make
+  a large-window local model forget things it can hold. Needs a per-bot context size first.
+- **Not verified live:** that Claude honours `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` in Launchpad's headless runs. Evidence it's
+  recognised is the installed binary; I found no compaction event in any Launchpad bot's saved transcripts yet.
+
+Tests: 33 new in `ContextCompactionTests` (settings, what each engine is told and through a real invocation, the event
+parser and message builder, the split, the prompt, cleaning and capping the summary, records and marking, the advisor's
+decisions including never-while-running, applying and the group case, the recap, and a local model's history).

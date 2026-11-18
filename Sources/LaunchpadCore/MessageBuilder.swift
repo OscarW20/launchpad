@@ -8,6 +8,8 @@ public struct MessageBuilder: Sendable {
     public private(set) var todos: [TodoItem] = []
     /// How full the context window was at the last report this run.
     public private(set) var context: ContextUsage?
+    /// Compactions the engine did during this run, for a notice in the chat.
+    public private(set) var compactions: [ContextCompaction] = []
     private var lastWasStep = false
 
     public init(botId: String?) {
@@ -63,6 +65,10 @@ public struct MessageBuilder: Sendable {
 
         case .context(let usage):
             context = context.map { $0.merged(with: usage) } ?? usage
+
+        case .compacted(let compaction):
+            compactions.append(compaction)
+            if let after = compaction.tokensAfter { context = ContextUsage(engine: compaction.engine, used: after, window: context?.window) }
 
         case .finished(let resultText):
             if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let resultText {

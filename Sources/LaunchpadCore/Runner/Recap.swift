@@ -36,12 +36,25 @@ public enum ConversationRecap {
     /// - Otherwise the prompt as it is.
     ///
     /// `history` is the chat; if it ends with the user's message being sent, that isn't recapped.
+    ///
+    /// With a `summary` (a compaction) and no session, the bot gets the summary and then only the messages after
+    /// `summarizedThrough`, instead of the last few messages with nothing before them.
     public static func prompt(for prompt: String, history: [ChatMessage], hasSession: Bool, unseenAfter: String? = nil,
-                              names: [String: String] = [:], limit: Int = defaultLimit) -> String {
+                              names: [String: String] = [:], limit: Int = defaultLimit,
+                              summary: String? = nil, summarizedThrough: String? = nil) -> String {
         var earlier = history
         if let last = earlier.last, last.role == .user,
            last.text.trimmingCharacters(in: .whitespacesAndNewlines) == prompt.trimmingCharacters(in: .whitespacesAndNewlines) {
             earlier.removeLast()
+        }
+        if !hasSession, let summary, !summary.isEmpty {
+            if let through = summarizedThrough, let i = earlier.firstIndex(where: { $0.id == through }) {
+                earlier = Array(earlier[earlier.index(after: i)...])
+            }
+            let recent = text(earlier, names: names, limit: limit)
+            var recap = "Summary of the earlier conversation (it was compacted to save space; the full chat is still on screen):\n\(summary)"
+            if !recent.isEmpty { recap += "\n\nThe most recent messages:\n\(recent)" }
+            return "\(recap)\n\n---\nNew message: \(prompt)"
         }
         if !hasSession {
             return seed(prompt: prompt, recap: text(earlier, names: names, limit: limit))

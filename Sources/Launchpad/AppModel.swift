@@ -1258,6 +1258,11 @@ final class AppModel {
         let botSkills = SkillLinker.effectiveSkills(for: bot, groups: groups).filter(available.contains)
         let lockedNames = botSkills.filter(lockedSkills.contains)
         o.manageConnectors = true
+        // A long session compacts itself at the threshold you set, instead of only at the very top of the window
+        // (Claude: its own compaction setting; Codex: its token limit). Off in Settings means the engine's own default.
+        let contextSettings = ContextSettingsStore(paths: paths).load()
+        o.autoCompact = contextSettings.autoCompact ? contextSettings : nil
+        o.contextWindow = contextByChat[chat.id]?.window
         o.connectors = MCPConfig.effective(for: bot, groups: groups, all: connectors)
         o.environment = MCPConfig.environment(o.connectors, secrets: secrets, engine: bot.engine)
         if chat.kind == .group, let gid = chat.groupId {
@@ -1566,6 +1571,14 @@ final class AppModel {
         if let token = setup.gatewayToken { SiteGateway.shared.revoke(token) }
 
         let run = live[chatId]?.first { $0.id == runId } ?? start
+        if !isSide {
+            // An engine compacting is never silent: say so in the chat. And keep this bot's last reading, so the meter and
+            // the auto-compact rule still have something to go on after a restart.
+            for compaction in run.builder.compactions {
+                append(ChatMessage(role: .notice, text: compaction.notice(botName: bot.name)), to: chatId)
+            }
+            if let reading = run.builder.context { try? CompactionLog(paths: paths).saveReading(reading, chatId: chatId, botId: botId) }
+        }
         live[chatId]?.removeAll { $0.id == runId }
         if live[chatId]?.isEmpty == true { live[chatId] = nil }
         handles[runId] = nil

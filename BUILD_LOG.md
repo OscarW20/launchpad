@@ -1135,3 +1135,45 @@ the check can't run.
   button can't be dismissed while the app is behind.
 
 Tests: 1 new (`testComingBackToTheAppChecksAtMostEveryFewMinutes`). Nothing was tried in the running app.
+
+## Create ticket: the core (2026-11-18)
+
+Select text in any Mac app, and a bot drafts and files a Jira ticket from it. This is the part with no UI (the
+service, hotkey and capture panel come next). All in `Sources/LaunchpadCore/Tickets/`.
+
+- **Settings** (`TicketSettings`, saved by `TicketSettingsStore` in `.launchpad/ticket-settings.json`): Jira project
+  key (default BIS), the skill to use (default `biscuit-jira-tickets`), approval **Ask me first** (default) or **File
+  without asking**, the assignee list (name + how Jira knows them), an optional Jira site host and the selection cap
+  (default 20,000 characters). Read leniently; an unknown approval means ask.
+- **The request and prompt** (`TicketRequest`, `TicketPrompt.prepare` / `build`): the selection, source app and
+  window (best effort), a note and an optional assignee. `prepare` returns exactly what will be sent, with warnings
+  (nothing selected, cut to fit, looks like it holds a secret) for the panel to show; `build` returns the prompt.
+- **The result** (`TicketOutcome.parse`): the bot ends with `TICKET: KEY link`, `DUPLICATE: KEY link` or `FAILED: why`.
+  Only a key in the project plus an https link on your Jira site pointing at that exact ticket counts as created.
+- **Skill import** (`SkillStore.importSkill`, `SkillSources.find`, `ensureTicketSkill`): copies a skill folder from
+  where it is on this Mac (`~/.claude/skills`, Claude's synced skills, the Claude plugin folder) into the library.
+- **Guard** (`TicketGuard`, `GuardRulesFile.config(extraAlwaysAllowed:)`, `write(variant:)`).
+
+### Decisions
+- **The skill is not in the repository.** `biscuit-jira-tickets` is company process and this repo is public, so
+  it's copied at run time from the Mac it's on. An import never replaces a skill: the same text is left alone, a
+  different one is refused.
+- **Selected text is untrusted.** It comes from emails and web pages. The prompt fences it between markers with a
+  random nonce (moved if the text contains it), says it's data and that instructions in it aren't to be followed,
+  and tells the bot to write [redacted] for secrets. Hidden and direction-changing characters are stripped first.
+- **Nothing is cut silently.** Over the cap, the selection is cut at a word boundary, the panel warns and the prompt
+  tells the bot the selection is partial.
+- **A duplicate check comes before the create**, so a retry after a lost reply doesn't make a second ticket.
+- **Settings are out of reach of bots**, in the data folder with the other protected files (the guard and the
+  sandbox both refuse writes), because the approval mode is a safety setting. The assignee list sits there too.
+- **The guard used to let Jira creates through without a card.** `createJiraIssue` splits into create, jira and issue,
+  and none counted as sending. Ask me first would have asked about nothing. Writing to an issue or ticket tool
+  (create, edit, update, transition, assign, add, link, move, write) now counts as sending, for any connector.
+- **File without asking only loosens the create call.** It adds an Always-allow for the Jira create tool in a
+  separate rules file (`rules/<bot>.ticket.json`); a push, any other send, a Never rule, a locked-down bot and the
+  "Always allow for writes" switch all still apply.
+- **A wrong project key is an error, not a fallback**, so a typo can't file tickets in the wrong project.
+
+Tests: 35 new (`TicketTests`, `SkillImportTests`): settings, cleaning and cutting, the fence, the result checks
+(including look-alike hosts, other tickets' links and credentials in links), the guard in both modes, a bot's attempts to
+edit the settings file, and the importer (copy, no replace, links refused, nothing left behind, finding it on disk).

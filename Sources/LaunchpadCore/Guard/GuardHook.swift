@@ -275,10 +275,12 @@ public enum GuardRulesFile {
     ///     the bot is locked down).
     ///   - trustedServers: MCP servers whose tools never need asking.
     ///   - fullFreedom: the run is in a group set to "Full freedom" (`ApprovalMode.skipsApprovals`).
+    ///   - extraAlwaysAllowed: "Always allow" entries for this run only (`TicketGuard.allowances`). They follow the same
+    ///     rule as the bot's own: a locked-down bot, or "Always allow" turned off for writes, still asks.
     public static func config(
         for bot: Bot, paths: LaunchpadPaths, extraRoots: [URL] = [], lockedSkillDirs: [String] = [],
         alwaysForWrites: Bool = true, trustedServers: [String] = [], fullFreedom: Bool = false,
-        home: URL = FileManager.default.homeDirectoryForCurrentUser
+        extraAlwaysAllowed: [String] = [], home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> GuardConfig {
         let folder = paths.botDir(bot.id)
         var c = GuardConfig()
@@ -289,6 +291,11 @@ public enum GuardRulesFile {
         let writesOK = alwaysForWrites && !bot.lockedDown
         c.alwaysAllowed = bot.rules.alwaysAllowed.filter { key in
             !BotRules.isTerminalKey(key) && (writesOK || !["send", "delete", "spend", "change"].contains(key.components(separatedBy: ":").first ?? ""))
+        }
+        for key in extraAlwaysAllowed where !BotRules.isTerminalKey(key) && !c.alwaysAllowed.contains(key) {
+            if writesOK || !["send", "delete", "spend", "change"].contains(key.components(separatedBy: ":").first ?? "") {
+                c.alwaysAllowed.append(key)
+            }
         }
         c.noAlwaysForWrites = !writesOK
         c.locked = lockedSkillDirs
@@ -301,7 +308,7 @@ public enum GuardRulesFile {
         c.protected = [
             paths.guardRules.path, paths.approvalAnswers.path, paths.launchpadData.appendingPathComponent("approvals").path,
             paths.snapshots.path, paths.launchpadData.appendingPathComponent("locked-skills.json").path,
-            ApprovalModes(paths: paths).file.path,
+            ApprovalModes(paths: paths).file.path, TicketSettingsStore(paths: paths).file.path,
             folder.appendingPathComponent(".claude/settings.json").path,
             folder.appendingPathComponent(".claude/settings.local.json").path,
             home.appendingPathComponent(".claude/settings.json").path,
@@ -316,13 +323,17 @@ public enum GuardRulesFile {
     /// Writes `paths.rulesFile(botId)` and returns its URL. The file is read-only (0444) and its folder 0555 between
     /// writes, on top of the guard's own check, so a bot can't replace or remove it.
     @discardableResult
-    public static func write(_ config: GuardConfig, botId: String, paths: LaunchpadPaths) throws -> URL {
+    /// - Parameter variant: a separate file for a special run (`TicketGuard.variant`), so it never replaces the one
+    ///   another run of the same bot is reading. Letters, digits and dashes only.
+    public static func write(_ config: GuardConfig, botId: String, paths: LaunchpadPaths, variant: String? = nil) throws -> URL {
         let fm = FileManager.default
         let folder = paths.guardRules
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
         defer { try? fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path) }
-        let url = paths.rulesFile(fileId(botId: botId, fullFreedom: config.fullFreedom))
+        let id = variant.flatMap { v in v.isEmpty || !v.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) ? nil : botId + "." + v }
+            ?? fileId(botId: botId, fullFreedom: config.fullFreedom)
+        let url = paths.rulesFile(id)
         let data = try JSONSerialization.data(withJSONObject: config.json, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         if fm.fileExists(atPath: url.path) { try? fm.removeItem(at: url) }
         try data.write(to: url, options: .atomic)

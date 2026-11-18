@@ -261,6 +261,8 @@ public enum GuardEngine {
                             "create_pending_pull_request_review", "create_message", "create_draft_reply"]
     /// "<verb>_message", "<verb>_comment" (conversations_add_message, create_comment…) put something in front of people.
     static let sendNouns: Set<String> = ["message", "messages", "comment", "comments", "reply", "replies"]
+    static let trackerNouns: Set<String> = ["issue", "issues", "ticket", "tickets"]
+    static let trackerVerbs: Set<String> = ["create", "edit", "update", "transition", "assign", "add", "link", "move", "write"]
     static let deleteWords: Set<String> = ["delete", "remove", "destroy", "drop", "purge", "erase", "wipe", "trash", "unlink", "truncate"]
     static let spendWords: Set<String> = ["pay", "payment", "payments", "charge", "charges", "purchase", "buy", "checkout", "order",
                                            "subscribe", "subscription", "invoice", "transfer", "payout", "refund", "donate", "tip", "billing", "capture"]
@@ -296,7 +298,10 @@ public enum GuardEngine {
         var found: [ApprovalCategory] = []
         if !set.isDisjoint(with: deleteWords) { found.append(.delete) }
         if !set.isDisjoint(with: spendWords) || !serverWords.isDisjoint(with: paymentServers) { found.append(.spend) }
-        if !set.isDisjoint(with: sendWords) || sendNames.contains(where: { lower.contains($0) })
+        // Writing to a ticket tracker (createJiraIssue, editJiraIssue, transition_issue, create_ticket…) puts
+        // something in front of people, whatever the tool's camel case or snake case spelling.
+        let trackerWrite = !set.isDisjoint(with: trackerNouns) && trackerVerbs.contains(first)
+        if !set.isDisjoint(with: sendWords) || sendNames.contains(where: { lower.contains($0) }) || trackerWrite
             || (w.count > 1 && sendNouns.contains(w.last ?? "")) { found.append(.send) }
         if !set.isDisjoint(with: changeWords) || lower.contains("apply_migration") { found.append(.change) }
         return found

@@ -57,6 +57,9 @@ struct RootView: View {
                 .keyboardShortcut("s", modifiers: [.control, .command])
             }
             ToolbarItem(placement: .navigation) { HistoryButtons() }
+            if sidebarHidden && WorkspaceCenter.shared.isInUse {
+                ToolbarItem(placement: .navigation) { WorkspaceSwitcher(compact: true) }
+            }
             ToolbarItem(placement: .primaryAction) { UpdateToolbarButton() }
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
@@ -88,6 +91,7 @@ struct RootView: View {
             SavedMessagesSheet()
         }
         .updateConfirmation(model: model)
+        .workspaceSheets()
         .alert(
             "Something went wrong",
             isPresented: Binding(get: { model.alertMessage != nil }, set: { if !$0 { model.alertMessage = nil } })
@@ -218,6 +222,12 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            VStack(spacing: Theme.Space.s) {
+                WorkspaceSwitcher()
+                WorkspaceBanner()
+            }
+            .padding(.horizontal, Theme.Space.m)
+            .padding(.top, Theme.Space.m)
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     row(.chats)
@@ -254,8 +264,8 @@ struct SidebarView: View {
 
     private func badge(for section: SidebarSection) -> Int {
         switch section {
-        case .bots: return model.bots.count
-        case .groups: return model.groups.count
+        case .bots: return model.workspaceBots.count
+        case .groups: return model.workspaceGroups.count
         case .tasks: return model.tasksNeedingYou
         case .office: return model.workingRuns.count
         default: return 0

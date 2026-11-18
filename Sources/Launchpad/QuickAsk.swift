@@ -161,16 +161,16 @@ private struct QuickAskView: View {
 
     private var targetMenu: some View {
         Menu {
-            if !model.bots.isEmpty {
+            if !model.workspaceBots.isEmpty {
                 Section("Bots") {
-                    ForEach(model.bots) { b in
+                    ForEach(model.workspaceBots) { b in
                         Button("\(b.emoji) \(b.name)") { pick(.bot(b.id)) }
                     }
                 }
             }
-            if !model.groups.isEmpty {
+            if !model.workspaceGroups.isEmpty {
                 Section("Groups") {
-                    ForEach(model.groups) { g in
+                    ForEach(model.workspaceGroups) { g in
                         Button(g.displayName) { pick(.group(g.id)) }
                     }
                 }

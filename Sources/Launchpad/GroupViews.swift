@@ -26,20 +26,20 @@ struct GroupListView: View {
     var body: some View {
         @Bindable var model = model
         Group {
-            if model.groups.isEmpty {
+            if model.workspaceGroups.isEmpty {
                 VStack(spacing: 10) {
-                    Text("No groups yet.")
+                    Text(WorkspaceCenter.shared.isInUse ? "No groups in \(WorkspaceCenter.shared.current.name) yet." : "No groups yet.")
                         .font(Theme.rounded(.headline))
                     Button("New Group") { model.showingNewGroup = true }
                         .buttonStyle(PillButtonStyle())
-                        .disabled(model.bots.isEmpty)
+                        .disabled(model.workspaceBots.isEmpty)
                     Button("Hire the Dev team") { model.section = .hire }
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 PanelList(selection: $model.selectedGroupId) {
-                    ForEach(model.groups) { group in
+                    ForEach(model.workspaceGroups) { group in
                         HStack(spacing: 10) {
                             GroupAvatar(group: group, size: 34)
                             VStack(alignment: .leading, spacing: 2) {
@@ -55,6 +55,8 @@ struct GroupListView: View {
                         .selectableRow(group.id)
                         .contextMenu {
                             Button("Open Chat") { model.openChat(with: group) }
+                            Divider()
+                            GroupWorkspaceMenu(group: group)
                         }
                     }
                 }
@@ -80,7 +82,7 @@ struct GroupFormSections: View {
             TextField("Emoji", text: Binding(get: { group.emoji }, set: { if let c = $0.last { group.emoji = String(c) } }))
         }
         Section {
-            ForEach(model.bots) { bot in
+            ForEach(model.workspaceBots) { bot in
                 Toggle(isOn: Binding(
                     get: { group.members.contains(bot.id) },
                     set: { on in

@@ -165,7 +165,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     func post(_ notice: ReplyNotice, chatId: String) {
         guard Self.available, Self.enabled, !NSApp.isActive else { return }
         let content = UNMutableNotificationContent()
-        content.title = notice.title
+        content.title = WorkspaceCenter.shared.titled(notice.title, chatId: chatId)
         content.body = notice.body
         content.sound = .default
         content.categoryIdentifier = Self.category

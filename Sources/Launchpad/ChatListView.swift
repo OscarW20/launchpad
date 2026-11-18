@@ -116,16 +116,16 @@ struct NewChatMenu: View {
     }
 
     @ViewBuilder private var items: some View {
-        if !model.bots.isEmpty {
+        if !model.workspaceBots.isEmpty {
             Section("Chat with") {
-                ForEach(model.bots) { bot in
+                ForEach(model.workspaceBots) { bot in
                     Button("\(bot.emoji)  \(bot.name)") { model.newChat(with: bot) }
                 }
             }
         }
-        if !model.groups.isEmpty {
+        if !model.workspaceGroups.isEmpty {
             Section("Groups") {
-                ForEach(model.groups) { group in
+                ForEach(model.workspaceGroups) { group in
                     Button("\(group.emoji)  \(group.displayName)") { model.openChat(with: group) }
                 }
             }

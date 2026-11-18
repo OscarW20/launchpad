@@ -1456,3 +1456,36 @@ Keeps Biscuit, Launchpad and a personal app apart. Core only (`Sources/Launchpad
 - **Duplicate.** `duplicate(bot:into:)` copies setup and instructions into a new folder with its own empty memory and no sessions, and records `origin` ("Copied from").
 - **Chats and routines** follow their bot or group: `workspaceId(for: ChatMeta)` and `workspaceId(for: Routine.Target)`.
 - **Tests.** 14 new; suite 587, 0 failures, 3 skips. Not run on Linux, not tried in the app.
+
+## Workspaces: the app side (2026-11-18)
+
+The app now uses `WorkspaceStore` (LaunchpadCore) so Biscuit, Launchpad and your own apps stay apart. Design:
+`workspace/WORKSPACES_DESIGN.md`, adapted to this app's sidebar (a list of pages, with the bots and groups in the list
+column beside it, not a tree).
+
+- **Switcher** (`WorkspaceSwitcher`, top of the sidebar): the workspace's tile (colour and icon) and name; click for the
+  list, with each workspace's bot count, a ✓ on the current one, a dot when a bot is working in it or waiting on you,
+  **Add Workspace…** and **Manage Workspaces…**. Empty General is hidden from the list once you've made others. With the
+  sidebar hidden, the switcher shrinks to its tile in the toolbar, and chats show a workspace chip in their header.
+  **Workspace ▸ ⌘1…⌘9** jumps between them; switching reopens the chat you last had there.
+- **What's shown**: the chats list, Bots, Groups, the Office desks, the New Chat menu, Quick Ask and a group's member
+  picker show only the current workspace's. Skills, Apps and routines' pickers still list everything (Apps says "Shared
+  across all workspaces"). New bots and groups land in the workspace you're in (`WorkspaceCenter.reconcile`).
+- **Move and duplicate** (right-click a bot or group): a group moves with its bots, behind a confirm. A bot in a group
+  can't move alone ("move the group instead"). A bot that's also in a group that stays behind gets a choice: give the
+  moving group its own copy, or take it out of that group. **Duplicate into Workspace** makes a copy with its own empty
+  memory; its info says "Copied from …".
+- **Add / edit / manage** (`EditWorkspaceSheet`, `ManageWorkspacesSheet`): name, 8 colours, an icon; reorder; delete.
+  Deleting one with things in it asks where they go (all of it, whole) and never deletes any of it.
+- **Elsewhere**: opening a chat from a notification or ⌘K switches to its workspace; notifications start with the
+  workspace's name once you have more than General; a one-time banner offers to sort your bots, until you say "Not Now".
+
+### Decisions
+- Nothing moves on its own: every bot and group starts in General, and you move them.
+- Search (⌘K) still looks across every workspace, and shows no workspace tile yet.
+- The "unread" dot from the design isn't built: the app doesn't track unread messages yet. The dot means a bot is
+  working, or waiting on you.
+- Not built: collapsible groups in the sidebar (the app has no group tree there), drag and drop.
+
+Tests: none new (the model is Backend's, with its own tests). Nothing was tried in the running app: the switcher and
+its popover, the sheets, moving and duplicating, the shared-bots choice, ⌘1 to ⌘9, the chip, notifications and the banner.

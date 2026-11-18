@@ -23,6 +23,15 @@ struct LaunchpadApp: App {
                     .keyboardShortcut("b", modifiers: [.command, .shift])
                 Button("Quick Ask…") { QuickAsk.shared.show() }
             }
+            CommandMenu("Workspace") {
+                ForEach(Array(WorkspaceCenter.shared.workspaces.prefix(9).enumerated()), id: \.element.id) { index, ws in
+                    Button("\(ws.icon) \(ws.name)") { WorkspaceCenter.shared.select(ws.id) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                }
+                Divider()
+                Button("Add Workspace…") { WorkspaceCenter.shared.sheet = .edit(nil) }
+                Button("Manage Workspaces…") { WorkspaceCenter.shared.sheet = .manage }
+            }
             CommandMenu("Go") {
                 Button("Back") { model.goBack() }
                     .keyboardShortcut("[", modifiers: .command)

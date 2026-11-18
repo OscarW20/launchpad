@@ -60,7 +60,7 @@ extension AppModel {
             if let w = Attention.waiting(in: list), waiting[w.botId] == nil { waiting[w.botId] = (chatId, w.reason) }
         }
         let claims = AppClaims.read(file: paths.appClaimsFile, now: now)
-        return bots.map { bot -> DeskInfo in
+        return workspaceBots.map { bot -> DeskInfo in
             let run = working[bot.id]
             let liveReason = run.flatMap { Attention.reason($0.run.message) }
             let needs = liveReason.map { (run!.chatId, $0) } ?? waiting[bot.id].map { ($0.chatId, $0.reason) }
@@ -298,6 +298,7 @@ extension AppModel {
         Notifier.shared.install(model: self)
         ComputerUseController.shared.start(locator: runner.locator)
         Updater.shared.start()
+        WorkspaceCenter.shared.install(model: self)
         TicketCenter.shared.install(model: self)
         CompactionCenter.shared.loadRecords(paths: paths, chats: chats)
     }

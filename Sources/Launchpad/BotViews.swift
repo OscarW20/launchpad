@@ -29,9 +29,9 @@ struct BotListView: View {
     var body: some View {
         @Bindable var model = model
         Group {
-            if model.bots.isEmpty {
+            if model.workspaceBots.isEmpty {
                 VStack(spacing: 10) {
-                    Text("No bots yet.")
+                    Text(WorkspaceCenter.shared.isInUse ? "No bots in \(WorkspaceCenter.shared.current.name) yet." : "No bots yet.")
                         .font(Theme.rounded(.headline))
                     Text("Each bot is a folder in ~/Launchpad/bots. Make one here, or drop a folder in.")
                         .foregroundStyle(Theme.secondary)
@@ -43,7 +43,7 @@ struct BotListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 PanelList(selection: $model.selectedBotId) {
-                    ForEach(model.bots) { bot in
+                    ForEach(model.workspaceBots) { bot in
                         HStack(spacing: 10) {
                             AvatarView(bot: bot, size: 34)
                             VStack(alignment: .leading, spacing: 2) {
@@ -60,6 +60,8 @@ struct BotListView: View {
                         .contextMenu {
                             Button("Message \(bot.name)") { model.openChat(with: bot) }
                             Button("Show in Finder") { SystemActions.reveal(model.paths.botDir(bot.id)) }
+                            Divider()
+                            BotWorkspaceMenu(bot: bot)
                         }
                     }
                 }
@@ -653,6 +655,11 @@ struct BotDetailView: View {
                 Text("~/Launchpad/bots/\(botId)")
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(Theme.secondary)
+                if let origin = WorkspaceCenter.shared.origin(ofBot: botId) {
+                    Text("Copied from \(origin.bot) in \(origin.workspace.name). The two are separate.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondary)
+                }
             }
             Spacer()
             Button {

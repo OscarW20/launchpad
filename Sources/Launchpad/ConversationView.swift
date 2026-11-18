@@ -39,6 +39,7 @@ struct ConversationView: View {
 
 struct ConversationHeader: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("ui.sidebarHidden") private var sidebarHidden = false
     let chatId: String
     var poppedOut = false
 
@@ -51,6 +52,7 @@ struct ConversationHeader: View {
                 botInfo(model.bot(chat?.botId))
             }
             Spacer(minLength: Theme.Space.s)
+            if sidebarHidden || poppedOut { WorkspaceChip(chatId: chatId) }
             if let usage = model.contextByChat[chatId] {
                 HStack(spacing: 6) {
                     ContextChip(usage: usage)

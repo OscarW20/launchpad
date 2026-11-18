@@ -47,7 +47,7 @@ struct AppsPage: View {
                 Text("Apps")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundStyle(Theme.text)
-                Text("Give your bots apps and services. Keys stay in your Keychain.")
+                Text("Give your bots apps and services. Keys stay in your Keychain." + (WorkspaceCenter.shared.isInUse ? " Shared across all workspaces." : ""))
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.secondary)
             }

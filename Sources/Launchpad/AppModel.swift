@@ -371,12 +371,14 @@ final class AppModel {
             botStore.syncInstructions(for: bot.id)
         }
         if loaded != bots { bots = loaded }
+        WorkspaceCenter.shared.reconcile(bots: bots, groups: groups)
         if let id = selectedBotId, bot(id) == nil { selectedBotId = nil }
     }
 
     func reloadGroups() {
         let loaded = groupStore.loadAll()
         if loaded != groups { groups = loaded }
+        WorkspaceCenter.shared.reconcile(bots: bots, groups: groups)
         if let id = selectedGroupId, group(id) == nil { selectedGroupId = nil }
     }
 
@@ -457,7 +459,9 @@ final class AppModel {
 
     var filteredChats: [ChatMeta] {
         let query = chatSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        let center = WorkspaceCenter.shared
         return chats.filter { chat in
+            if center.id(for: chat) != center.currentId { return false }
             switch chatFilter {
             case .all: break
             case .bots: if chat.kind != .bot { return false }
@@ -974,6 +978,7 @@ final class AppModel {
     }
 
     func show(chat id: String) {
+        WorkspaceCenter.shared.reveal(chat: id)
         section = .chats
         chatFilter = .all
         chatSearch = ""

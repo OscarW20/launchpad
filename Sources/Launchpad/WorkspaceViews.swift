@@ -216,6 +216,7 @@ struct BotWorkspaceMenu: View {
         let here = center.id(forBot: bot.id)
         let others = center.workspaces.filter { $0.id != here }
         let inGroups = model.groups(containing: bot.id).filter { center.id(forGroup: $0.id) == here }
+        ForEach(inGroups) { RenameGroupItem(group: $0) }
         if others.isEmpty {
             AddWorkspaceFirst()
         } else {
@@ -239,6 +240,7 @@ struct GroupWorkspaceMenu: View {
     var body: some View {
         let center = WorkspaceCenter.shared
         let others = center.workspaces.filter { $0.id != center.id(forGroup: group.id) }
+        RenameGroupItem(group: group)
         if others.isEmpty {
             AddWorkspaceFirst()
         } else {
@@ -258,6 +260,11 @@ struct ChatWorkspaceMenu: View {
         let center = WorkspaceCenter.shared
         let here = center.id(for: chat)
         let others = center.workspaces.filter { $0.id != here }
+        if chat.kind == .group, let group = model.group(chat.groupId) {
+            RenameGroupItem(group: group)
+        } else if let bot = model.bot(chat.botId) {
+            ForEach(model.groups(containing: bot.id).filter { center.id(forGroup: $0.id) == here }) { RenameGroupItem(group: $0) }
+        }
         if others.isEmpty {
             AddWorkspaceFirst()
         } else if chat.kind == .group, let group = model.group(chat.groupId) {
@@ -275,6 +282,55 @@ struct ChatWorkspaceMenu: View {
             }
             Menu("Duplicate \(bot.name) into Workspace") { destinations(others) { .duplicate(bot) } }
         }
+    }
+}
+
+struct RenameGroupItem: View {
+    let group: BotGroup
+
+    var body: some View {
+        Button("Rename \(group.displayName)…") { WorkspaceCenter.shared.sheet = .rename(group) }
+    }
+}
+
+/// A small sheet for a group's new name. The name only has to be unique in the group's own workspace.
+struct RenameGroupSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let group: BotGroup
+    @State private var name: String
+    @State private var problem: String?
+
+    init(group: BotGroup) {
+        self.group = group
+        _name = State(initialValue: group.name)
+    }
+
+    private var clean: String { name.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "#")) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            Text("Rename \(group.displayName)").font(Theme.rounded(.title3, weight: .bold))
+            TextField("Name", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(save)
+            Text("Only this group changes. A name only has to be different from the other groups in \(WorkspaceCenter.shared.workspace(WorkspaceCenter.shared.id(forGroup: group.id))?.name ?? "this workspace"), so each workspace can name its copy its own way.")
+                .font(.callout).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            if let problem { Text(problem).font(.callout).foregroundStyle(Theme.warning).fixedSize(horizontal: false, vertical: true) }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Rename", action: save).buttonStyle(PillButtonStyle()).keyboardShortcut(.defaultAction)
+                    .disabled(clean.isEmpty || clean == group.name)
+            }
+        }
+        .padding(Theme.Space.xl)
+        .frame(width: 420)
+        .sheetBackground()
+    }
+
+    private func save() {
+        guard !clean.isEmpty, clean != group.name else { return }
+        if let message = WorkspaceCenter.shared.rename(group: group.id, to: clean) { problem = message } else { dismiss() }
     }
 }
 
@@ -309,6 +365,7 @@ private struct WorkspaceSheets: ViewModifier {
             case .edit(let ws): EditWorkspaceSheet(workspace: ws)
             case .manage: ManageWorkspacesSheet()
             case .move(let move): MoveSheet(move: move)
+            case .rename(let group): RenameGroupSheet(group: group)
             }
         }
     }

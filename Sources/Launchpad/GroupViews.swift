@@ -269,6 +269,14 @@ struct GroupDetailView: View {
                     if var g = draft {
                         g.name = g.name.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "#"))
                         if g.name.isEmpty { g.name = original?.name ?? groupId }
+                        // The name goes through the same call as Rename Group, so it's unique within its workspace.
+                        if g.name != original?.name {
+                            if let message = WorkspaceCenter.shared.rename(group: groupId, to: g.name) {
+                                model.alertMessage = message
+                                return
+                            }
+                            g.name = model.group(groupId)?.name ?? g.name
+                        }
                         model.saveGroup(g)
                         load()
                     }

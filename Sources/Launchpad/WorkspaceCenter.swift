@@ -37,12 +37,14 @@ final class WorkspaceCenter {
         case edit(Workspace?)
         case manage
         case move(WorkspaceMove)
+        case rename(BotGroup)
 
         var id: String {
             switch self {
             case .edit(let w): return "edit-\(w?.id ?? "new")"
             case .manage: return "manage"
             case .move(let m): return m.id
+            case .rename(let g): return "rename-\(g.id)"
             }
         }
     }
@@ -263,6 +265,21 @@ final class WorkspaceCenter {
     func origin(ofBot botId: String) -> (bot: String, workspace: Workspace)? {
         guard let o = layout.origins[botId], let ws = workspace(o.workspaceId) else { return nil }
         return (model?.bot(o.botId)?.name ?? o.botId, ws)
+    }
+
+    /// Renames a group (the Rename Group sheet and the group's edit sheet both come here). A name only has to be unique among
+    /// the groups of the same workspace. Returns the error text to show, or nil when it worked.
+    func rename(group groupId: String, to name: String) -> String? {
+        guard let store, let model else { return "Launchpad isn't ready yet." }
+        do {
+            try store.rename(group: groupId, to: name)
+        } catch {
+            if case WorkspaceError.unreadable = error { damaged = true }
+            return error.localizedDescription
+        }
+        model.reloadAll()
+        reload()
+        return nil
     }
 
     func origin(ofGroup groupId: String) -> (group: String, workspace: Workspace)? {

@@ -1565,3 +1565,17 @@ Each workspace can name its copy of a group differently. `WorkspaceStore.rename(
 - Safe by design: the group's id and folder never change, and routines, hand-offs, chats and "Copied from" notes all point at the id, so they follow. The group's chats keep any title you gave them and follow the default "#Name"; the heading the app wrote in SUMMARY.md follows, and nothing the lead wrote is touched.
 - Note: the app's group edit sheet saved the name straight through `GroupStore.save`, with no uniqueness check; it should call this instead.
 - Tests: 4 new; suite 608, 0 failures, 3 skips. Not hand-tested.
+
+### Workspaces: Rename Group (2026-11-18)
+Oscar wants each workspace to name its own copy of a group differently.
+- **Rename <group>…** on a group's right-click menu in the Chats list (group chats, and one-to-one chats whose bot is in a
+  group), the Groups page and the Bots page (a bot in a group). It opens `RenameGroupSheet`: the current name filled in,
+  Backend's error text shown under it if the name is taken in that workspace, Rename disabled while the name is empty or
+  unchanged. The item shows even when only General exists.
+- **One call for both routes**: `WorkspaceCenter.rename(group:to:)` wraps Backend's `WorkspaceStore.rename(group:to:)`,
+  reloads, and the sidebar, chat header and "Copied from" lines follow. The group's own edit sheet now uses it too when the
+  name changed, so it can no longer create a duplicate name in one workspace; a refusal shows as an alert and nothing is saved.
+- A name only has to be unique within the group's own workspace, so "Dev Team" and "Biscuit Dev" (or the same name in two
+  workspaces) are fine.
+
+Tests: none new (UI only; the core is covered by Backend's tests).

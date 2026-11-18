@@ -108,6 +108,7 @@ struct BotFormSections: View {
                 ), prompt: Text(Self.modelPrompt(bot.engine)))
             } else {
                 ModelPicker(engine: bot.engine, model: $bot.model)
+                EffortPicker(engine: bot.engine, effort: $bot.effort)
             }
             if bot.engine == .local {
                 LocalServerFields(baseURL: $bot.localBaseURL)
@@ -426,6 +427,20 @@ struct ModelPicker: View {
         guard engine == .claude else { return "Default (Codex's own setting)" }
         let name = Self.claudeModels.first { $0.id == model.botModel }?.title.components(separatedBy: ":").first
         return model.botModel.isEmpty ? "Default (Claude Code's default)" : "Default (\(name ?? model.botModel), from Settings)"
+    }
+}
+
+/// Thinking effort for one bot; "Default" follows Settings › Token use.
+struct EffortPicker: View {
+    @Environment(AppModel.self) private var model
+    let engine: BotEngine
+    @Binding var effort: String?
+
+    var body: some View {
+        Picker("Thinking effort", selection: Binding(get: { effort ?? "" }, set: { effort = $0.isEmpty ? nil : $0 })) {
+            Text(model.botEffort.isEmpty ? "Default (engine's own setting)" : "Default (\(EffortLevel.title(model.botEffort)), from Settings)").tag("")
+            ForEach(engine == .codex ? EffortLevel.codex : EffortLevel.claude, id: \.id) { Text($0.title).tag($0.id) }
+        }
     }
 }
 

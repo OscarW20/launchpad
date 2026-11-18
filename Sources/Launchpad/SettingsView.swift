@@ -105,11 +105,13 @@ struct SettingsView: View {
                     Text("Low").tag("low")
                     Text("Medium (recommended)").tag("medium")
                     Text("High").tag("high")
-                    Text("Claude Code's default").tag("")
+                    Text("Very high").tag("xhigh")
+                    Text("Max").tag("max")
+                    Text("Engine's own default").tag("")
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Thinking effort")
-                        Text("How hard Claude bots think before answering. Higher uses more of your plan.")
+                        Text("How hard bots think before answering, unless a bot picks its own in the bot editor. Higher uses more of your plan.")
                             .font(.caption).foregroundStyle(Theme.secondary)
                     }
                 }

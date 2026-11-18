@@ -178,3 +178,17 @@ private extension Bot {
         return b
     }
 }
+
+final class BotEffortTests: XCTestCase {
+    func testEffortIsSavedAndOldBotsStillLoad() throws {
+        var bot = Bot(id: "b", name: "B")
+        bot.effort = "high"
+        let data = try JSONEncoder().encode(bot)
+        XCTAssertEqual(try JSONDecoder().decode(Bot.self, from: data).effort, "high")
+        let old = try JSONDecoder().decode(Bot.self, from: Data(#"{"name":"Old"}"#.utf8))
+        XCTAssertNil(old.effort)
+        XCTAssertEqual(EffortLevel.codex("max"), "high")
+        XCTAssertEqual(EffortLevel.codex("low"), "low")
+        XCTAssertNil(EffortLevel.codex(nil))
+    }
+}

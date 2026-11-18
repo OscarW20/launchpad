@@ -1246,9 +1246,12 @@ final class AppModel {
             return setup
         }
         o.lean = leanRuns
+        let effort = bot.effort ?? (botEffort.isEmpty ? nil : botEffort)
         if bot.engine == .claude {
             o.defaultModel = botModel.isEmpty ? nil : botModel
-            o.effort = botEffort.isEmpty ? nil : botEffort
+            o.effort = effort
+        } else if bot.engine == .codex {
+            o.reasoningEffort = EffortLevel.codex(effort)
         }
 
         let available = Set(skills.map(\.id))

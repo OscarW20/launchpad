@@ -95,6 +95,8 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
     /// "Use this Mac": the bot gets the computer tools (Cua Driver) when computer use is set up. Every action still
     /// goes through the guard's "Use your Mac" category (Ask by default).
     public var useComputer: Bool
+    /// How hard the bot thinks: "low", "medium", "high", "xhigh" or "max" (Claude); nil = the Settings default.
+    public var effort: String?
 
     public init(
         id: String, name: String, emoji: String = "🤖", colour: String = BotPalette.default,
@@ -102,7 +104,7 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
         permission: PermissionLevel = .editWorkspace, connectors: [String] = [],
         skills: [String] = [], createdAt: Date = Date(), rules: BotRules = BotRules(),
         lockedDown: Bool = false, sites: [String] = [], localBaseURL: String? = nil, backup: BotBrain? = nil,
-        useComputer: Bool = false
+        useComputer: Bool = false, effort: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -121,11 +123,12 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
         self.localBaseURL = localBaseURL
         self.backup = backup
         self.useComputer = useComputer
+        self.effort = effort
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, emoji, colour, role, engine, model, permission, connectors, skills, createdAt
-        case rules, lockedDown, sites, localBaseURL, backup, useComputer
+        case rules, lockedDown, sites, localBaseURL, backup, useComputer, effort
     }
 
     // bot.json may be written by hand or by another agent, so every field is optional on read.
@@ -150,6 +153,34 @@ public struct Bot: Codable, Identifiable, Hashable, Sendable {
         localBaseURL = (rawURL?.isEmpty ?? true) ? nil : rawURL
         backup = try? c.decodeIfPresent(BotBrain.self, forKey: .backup)
         useComputer = (try? c.decodeIfPresent(Bool.self, forKey: .useComputer)) ?? false
+        let rawEffort = try? c.decodeIfPresent(String.self, forKey: .effort)
+        effort = (rawEffort?.isEmpty ?? true) ? nil : rawEffort
+    }
+}
+
+/// Thinking effort levels. Codex has fewer, so the top ones map to "high" there.
+public enum EffortLevel {
+    public static let claude: [(id: String, title: String)] = [
+        ("low", "Low: quick answers, uses the least"),
+        ("medium", "Medium: good for most work"),
+        ("high", "High: harder problems"),
+        ("xhigh", "Very high"),
+        ("max", "Max: uses the most"),
+    ]
+    public static let codex: [(id: String, title: String)] = [
+        ("low", "Low: quick answers, uses the least"),
+        ("medium", "Medium: good for most work"),
+        ("high", "High: harder problems"),
+    ]
+
+    /// The value to pass to Codex (`model_reasoning_effort`).
+    public static func codex(_ effort: String?) -> String? {
+        guard let effort, !effort.isEmpty else { return nil }
+        return ["xhigh", "max"].contains(effort) ? "high" : effort
+    }
+
+    public static func title(_ effort: String) -> String {
+        (claude.first { $0.id == effort }?.title.components(separatedBy: ":").first) ?? effort
     }
 }
 

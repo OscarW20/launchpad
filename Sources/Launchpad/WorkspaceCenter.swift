@@ -38,6 +38,7 @@ final class WorkspaceCenter {
         case manage
         case move(WorkspaceMove)
         case rename(BotGroup)
+        case repair
 
         var id: String {
             switch self {
@@ -45,6 +46,7 @@ final class WorkspaceCenter {
             case .manage: return "manage"
             case .move(let m): return m.id
             case .rename(let g): return "rename-\(g.id)"
+            case .repair: return "repair"
             }
         }
     }
@@ -57,6 +59,9 @@ final class WorkspaceCenter {
     /// The workspaces file exists but can't be read: everything shows in General, and changes are refused until it's reset.
     private(set) var damaged = false
     var sheet: Sheet?
+    /// Groups that hold extra members (from another workspace, or a role twice), found by looking: nothing changes until
+    /// the Repair Workspaces screen applies it.
+    private(set) var repair: WorkspaceStore.RepairPlan?
     private var store: WorkspaceStore?
     private weak var model: AppModel?
 
@@ -81,6 +86,62 @@ final class WorkspaceCenter {
         layout = store.load()
         damaged = store.isUnreadable
         if !layout.workspaces.contains(where: { $0.id == currentId }) { currentId = Workspace.generalId }
+        refreshRepair()
+    }
+
+    // MARK: Repairing
+
+    var needsRepair: Bool { !(repair?.fixes.isEmpty ?? true) }
+
+    func refreshRepair() {
+        repair = damaged ? nil : store?.repairPlan()
+    }
+
+    /// Names of groups (or bots) in the plan that are working right now: the repair waits for them.
+    func repairBlockers(_ plan: WorkspaceStore.RepairPlan) -> [String] {
+        guard let model else { return [] }
+        var names = Set<String>()
+        for fix in plan.fixes {
+            if model.chats.contains(where: { $0.kind == .group && $0.groupId == fix.groupId && model.isRunning($0.id) }) { names.insert(fix.groupName) }
+            let removing = Set(fix.removeIds)
+            for chat in model.chats where model.isRunning(chat.id) && chat.kind != .group && removing.contains(chat.botId ?? "") {
+                names.insert(model.bot(chat.botId)?.name ?? chat.botId ?? "a bot")
+            }
+        }
+        return names.sorted()
+    }
+
+    /// Takes the planned members out of their groups. Returns what to tell the user.
+    func applyRepair(_ plan: WorkspaceStore.RepairPlan) -> String {
+        guard let store, let model else { return "Launchpad isn't ready yet." }
+        guard repairBlockers(plan).isEmpty else { return "Something in these groups is working right now. Try again when it's done." }
+        do {
+            let changed = try store.applyRepair(plan)
+            model.reloadAll()
+            reload()
+            if changed.isEmpty { return "Nothing needed changing." }
+            return "Took the extra members out of \(changed.count) group\(changed.count == 1 ? "" : "s"). Each group's old file is kept as group.before-repair.json in its folder, and no bot was deleted."
+        } catch {
+            if case WorkspaceError.unreadable = error { damaged = true }
+            return "Couldn't repair: \(error.localizedDescription)"
+        }
+    }
+
+    /// Moves the chosen unused copies to the Trash. Returns what to tell the user.
+    func removeUnusedCopies(_ ids: [String]) -> String {
+        guard let store, let model else { return "Launchpad isn't ready yet." }
+        do {
+            let removed = try store.removeUnusedCopies(ids)
+            model.reloadAll()
+            reload()
+            let skipped = ids.count - removed.count
+            var text = removed.isEmpty ? "Nothing was moved." : "Moved \(removed.count) bot\(removed.count == 1 ? "" : "s") to the Trash. You can put them back from there."
+            if skipped > 0 { text += " \(skipped) \(skipped == 1 ? "was" : "were") left alone because it has since been used." }
+            return text
+        } catch {
+            if case WorkspaceError.unreadable = error { damaged = true }
+            return "Couldn't move them: \(error.localizedDescription)"
+        }
     }
 
     // MARK: Where things are

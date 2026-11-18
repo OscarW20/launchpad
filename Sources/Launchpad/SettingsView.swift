@@ -21,6 +21,14 @@ struct SettingsView: View {
                 Text("Bots, groups, skills and chats are plain files here. Edit them by hand or with any agent; the app picks up changes live. Set LAUNCHPAD_HOME to use a different folder.")
             }
 
+            Section {
+                Button("Repair Workspaces…") { WorkspaceCenter.shared.sheet = .repair }
+            } header: {
+                Text("Workspaces")
+            } footer: {
+                Text("Looks for groups with extra members (from another workspace, or the same role twice) and lets you fix them. Nothing changes until you press the button on the next screen.")
+            }
+
             ForEach(BotEngine.allCases.filter(\.isAgent)) { engine in
                 Section(engine.displayName) {
                     LabeledContent("Status") {

@@ -1586,3 +1586,22 @@ Oscar added the Dev team to Biscuit and it showed 15 members, each role twice ("
 - **Fix.** `hireTeam` on an existing group now counts a role as present if the group has the bot or a copy of it (`WorkspaceLayout.rootBot` follows copies of copies; a bot hired under a numbered id is noted in `roles`), and only adds a missing role from, or hires it into, the group's own workspace. A new group only reuses General bots. `addTeam` installing a team nowhere else now builds it straight in the target workspace (reusing that workspace's bots, otherwise new ones), so a lone bot elsewhere is never reused or moved.
 - **Repair (nothing is deleted without asking).** `repairPlan()` lists, per group, members from another workspace or a role held twice, and the copies nobody then uses (in no group, no chat, memory still empty). `applyRepair` only takes those members out of the group (never the lead; the old group file is kept as `group.before-repair.json`; every bot stays). `removeUnusedCopies(ids)` re-checks each and moves them to the Trash, so they can be put back. On Oscar's real data the plan is 7 + 7 members and 7 unused copies; the originals in Launchpad are untouched.
 - **Tests.** 8 new (Oscar's sequence, one of each in order, lead once, `addTeam` twice adds nothing, fresh install, repair plan/apply/backup/unused/lead). Suite 616, 0 failures, 3 skips. Not hand-tested.
+
+### Workspaces: Repair Workspaces screen (2026-11-18)
+For groups that picked up extra bots (a move followed by re-adding a team), on Backend's `repairPlan()`, `applyRepair(_:)`
+and `removeUnusedCopies(_:)`. It only ever runs on a click.
+- **Where**: Settings has a Workspaces section with **Repair Workspaces…**, and the sidebar shows a **Review…** banner while
+  any group needs step 1. The banner is only for step 1; unused copies alone don't raise it (a bot you just duplicated would
+  count), but they show on the screen.
+- **Step 1**: each affected group, with the members that would come out and why ("lives in Launchpad", "the same role is
+  already in the group"). **Take Them Out of the Groups** applies it. It's disabled, with the names, while a chat in an
+  affected group (or a chat with a bot being taken out) is working. The note says nothing is deleted, the lead stays, and the
+  old group file is kept as `group.before-repair.json`.
+- **Step 2** (after step 1, optional): the copies nothing uses, each with a checkbox, all off. **Move to Trash** sends the
+  ticked ones; the line says they can be put back. Anything that has been used since is left alone and the result says so.
+- **Afterwards** a line says what happened, including the backup file name. The plan is re-read when the screen opens and
+  after each step.
+- `WorkspaceCenter.repair`, `needsRepair`, `repairBlockers(_:)`, `applyRepair(_:)`, `removeUnusedCopies(_:)`.
+
+Tests: none new (UI only; the core is covered by Backend's tests). Not tried in the running app: the screen, the banner,
+the busy block, and both buttons.

@@ -166,6 +166,17 @@ struct WorkspaceBanner: View {
             }
             .padding(Theme.Space.m)
             .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
+        } else if WorkspaceCenter.shared.needsRepair {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                Label("Some groups have extra members", systemImage: "wrench.and.screwdriver.fill")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text)
+                Text("Bots from another workspace, or the same role twice. Nothing changes until you review it and apply it.")
+                    .font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                Button("Review…") { WorkspaceCenter.shared.sheet = .repair }
+                    .buttonStyle(PillButtonStyle()).controlSize(.small)
+            }
+            .padding(Theme.Space.m)
+            .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
         } else if !dismissed, !WorkspaceCenter.shared.isInUse {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 Text("Sort your bots into workspaces").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text)
@@ -334,6 +345,97 @@ struct RenameGroupSheet: View {
     }
 }
 
+/// Finds groups that picked up extra bots (a move followed by re-adding a team) and fixes them in two steps you control:
+/// take the extra members out of the groups, then optionally move copies nothing uses to the Trash. Runs only on a click.
+struct RepairWorkspacesSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var message: String?
+    @State private var selected = Set<String>()
+
+    private var center: WorkspaceCenter { WorkspaceCenter.shared }
+
+    var body: some View {
+        let plan = center.repair
+        let fixes = plan?.fixes ?? []
+        let blockers = plan.map(center.repairBlockers) ?? []
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            Text("Repair Workspaces").font(Theme.rounded(.title3, weight: .bold))
+            if fixes.isEmpty {
+                Text(plan == nil ? "The workspaces file is damaged, so there's nothing to repair until it's reset." : "No group has extra members.")
+                    .foregroundStyle(Theme.secondary)
+            } else {
+                Text("Step 1: take extra members out of these groups").font(.system(size: 13, weight: .semibold))
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Theme.Space.s) {
+                        ForEach(fixes, id: \.groupId) { fix in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(fix.groupName) · \(center.workspace(center.id(forGroup: fix.groupId))?.name ?? "General")").font(.system(size: 13, weight: .semibold))
+                                ForEach(fix.removeIds, id: \.self) { id in
+                                    Text("• \(model.bot(id)?.name ?? id): \(reason(fix.remove[id], bot: id))")
+                                        .font(.callout).foregroundStyle(Theme.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 220)
+                Text("Nothing is deleted. The bots stay, the lead is never taken out, and each group's old file is kept as group.before-repair.json.")
+                    .font(.callout).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                if !blockers.isEmpty {
+                    Text("\(blockers.joined(separator: ", ")) \(blockers.count == 1 ? "is" : "are") working right now. Apply when it's finished.")
+                        .font(.callout).foregroundStyle(Theme.warning).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if fixes.isEmpty, let copies = plan?.unusedCopies, !copies.isEmpty {
+                Text("Step 2 (optional): move copies nothing uses to the Trash").font(.system(size: 13, weight: .semibold))
+                Text("These are in no group, have no chats and an empty memory. Nothing is ticked: choose the ones you want gone.")
+                    .font(.callout).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(copies, id: \.self) { id in
+                            Toggle(isOn: Binding(get: { selected.contains(id) }, set: { on in if on { selected.insert(id) } else { selected.remove(id) } })) {
+                                Text("\(model.bot(id)?.name ?? id) · \(center.workspace(center.id(forBot: id))?.name ?? "General")")
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 180)
+                Text("They go to the Trash, so you can put them back.").font(.callout).foregroundStyle(Theme.secondary)
+            }
+            if let message { Text(message).font(.callout).foregroundStyle(Theme.success).fixedSize(horizontal: false, vertical: true) }
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+                if !fixes.isEmpty, let plan {
+                    Button("Take Them Out of the Groups") { message = center.applyRepair(plan) }
+                        .buttonStyle(PillButtonStyle()).keyboardShortcut(.defaultAction).disabled(!blockers.isEmpty)
+                } else if let copies = plan?.unusedCopies, !copies.isEmpty {
+                    Button("Move to Trash") {
+                        message = center.removeUnusedCopies(copies.filter(selected.contains))
+                        selected = []
+                    }
+                    .buttonStyle(PillButtonStyle()).disabled(selected.isEmpty)
+                }
+            }
+        }
+        .padding(Theme.Space.xl)
+        .frame(width: 540)
+        .sheetBackground()
+        .onAppear { center.refreshRepair() }
+    }
+
+    private func reason(_ reason: WorkspaceStore.GroupRepair.Reason?, bot: String) -> String {
+        switch reason {
+        case .otherWorkspace: return "lives in \(center.workspace(center.id(forBot: bot))?.name ?? "another workspace")"
+        case .duplicateRole: return "the same role is already in the group"
+        case nil: return ""
+        }
+    }
+}
+
 /// With only General there's nowhere to move to yet: say so, and offer to make one.
 private struct AddWorkspaceFirst: View {
     var body: some View {
@@ -366,6 +468,7 @@ private struct WorkspaceSheets: ViewModifier {
             case .manage: ManageWorkspacesSheet()
             case .move(let move): MoveSheet(move: move)
             case .rename(let group): RenameGroupSheet(group: group)
+            case .repair: RepairWorkspacesSheet()
             }
         }
     }

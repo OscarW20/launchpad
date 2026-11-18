@@ -186,7 +186,11 @@ public enum GuardHook {
         let cwd = (call["cwd"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? config.folder
         switch GuardEngine.decide(tool: tool, input: toolInput, cwd: cwd, config: config) {
         case .pass:
-            return .pass
+            // Full freedom also has to lift Claude Code's own permission check. The guard has no objection to a tool like
+            // WebFetch, WebSearch or a sub-agent, but a headless run refuses any tool it wasn't pre-approved for, and the
+            // bot then reports "I need your permission". An allow here skips that check, while the bot's own deny rules
+            // (a read-only bot) still hold, and `.deny` verdicts below are never turned into an allow.
+            return config.fullFreedom ? .allow("Full freedom is on for this group.") : .pass
         case .deny(let reason):
             return .deny(reason)
         case .ask(let category, let detail):

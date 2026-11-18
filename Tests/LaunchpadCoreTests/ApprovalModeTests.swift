@@ -145,7 +145,39 @@ final class ApprovalModeTests: XCTestCase {
         XCTAssertEqual(run("rm -rf ~/Documents/old", rules: free).exitCode, 0)
         let mcp = GuardHook.run(input: call("mcp__slack__post_message", ["text": "hi"]), rulesPath: free, askBase: nil, grants: nil)
         XCTAssertEqual(mcp.exitCode, 0)
-        XCTAssertEqual(run("ls -la", rules: free), .pass, "harmless calls are untouched")
+        XCTAssertEqual(run("ls -la", rules: free), .allow("Full freedom is on for this group."), "no card, and no Claude Code prompt either")
+    }
+
+    /// Full freedom still showed "I need your permission" for tools the guard has no objection to (WebFetch, WebSearch, a
+    /// sub-agent): a headless Claude Code run refuses any tool it wasn't pre-approved for, and a plain pass hands the decision
+    /// back to it. Verified with the real CLI: with the same flags Launchpad uses, WebFetch was refused on a pass and ran on an allow.
+    func testFullFreedomAlsoLiftsClaudeCodesOwnRefusalForToolsTheGuardPasses() throws {
+        let bot = Bot(id: "scout", name: "Scout")
+        let ask = try rules(bot, free: false), free = try rules(bot, free: true)
+        let allowed = HookResult.allow("Full freedom is on for this group.")
+        let tools: [(String, [String: Any])] = [
+            ("WebFetch", ["url": "https://example.com", "prompt": "title"]), ("WebSearch", ["query": "swift"]),
+            ("Task", ["description": "x", "prompt": "y"]), ("Skill", ["skill": "demo"]), ("Read", ["file_path": "/tmp/x"]),
+        ]
+        for (tool, input) in tools {
+            XCTAssertEqual(GuardHook.run(input: call(tool, input), rulesPath: free, askBase: nil, grants: nil), allowed, tool)
+            // Ask me leaves them to Claude Code exactly as before.
+            XCTAssertEqual(GuardHook.run(input: call(tool, input), rulesPath: ask, askBase: nil, grants: nil), .pass, tool)
+        }
+    }
+
+    func testFullFreedomNeverTurnsARefusalIntoAnAllow() throws {
+        var bot = Bot(id: "scout", name: "Scout")
+        bot.rules.set(.never, for: .spend)
+        let free = try rules(bot, free: true)
+        // Never, Launchpad's own files and credentials stay refused, even when everything else is allowed.
+        XCTAssertEqual(run("vercel domains buy example.com", rules: free).exitCode, 2)
+        XCTAssertEqual(run("echo x > \(paths.launchpadData.path)/full-freedom.json", rules: free).exitCode, 2)
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        XCTAssertEqual(GuardHook.run(input: call("Read", ["file_path": home + "/.ssh/id_rsa"]), rulesPath: free, askBase: nil, grants: nil).exitCode, 2)
+        // A locked-down bot is not in Full freedom: it keeps the plain pass and its cards.
+        let locked = try rules(Bot(id: "scout", name: "Scout", lockedDown: true), free: true)
+        XCTAssertEqual(GuardHook.run(input: call("WebFetch", ["url": "https://example.com"]), rulesPath: locked, askBase: nil, grants: nil).stdout, nil)
     }
 
     func testNeverStillMeansNever() throws {

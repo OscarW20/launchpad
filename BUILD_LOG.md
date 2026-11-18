@@ -1522,3 +1522,18 @@ Reset, the scoped search and its checkbox, the tiles on results, and the Apps li
 - `workspaces.json` is read strictly: a missing key is fine, a key with the wrong type (`"groups": "oops"`, `[]`) makes the file unreadable, so the banner and Reset apply and nothing is dropped silently.
 - Each write keeps the last good file as `workspaces.json.bak`.
 - Tests: 2 new; suite 593, 0 failures, 3 skips.
+
+### Workspaces: Move on every row, even before you have a second workspace (2026-11-18)
+Oscar right-clicked a group chat row in Chats and saw only Open in New Window, Save as Skill and Delete Chat: the Move
+option existed on the Bots and Groups pages only, and was hidden entirely until a workspace other than General existed.
+- **Chat rows** now have `ChatWorkspaceMenu`. A group chat moves its group and bots ("Move <group> and its bots to
+  Workspace"); a one-to-one chat moves its bot and chats ("Move <bot> and its chats to Workspace") and also offers
+  "Duplicate <bot> into Workspace". If the bot is in a group, the item offers to move that group instead, since a bot in a
+  group can't go alone.
+- **Bot and group rows** use the same wording, so each item says what moves.
+- With only General, every one of these shows "Move to Workspace… (add a workspace first)", which opens the Add Workspace
+  sheet, instead of disappearing.
+- Shared helper `destinations(_:kind:)` builds the destination list for all three menus.
+
+Tests: none new (UI only). Suite 597, 0 failures, 3 skips. Not tried in the running app: the three menus, the add-first
+item, and the group-instead item for a bot in a group.

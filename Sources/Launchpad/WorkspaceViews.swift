@@ -215,19 +215,19 @@ struct BotWorkspaceMenu: View {
         let center = WorkspaceCenter.shared
         let here = center.id(forBot: bot.id)
         let others = center.workspaces.filter { $0.id != here }
-        let inGroups = model.groups(containing: bot.id).map(\.name)
-        if center.isInUse || !others.isEmpty {
+        let inGroups = model.groups(containing: bot.id).filter { center.id(forGroup: $0.id) == here }
+        if others.isEmpty {
+            AddWorkspaceFirst()
+        } else {
             if inGroups.isEmpty {
-                Menu("Move to Workspace") {
-                    ForEach(others) { ws in Button("\(ws.icon) \(ws.name)") { center.sheet = .move(WorkspaceMove(kind: .bot(bot), destination: ws)) } }
-                }
+                Menu("Move \(bot.name) and its chats to Workspace") { destinations(others) { .bot(bot) } }
             } else {
-                Button("Move to Workspace: move the group instead") {}.disabled(true)
-                    .help("\(bot.name) is in \(inGroups.joined(separator: ", ")). A group and its bots move together.")
+                // A bot in a group can't move alone: offer to move the group, which takes it along.
+                ForEach(inGroups) { group in
+                    Menu("Move \(group.displayName) and its bots to Workspace") { destinations(others) { .group(group) } }
+                }
             }
-            Menu("Duplicate into Workspace") {
-                ForEach(others) { ws in Button("\(ws.icon) \(ws.name)") { center.sheet = .move(WorkspaceMove(kind: .duplicate(bot), destination: ws)) } }
-            }
+            Menu("Duplicate \(bot.name) into Workspace") { destinations(others) { .duplicate(bot) } }
         }
     }
 }
@@ -238,11 +238,53 @@ struct GroupWorkspaceMenu: View {
     var body: some View {
         let center = WorkspaceCenter.shared
         let others = center.workspaces.filter { $0.id != center.id(forGroup: group.id) }
-        if !others.isEmpty {
-            Menu("Move to Workspace") {
-                ForEach(others) { ws in Button("\(ws.icon) \(ws.name)") { center.sheet = .move(WorkspaceMove(kind: .group(group), destination: ws)) } }
-            }
+        if others.isEmpty {
+            AddWorkspaceFirst()
+        } else {
+            Menu("Move \(group.displayName) and its bots to Workspace") { destinations(others) { .group(group) } }
         }
+    }
+}
+
+/// The context menu of a chat row. A chat has no workspace of its own: it's where its bot or group is, so this moves
+/// that, and the item says so. A one-to-one chat with a bot that's in a group moves the group (the bot can't go alone).
+struct ChatWorkspaceMenu: View {
+    @Environment(AppModel.self) private var model
+    let chat: ChatMeta
+
+    var body: some View {
+        let center = WorkspaceCenter.shared
+        let here = center.id(for: chat)
+        let others = center.workspaces.filter { $0.id != here }
+        if others.isEmpty {
+            AddWorkspaceFirst()
+        } else if chat.kind == .group, let group = model.group(chat.groupId) {
+            Menu("Move \(group.displayName) and its bots to Workspace") { destinations(others) { .group(group) } }
+        } else if let bot = model.bot(chat.botId) {
+            let inGroups = model.groups(containing: bot.id).filter { center.id(forGroup: $0.id) == here }
+            if inGroups.isEmpty {
+                Menu("Move \(bot.name) and its chats to Workspace") { destinations(others) { .bot(bot) } }
+            } else {
+                ForEach(inGroups) { group in
+                    Menu("Move \(group.displayName) and its bots to Workspace") { destinations(others) { .group(group) } }
+                }
+            }
+            Menu("Duplicate \(bot.name) into Workspace") { destinations(others) { .duplicate(bot) } }
+        }
+    }
+}
+
+/// With only General there's nowhere to move to yet: say so, and offer to make one.
+private struct AddWorkspaceFirst: View {
+    var body: some View {
+        Button("Move to Workspace… (add a workspace first)") { WorkspaceCenter.shared.sheet = .edit(nil) }
+    }
+}
+
+/// One item per destination; choosing one opens the confirm sheet.
+@ViewBuilder private func destinations(_ others: [Workspace], kind: @escaping () -> WorkspaceMove.Kind) -> some View {
+    ForEach(others) { ws in
+        Button("\(ws.icon) \(ws.name)") { WorkspaceCenter.shared.sheet = .move(WorkspaceMove(kind: kind(), destination: ws)) }
     }
 }
 

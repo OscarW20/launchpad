@@ -73,7 +73,8 @@ public final class EngineRunner: @unchecked Sendable {
         process.executableURL = launch.executable
         process.arguments = launch.arguments
         process.currentDirectoryURL = inv.workingDirectory
-        process.environment = locator.environment().merging(inv.environment) { _, new in new }
+        // Not a copy of Launchpad's environment: a bot's shell commands inherit this, and what they print goes back to the model.
+        process.environment = EngineEnvironment.build(base: locator.environment(), extra: inv.environment, engine: inv.engine)
         let stdout = Pipe(), stderr = Pipe(), stdin = Pipe()
         process.standardOutput = stdout
         process.standardError = stderr

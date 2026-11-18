@@ -1276,7 +1276,8 @@ final class AppModel {
         var liveApprovals = false
         if bot.engine == .claude {
             let ticketAllowances = TicketCenter.shared.guardAllowances(forChat: chat.id)
-            if let guardURL = guardExecutable, let rules = writeGuardRules(for: bot, fullFreedom: free, ticketAllowances: ticketAllowances) {
+            if let guardURL = guardExecutable, let rules = writeGuardRules(for: bot, fullFreedom: free, ticketAllowances: ticketAllowances,
+                                                                secretVariables: Array(o.environment.keys)) {
                 let base = inbox.base(chatId: chat.id, runId: runId)
                 o.guardHook = GuardHookSetup(helper: guardURL.path, rulesFile: rules.path, askBase: base.path,
                                              approvalsDir: grants.directory.path)
@@ -1652,7 +1653,9 @@ final class AppModel {
     @discardableResult
     /// - Parameter ticketAllowances: for a Create ticket run in "File without asking" mode: the Jira create call is
     ///   allowed without a card, in a rules file of its own so the bot's other runs never see it.
-    func writeGuardRules(for bot: Bot, fullFreedom: Bool = false, ticketAllowances: [String] = []) -> URL? {
+    /// - Parameter secretVariables: the names (never the values) of the variables this run holds secrets in, so the
+    ///   guard refuses a command that mentions one.
+    func writeGuardRules(for bot: Bot, fullFreedom: Bool = false, ticketAllowances: [String] = [], secretVariables: [String] = []) -> URL? {
         let skillIds = SkillLinker.effectiveSkills(for: bot, groups: groups)
         let lockedDirs = SkillLocks.lockedDirs(skillIds: skillIds, locked: lockedSkills, paths: paths, botId: bot.id)
         // Every group folder it works in, so a rules file written for one chat suits the others too.
@@ -1660,7 +1663,7 @@ final class AppModel {
         // Team notes (Shared/TEAM.md) are every bot's to edit; the chat tools never need asking.
         let cfg = GuardRulesFile.config(for: bot, paths: paths, extraRoots: extra + [paths.shared], lockedSkillDirs: lockedDirs,
                                         alwaysForWrites: alwaysForWrites, trustedServers: [ChatToolsSetup.serverKey],
-                                        fullFreedom: fullFreedom, extraAlwaysAllowed: ticketAllowances)
+                                        fullFreedom: fullFreedom, extraAlwaysAllowed: ticketAllowances, secretVariables: secretVariables)
         return try? GuardRulesFile.write(cfg, botId: bot.id, paths: paths, variant: ticketAllowances.isEmpty ? nil : TicketGuard.variant)
     }
 

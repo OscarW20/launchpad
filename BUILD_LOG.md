@@ -1248,3 +1248,38 @@ the clipboard.
 Tests: 5 new and 4 changed in `TicketTests` (tag-character smuggling in the selection and the note, every other
 hidden character, what must be kept, the length limit, ports and bare domains, confirmed against unconfirmed,
 confirming the site).
+
+## Bots no longer inherit Launchpad's environment, and the guard refuses to print it (2026-11-18)
+
+Tester confirmed that a bot's shell commands could read environment variables (`printenv LP_FAKE_TOKEN` printed a
+dummy value), that the guard allowed all 13 ways of printing them, and that it was wider than connector tokens:
+`CLILocator.environment()` started from a copy of Launchpad's whole environment, so anything set in your shell when
+Launchpad started (an `AWS_SECRET_ACCESS_KEY`, a `GITHUB_TOKEN`) reached every bot.
+
+- **Pass less** (`EngineEnvironment`): an engine process now gets only a short list from Launchpad's environment (PATH,
+  HOME, USER, locale, TMPDIR, the macOS login session, your proxy and certificate settings, SSH_AUTH_SOCK) plus its
+  own settings by prefix (`CLAUDE_`/`ANTHROPIC_` for Claude, `CODEX_`/`OPENAI_` for Codex), plus whatever Launchpad
+  gives that run (connector values). Used by `EngineRunner`. On this Mac 24 of 45 variables are no longer passed.
+- **Refuse to print it** (`GuardEngine.environmentReadReason`): a shell command is refused, whatever the rules or Full
+  freedom say, if it prints the environment (`printenv`, `env`, `set`, `export -p`, `declare -x`, `ps eww`,
+  `sysctl kern.procargs`, `/proc/…/environ`, an inline Python, Node, Ruby, Perl, PHP, Swift… one-liner that dumps it) or
+  names a secret variable (`echo $LP_GITHUB_TOKEN`, including inside `bash -c`, `$(…)`, `sudo`, `xargs`). "Secret"
+  means one of this run's variable names (`GuardConfig.secretVariables`, names only, from `MCPConfig.environment`) or a
+  name with TOKEN, SECRET, PASSWORD, KEY… as a word in it. `printenv PATH` and `env FOO=1 cmd` still work.
+
+### Decisions
+- **The guard rule is friction, not a boundary.** A script file that reads the environment (`python3 dump.py`), an
+  encoding trick or another process's environment is not seen. A test documents that on purpose.
+- **Connector tokens are still readable by that bot's own engine.** Claude expands `${LP_…}` from its own environment
+  and a stdio server needs its variables, so the token has to be in the engine's process. The real fix is that the engine
+  never holds it: Launchpad starts the connector's server itself and relays to it (the broker in `VAULT_DESIGN.md`).
+  Until then, treat a connector token as readable by any bot that has that connector.
+- **An engine's own API key stays visible to its shell** if you set one (it may need it to start). Signing in with the
+  app, which keeps no key in the environment, is the safer way.
+- **Not used: `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`.** Write-ups say it removes only a fixed list of cloud credentials (not
+  `LP_*`), and it is reported to force Claude's own sandbox on, which can't nest inside Launchpad's.
+
+Tests: 11 new in `EngineEnvironmentTests` and `EnvironmentReadGuardTests`, including a real `EngineRunner` run of a fake
+engine with dummy secrets in Launchpad's own environment, 45 ways of printing it that are refused and 40 ordinary commands
+that still run. All values are dummies. Checked by hand: the real `claude --version` and `claude auth status` still work
+(signed in) under the smaller environment. Not checked: a full run with a model call.

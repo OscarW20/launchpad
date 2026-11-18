@@ -275,12 +275,14 @@ public enum GuardRulesFile {
     ///     the bot is locked down).
     ///   - trustedServers: MCP servers whose tools never need asking.
     ///   - fullFreedom: the run is in a group set to "Full freedom" (`ApprovalMode.skipsApprovals`).
+    ///   - secretVariables: the names (never the values) of variables this run holds secrets in, from
+    ///     `MCPConfig.environment`; a command that mentions one is refused.
     ///   - extraAlwaysAllowed: "Always allow" entries for this run only (`TicketGuard.allowances`). They follow the same
     ///     rule as the bot's own: a locked-down bot, or "Always allow" turned off for writes, still asks.
     public static func config(
         for bot: Bot, paths: LaunchpadPaths, extraRoots: [URL] = [], lockedSkillDirs: [String] = [],
         alwaysForWrites: Bool = true, trustedServers: [String] = [], fullFreedom: Bool = false,
-        extraAlwaysAllowed: [String] = [], home: URL = FileManager.default.homeDirectoryForCurrentUser
+        extraAlwaysAllowed: [String] = [], secretVariables: [String] = [], home: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> GuardConfig {
         let folder = paths.botDir(bot.id)
         var c = GuardConfig()
@@ -298,6 +300,7 @@ public enum GuardRulesFile {
             }
         }
         c.noAlwaysForWrites = !writesOK
+        c.secretVariables = secretVariables.sorted()
         c.locked = lockedSkillDirs
         c.changePatterns = bot.rules.changePatterns
         c.trustedServers = trustedServers

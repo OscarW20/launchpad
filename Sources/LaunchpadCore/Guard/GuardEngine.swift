@@ -27,6 +27,9 @@ public struct GuardConfig: Equatable, Sendable {
     public var locked: [String] = []
     /// Launchpad's own files and folders, which bots may never change.
     public var protected: [String] = []
+    /// Names (never values) of the variables this run holds secrets in: connector tokens and the like. A command that
+    /// mentions one by name is refused (`GuardEngine.environmentReadReason`).
+    public var secretVariables: [String] = []
     /// Where the app writes your answers to approval cards: a folder the bot can't write, so a bot can't approve
     /// its own request.
     public var answers = ""
@@ -54,6 +57,7 @@ public struct GuardConfig: Equatable, Sendable {
         alwaysAllowed = json["alwaysAllowed"] as? [String] ?? []
         locked = json["locked"] as? [String] ?? []
         protected = json["protected"] as? [String] ?? []
+        secretVariables = json["secretVariables"] as? [String] ?? []
         answers = json["answers"] as? String ?? ""
         noAlwaysForWrites = json["noAlwaysForWrites"] as? Bool ?? false
         changePatterns = json["changePatterns"] as? [String] ?? []
@@ -65,7 +69,7 @@ public struct GuardConfig: Equatable, Sendable {
 
     public var json: [String: Any] {
         ["bot": bot, "folder": folder, "roots": roots, "rules": rules, "alwaysAllowed": alwaysAllowed,
-         "locked": locked, "protected": protected, "answers": answers, "noAlwaysForWrites": noAlwaysForWrites,
+         "locked": locked, "protected": protected, "secretVariables": secretVariables, "answers": answers, "noAlwaysForWrites": noAlwaysForWrites,
          "changePatterns": changePatterns, "trustedServers": trustedServers, "computerServers": computerServers,
          "dataFolderName": dataFolderName, "fullFreedom": fullFreedom]
     }
@@ -125,6 +129,7 @@ public enum GuardEngine {
     static let writingCommands: Set<String> = ["tee", "truncate", "touch", "dd", "mkdir", "xattr", "setfile"]
 
     static func blockedShell(_ command: String, cwd: String, config: GuardConfig) -> String? {
+        if let reason = environmentReadReason(command, config: config) { return reason }
         let text = normalized(command)
         if writes(command) {
             if namesDataFolder(command, config: config) { return protectedReason }
@@ -205,6 +210,90 @@ public enum GuardEngine {
         if text.range(of: #"(^|[/\s=])"# + name + #"(/|\s|$|\*|\?)"#, options: .regularExpression) != nil { return true }
         return text.range(of: #"\$\{?\w+\}?/(rules|answers|approvals|snapshots)(/[^/\s]*\.(json|answer)|/?(\s|$))"#,
                           options: .regularExpression) != nil
+    }
+
+    // MARK: Reading the environment
+
+    public static let environmentReason = "That would print environment variables, which can hold tokens and keys, and what a command prints goes back to the model. You never need them: connectors are already signed in, so use the connector. If you really need a value, ask the user. Don't try another way to read it."
+
+    /// Names that are fine to read: they're how the shell is set up, not secrets.
+    static let plainVariables: Set<String> = ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "TMPDIR", "TZ", "PWD",
+                                              "OLDPWD", "SHLVL", "EDITOR", "PAGER", "HOSTNAME", "COLUMNS", "LINES"]
+
+    /// Inline code that reads the environment: Python, Node, Deno, Go, Java, PHP, Lua, Swift and the like.
+    static let environmentCode = #"([Ee]nviron\b|\b[Gg]etenv\b|\bprocess\.env\b|\bDeno\.env\b|\b_ENV\b|\.environment\b|\bprintenv\b)"#
+    /// Ruby and Perl: a bare ENV is the whole environment (`p ENV`, `%ENV`, `$ENV{…}`).
+    static let environmentCodeRubyPerl = #"\bENV\b"#
+
+    /// Whether this variable name is one a command must not mention: one of the run's secret variables, or a name that
+    /// says it holds a secret.
+    static func isSecretVariable(_ name: String, config: GuardConfig) -> Bool {
+        config.secretVariables.contains(name) || EngineEnvironment.looksSecret(name)
+    }
+
+    /// A shell command that would print the environment (`printenv`, `env`, `set`, `export -p`, `declare -x`, `ps eww`,
+    /// a one-liner that dumps `os.environ`), or that names a secret variable (`echo $LP_GITHUB_TOKEN`). A bot's shell
+    /// inherits the engine's environment, and what a command prints goes back to the model, so this refuses them,
+    /// whatever the rules or Full freedom say.
+    ///
+    /// This is friction, not a boundary: a script file that reads the environment, or an encoding trick, gets past it.
+    /// The boundary is the engine never holding a secret (see `EngineEnvironment`).
+    public static func environmentReadReason(_ command: String, config: GuardConfig) -> String? {
+        // Naming a secret variable: $NAME, ${NAME}, ${!PREFIX@}.
+        if let named = try? NSRegularExpression(pattern: #"\$\{?([A-Za-z_][A-Za-z0-9_]*)"#) {
+            let ns = command as NSString
+            for m in named.matches(in: command, range: NSRange(location: 0, length: ns.length)) {
+                if isSecretVariable(ns.substring(with: m.range(at: 1)), config: config) { return environmentReason }
+            }
+        }
+        if command.range(of: #"\$\{![A-Za-z_]*"#, options: .regularExpression) != nil { return environmentReason }
+        if command.range(of: #"/(proc/[^\s/]+|self)/environ"#, options: .regularExpression) != nil { return environmentReason }
+
+        for top in ShellParser.parse(command) {
+            // A bare `env` (and `sudo env`, `nohup env`) unwraps to nothing, so look at what was written too.
+            let unwrapped = ShellParser.expand(top, depth: 0)
+            let bareWrapper = unwrapped.contains { $0.words.isEmpty } && top.words.contains { ($0 as NSString).lastPathComponent == "env" }
+            if bareWrapper { return environmentReason }
+            for c in [top] + unwrapped {
+                guard let head = c.head else { continue }
+                let options = c.args.filter { $0.hasPrefix("-") && $0.count > 1 }
+                let operands = c.args.filter { !$0.hasPrefix("-") }
+                let names = operands.map { String($0.prefix { $0 != "=" }) }
+                switch head {
+                case "printenv":
+                    if names.isEmpty || names.contains(where: { isSecretVariable($0, config: config) }) { return environmentReason }
+                case "env":
+                    // `env FOO=1 cmd` runs a command; `env`, `env -0` and `env -i` print.
+                    if !operands.contains(where: { !$0.contains("=") }) { return environmentReason }
+                case "set":
+                    if c.args.isEmpty { return environmentReason }
+                case "export", "declare", "typeset", "local", "readonly":
+                    let lists = options.contains { head == "export" ? $0.contains("p") : ($0.contains("x") || $0.contains("p")) }
+                    let printsAll = c.args.isEmpty && head == "export"
+                    if printsAll || (lists && (names.isEmpty || names.contains(where: { isSecretVariable($0, config: config) }))) {
+                        return environmentReason
+                    }
+                case "ps":
+                    // BSD style `ps eww`, `ps auxe`; `-E` shows the environment too.
+                    let bare = c.args.first.map { !$0.hasPrefix("-") && $0.contains("e") && !$0.contains("/") && Int($0) == nil } ?? false
+                    if bare || options.contains(where: { $0.contains("E") }) { return environmentReason }
+                case "sysctl":
+                    if c.args.contains(where: { $0.contains("procargs") }) { return environmentReason }
+                default:
+                    break
+                }
+                // An inline script or here-document that reads the environment.
+                if isInterpreter(head) {
+                    let inline = c.heredoc || c.args.contains { ["-c", "-e", "-E", "--eval", "-p", "--print", "-r", "-"].contains($0) }
+                    let code = c.args.joined(separator: " ") + (c.heredoc ? " " + command : "")
+                    if inline, code.range(of: environmentCode, options: .regularExpression) != nil { return environmentReason }
+                    if inline, head == "ruby" || head == "perl", code.range(of: environmentCodeRubyPerl, options: .regularExpression) != nil {
+                        return environmentReason
+                    }
+                }
+            }
+        }
+        return nil
     }
 
     /// Any Claude Code settings file: a bot could otherwise switch its own hooks off.

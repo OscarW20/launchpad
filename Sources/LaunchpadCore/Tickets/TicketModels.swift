@@ -114,6 +114,22 @@ public struct TicketSettings: Codable, Equatable, Sendable {
         key.range(of: #"^[A-Z][A-Z0-9_]{1,9}$"#, options: .regularExpression) != nil
     }
 
+    /// Shown while no Jira site is set. Not an error: tickets can still be filed, but their links aren't trusted yet.
+    public var siteWarning: String? {
+        siteHost == nil
+            ? "Your Jira site isn't set, so Launchpad can't tell a ticket link is really yours. It won't copy or open one until you confirm the site."
+            : nil
+    }
+
+    /// These settings with the Jira site taken from a result's link: what you do when you confirm "yes, that's my site".
+    /// Does nothing if the result's link isn't on an atlassian.net site.
+    public func confirmingSite(of result: TicketResult) -> TicketSettings {
+        guard let host = result.site, host.hasSuffix(".atlassian.net") else { return self }
+        var copy = self
+        copy.siteHost = Self.cleanHost(host)
+        return copy
+    }
+
     public func assignee(id: String?) -> TicketAssignee? {
         id.flatMap { id in assignees.first { $0.id == id } }
     }
@@ -175,15 +191,26 @@ public struct TicketRequest: Equatable, Sendable {
     }
 }
 
-/// A ticket that exists in Jira.
+/// A ticket the bot says it filed, with a link that passed the checks below.
 public struct TicketResult: Equatable, Sendable {
     public var key: String
     public var url: URL
+    /// True when the link is on the Jira site set in Settings. False when no site is set: the link is on *some*
+    /// atlassian.net site, and anyone can make one, so the app must not copy it, announce it or open it until you've
+    /// confirmed the site (`TicketSettings.confirmingSite(of:)`).
+    public var siteConfirmed: Bool
 
-    public init(key: String, url: URL) {
+    public init(key: String, url: URL, siteConfirmed: Bool) {
         self.key = key
         self.url = url
+        self.siteConfirmed = siteConfirmed
     }
+
+    /// The host the link is on, e.g. "biscuit-pet-care.atlassian.net".
+    public var site: String? { url.host?.lowercased() }
+
+    /// The same result once you've confirmed the site.
+    public func confirmed() -> TicketResult { TicketResult(key: key, url: url, siteConfirmed: true) }
 }
 
 /// How the bot's reply ended. Only a real key and link count as success.
@@ -229,12 +256,21 @@ public enum TicketOutcome: Equatable, Sendable {
         let keyPattern = "^" + NSRegularExpression.escapedPattern(for: settings.projectKey) + "-[0-9]{1,9}$"
         guard let key = tokens.first(where: { $0.range(of: keyPattern, options: .regularExpression) != nil }),
               let link = tokens.first(where: { $0.lowercased().hasPrefix("https://") }) else { return nil }
-        guard let url = URL(string: link), url.scheme == "https", url.user == nil, url.password == nil,
+        guard let url = URL(string: link), url.scheme == "https", url.port == nil, url.user == nil, url.password == nil,
               url.query == nil, url.fragment == nil, let host = url.host?.lowercased() else { return nil }
-        if let site = settings.siteHost { guard host == site else { return nil } } else { guard host.hasSuffix(".atlassian.net") else { return nil } }
+        // With a site set, only that exact host counts. Without one, any atlassian.net site passes the shape check but
+        // comes back unconfirmed: the app shows it and asks, and doesn't copy, announce or open it.
+        let confirmed: Bool
+        if let site = settings.siteHost {
+            guard host == site else { return nil }
+            confirmed = true
+        } else {
+            guard host.hasSuffix(".atlassian.net"), host.count > ".atlassian.net".count else { return nil }
+            confirmed = false
+        }
         let path = url.path.hasSuffix("/") ? String(url.path.dropLast()) : url.path
         guard path == "/browse/\(key)" else { return nil }
-        return TicketResult(key: key, url: url)
+        return TicketResult(key: key, url: url, siteConfirmed: confirmed)
     }
 }
 

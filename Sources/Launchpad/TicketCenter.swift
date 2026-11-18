@@ -409,8 +409,9 @@ final class TicketCenter {
     private func finish(_ run: TicketRun, phase: TicketRun.Phase) {
         activeChats.remove(run.chatId)
         run.phase = phase
-        // Only a real key and link count: copy it and say so, once.
-        if case .done(let result, let duplicate) = phase {
+        // Only a real key and a link on your Jira site count: copy it and say so, once. With no site set the link could be
+        // on anyone's atlassian.net site, so it isn't copied, announced or opened until you confirm the site in the panel.
+        if case .done(let result, let duplicate) = phase, result.siteConfirmed {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(result.url.absoluteString, forType: .string)
             Notifier.shared.postTicket(result, duplicate: duplicate)

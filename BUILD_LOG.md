@@ -1217,3 +1217,34 @@ Tests: 11 new in `TicketRunTests` (hotkey letters, which bots can file tickets, 
 plist and the Swift handler agree on the message name). Nothing was tried in the running app: the Service entry, the
 hotkey and Accessibility, the panel, a real run against Jira, the approval card in the panel, the notification and
 the clipboard.
+
+## Create ticket: closing the holes Tester found (2026-11-18)
+
+- **Hidden characters** (`TicketPrompt.sanitize`): the tag characters (U+E0000 to U+E007F), all variation selectors
+  (U+FE00 to U+FE0F, U+E0100 to U+E01EF), the soft hyphen, the invisible math operators, the Mongolian vowel
+  separator, the zero-width space, word joiner, byte order mark and direction overrides and isolates are removed from
+  the selection, the note and the source labels. These render as nothing but can spell out an instruction. Zero-width
+  non-joiner and joiner stay, so emoji sequences and some languages keep working. The cost is cosmetic: an emoji's
+  colour selector and a regional flag's tags are dropped, so they draw plain.
+- **The length limit** is measured after cleaning. Swift counts these characters as part of the visible one before
+  them, so counting the raw text would let a huge hidden payload past the cap (there's a test for it).
+- **Jira site.** With no site set, any `*.atlassian.net` link passed the shape check, and anyone can make such a site,
+  so injected text could have had a bot report a ticket on someone else's site, which the app then copied and
+  opened from the notification. Now `TicketResult.siteConfirmed` is true only for a link on the site set in Settings.
+  Without one the result still comes back (so a real ticket isn't lost) but unconfirmed, and the app doesn't copy,
+  announce or open it: the panel shows the key and host and asks "is this your Jira site?", which saves the site and
+  then copies the link. The panel and Settings also say while the site is blank (`TicketSettings.siteWarning`).
+- **Ports** are refused in a ticket link (on any host). The bare `atlassian.net` and a link with no site name are
+  refused too.
+
+### Decisions
+- **Not filled in from the connector.** The Jira sign-in doesn't store the site, and the bot's own report of it can't
+  be trusted, since that's exactly what's being spoofed. A person confirming once is the safe way to learn it.
+- **Enum shapes unchanged** (`TicketOutcome`, `TicketWarning`, `TicketProblem`), so the app's exhaustive switches still
+  compile; the new information is a field on `TicketResult` and a property on the settings.
+- **Still not checked: that the ticket exists.** The parser checks the shape of the bot's `TICKET:` line, not Jira.
+  A made-up key on your real site would pass, so look in Jira for the first few runs.
+
+Tests: 5 new and 4 changed in `TicketTests` (tag-character smuggling in the selection and the note, every other
+hidden character, what must be kept, the length limit, ports and bare domains, confirmed against unconfirmed,
+confirming the site).

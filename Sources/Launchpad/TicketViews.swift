@@ -118,6 +118,9 @@ struct TicketPanelView: View {
                 }
                 .accessibilityLabel("Selected text")
             warnings(preview)
+            if let siteWarning = settings.siteWarning {
+                note(siteWarning, symbol: "link.badge.plus")
+            }
         }
 
         HStack(alignment: .top, spacing: Theme.Space.m) {
@@ -273,6 +276,44 @@ struct TicketPanelView: View {
     // MARK: Done
 
     @ViewBuilder private func done(_ result: TicketResult, duplicate: Bool) -> some View {
+        if result.siteConfirmed {
+            confirmedDone(result, duplicate: duplicate)
+        } else {
+            unconfirmedDone(result, duplicate: duplicate)
+        }
+    }
+
+    /// No Jira site is set, so the link could be on anyone's atlassian.net site: show it, don't copy or open it, and
+    /// let you say "yes, that's mine" once.
+    @ViewBuilder private func unconfirmedDone(_ result: TicketResult, duplicate: Bool) -> some View {
+        let host = result.site ?? "that site"
+        HStack(alignment: .top, spacing: Theme.Space.s) {
+            Image(systemName: "questionmark.circle.fill").font(.system(size: 22)).foregroundStyle(Theme.warning)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(duplicate ? "\(result.key) may already cover this" : "\(result.key) was reported filed")
+                    .font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.text)
+                Text("The link is on \(host). Your Jira site isn't set, and anyone can make an atlassian.net site, so Launchpad hasn't copied or opened the link. If \(host) is your Jira site, confirm it.")
+                    .font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        HStack {
+            Spacer()
+            Button("Close", action: close).keyboardShortcut(.cancelAction)
+            Button("\(host) is my Jira site") { confirmSite(of: result, duplicate: duplicate) }
+                .buttonStyle(PillButtonStyle())
+                .keyboardShortcut(.defaultAction)
+        }
+        .controlSize(.small)
+    }
+
+    private func confirmSite(of result: TicketResult, duplicate: Bool) {
+        center.update { $0 = $0.confirmingSite(of: result) }
+        draft.run?.phase = .done(result.confirmed(), duplicate: duplicate)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(result.url.absoluteString, forType: .string)
+    }
+
+    @ViewBuilder private func confirmedDone(_ result: TicketResult, duplicate: Bool) -> some View {
         HStack(spacing: Theme.Space.s) {
             Image(systemName: "checkmark.circle.fill").font(.system(size: 22)).foregroundStyle(Theme.success)
             VStack(alignment: .leading, spacing: 2) {
@@ -367,7 +408,8 @@ struct TicketSettingsSection: View {
                 get: { settings.siteHost ?? "" },
                 set: { v in center.update { $0.siteHost = TicketSettings.cleanHost(v) ?? (v.isEmpty ? nil : $0.siteHost) } }
             ), prompt: Text("your-site.atlassian.net"))
-            Text("Optional. When set, only a link on this site counts as a created ticket.").font(.caption).foregroundStyle(Theme.secondary)
+            Text("Recommended. Only a link on this site counts as a created ticket. Until it's set, Launchpad won't copy or open ticket links.")
+                .font(.caption).foregroundStyle(settings.siteHost == nil ? Theme.warning : Theme.secondary)
 
             Picker("Bot", selection: $botId) {
                 Text("Automatic").tag("")

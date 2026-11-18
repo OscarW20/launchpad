@@ -48,20 +48,30 @@ public enum TicketPrompt {
     public static let maxNoteCharacters = 2_000
     public static let maxLabelCharacters = 200
 
-    /// Invisible and direction-changing characters that can hide text from a person reading it.
-    private static let hidden: Set<UInt32> = {
-        var set: Set<UInt32> = [0x200B, 0x2060, 0xFEFF]
-        for value in UInt32(0x202A)...UInt32(0x202E) { set.insert(value) }
-        for value in UInt32(0x2066)...UInt32(0x2069) { set.insert(value) }
-        return set
-    }()
+    /// Characters that show nothing (or change how the text reads) but that a bot receives as text, so they can carry
+    /// a hidden instruction past a person looking at the panel. Zero-width non-joiner and joiner (U+200C, U+200D) are
+    /// kept: emoji sequences and some languages need them.
+    /// - Tag characters (U+E0000 to U+E007F) and variation selectors (U+FE00 to U+FE0F, U+E0100 to U+E01EF) can spell
+    ///   out a whole message that renders as nothing.
+    /// - Also zero-width space, word joiner, soft hyphen, invisible math operators, the Mongolian vowel separator, the
+    ///   byte order mark and the direction overrides and isolates.
+    /// The cost is cosmetic: an emoji's colour selector (U+FE0F) and the tags in a regional flag such as England's
+    /// are dropped, so those draw in their plain form.
+    static func isHidden(_ value: UInt32) -> Bool {
+        switch value {
+        case 0x00AD, 0x180E, 0x200B, 0x2060, 0xFEFF: return true
+        case 0x2061...0x2064, 0x202A...0x202E, 0x2066...0x2069: return true
+        case 0xFE00...0xFE0F, 0xE0000...0xE007F, 0xE0100...0xE01EF: return true
+        default: return false
+        }
+    }
 
-    /// Line endings made plain; control, invisible and direction-changing characters removed (tabs and new lines stay).
+    /// Line endings made plain; control and hidden characters removed (see `isHidden`). Tabs and new lines stay.
     public static func sanitize(_ text: String) -> String {
         let plain = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         var out = String.UnicodeScalarView()
         for s in plain.unicodeScalars {
-            if hidden.contains(s.value) { continue }
+            if isHidden(s.value) { continue }
             if s == "\n" || s == "\t" { out.append(s); continue }
             if s.value < 0x20 || s.value == 0x7F || (0x80...0x9F).contains(s.value) { continue }
             out.append(s)

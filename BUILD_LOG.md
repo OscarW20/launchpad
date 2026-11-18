@@ -1517,3 +1517,8 @@ Three loose ends from the workspaces UI.
 
 Tests: none new (UI only; the core behaviour is covered by Backend's tests). Not tried in the running app: the banner and
 Reset, the scoped search and its checkbox, the tiles on results, and the Apps line.
+
+### Workspaces: wrong-typed fields and a backup (2026-11-18)
+- `workspaces.json` is read strictly: a missing key is fine, a key with the wrong type (`"groups": "oops"`, `[]`) makes the file unreadable, so the banner and Reset apply and nothing is dropped silently.
+- Each write keeps the last good file as `workspaces.json.bak`.
+- Tests: 2 new; suite 593, 0 failures, 3 skips.

@@ -284,4 +284,30 @@ final class WorkspaceTests: XCTestCase {
         try store.move(bot: a.id, to: "biscuit")
         XCTAssertThrowsError(try store.delete(id: "biscuit", movingContentsTo: "biscuit")) { XCTAssertEqual($0 as? WorkspaceError, .sameWorkspace) }
     }
+
+    // MARK: Wrong-typed fields and the backup
+
+    func testAWrongTypedFieldIsUnreadableNotSilentlyDropped() throws {
+        try FileManager.default.createDirectory(at: store.file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        for bad in [#"{"groups":"oops"}"#, #"{"bots":{"a":5}}"#, #"{"workspaces":[{"id":"x"}]}"#, "[]"] {
+            try Data(bad.utf8).write(to: store.file)
+            XCTAssertTrue(store.isUnreadable, bad)
+            XCTAssertThrowsError(try store.create(name: "Biscuit"), bad) { XCTAssertEqual($0 as? WorkspaceError, .unreadable) }
+            XCTAssertEqual(try String(contentsOf: store.file, encoding: .utf8), bad)
+        }
+        // Keys that are simply missing are fine.
+        try Data("{}".utf8).write(to: store.file)
+        XCTAssertFalse(store.isUnreadable)
+        XCTAssertNoThrow(try store.create(name: "Biscuit"))
+    }
+
+    func testEachWriteKeepsTheLastGoodFileAsBak() throws {
+        try store.create(name: "Biscuit")
+        let bak = store.file.deletingLastPathComponent().appendingPathComponent("workspaces.json.bak")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: bak.path))   // nothing to keep the first time
+        let before = try Data(contentsOf: store.file)
+        try store.create(name: "Launchpad")
+        XCTAssertEqual(try Data(contentsOf: bak), before)
+        XCTAssertEqual(store.workspaces.map(\.name), ["General", "Biscuit", "Launchpad"])
+    }
 }

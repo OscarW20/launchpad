@@ -53,13 +53,14 @@ public struct WorkspaceLayout: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey { case workspaces, groups, bots, origins }
+    // Decoding is strict: a key that's missing is fine, one with the wrong type makes the file unreadable (never silently dropped).
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        workspaces = (try? c.decodeIfPresent([Workspace].self, forKey: .workspaces)) ?? []
-        groups = (try? c.decodeIfPresent([String: String].self, forKey: .groups)) ?? [:]
-        bots = (try? c.decodeIfPresent([String: String].self, forKey: .bots)) ?? [:]
-        origins = (try? c.decodeIfPresent([String: BotOrigin].self, forKey: .origins)) ?? [:]
+        workspaces = (try c.decodeIfPresent([Workspace].self, forKey: .workspaces)) ?? []
+        groups = (try c.decodeIfPresent([String: String].self, forKey: .groups)) ?? [:]
+        bots = (try c.decodeIfPresent([String: String].self, forKey: .bots)) ?? [:]
+        origins = (try c.decodeIfPresent([String: BotOrigin].self, forKey: .origins)) ?? [:]
         normalise()
     }
 
@@ -425,6 +426,12 @@ public final class WorkspaceStore: @unchecked Sendable {
         let result = try change(&layout)
         layout.normalise()
         try fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        // Keep the last good file next to it, so a bad write can always be undone by hand.
+        if fm.fileExists(atPath: file.path) {
+            let backup = file.deletingLastPathComponent().appendingPathComponent("workspaces.json.bak")
+            try? fm.removeItem(at: backup)
+            try? fm.copyItem(at: file, to: backup)
+        }
         try JSONCoding.encoder().encode(layout).write(to: file, options: .atomic)
         return result
     }

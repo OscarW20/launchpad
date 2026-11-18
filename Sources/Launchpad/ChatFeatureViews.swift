@@ -772,7 +772,7 @@ struct ContextRing: View {
         }
         .frame(width: 16, height: 16)
         .help("Memory for this chat: \(usage.summary)\(usage.isEstimated ? " (estimated)" : "")"
-              + (usage.isNearlyFull ? ". Nearly full: Compact keeps the chat and starts the bot from a recap." : ""))
+              + (usage.isNearlyFull ? ". Nearly full: Compact summarises the older messages. Launchpad does this by itself when auto-compact is on (Settings › Long chats)." : ""))
     }
 }
 
@@ -786,8 +786,9 @@ struct ThreadMenu: View {
         CircleMenu(symbol: "text.bubble", help: running ? "Wait until the reply finishes" : "New thread, compact, branch or past threads") {
             Button("New Thread") { model.newThread(chatId) }
                 .help("Put this conversation aside and start fresh")
-            Button("Compact") { model.compact(chatId) }
-                .help("Keep the messages; the bot starts from a short recap")
+            Button("Compact") { model.compactChat(chatId, manual: true) }
+                .disabled(CompactionCenter.shared.compacting.contains(chatId))
+                .help("Summarise the older messages and keep the latest; every message stays on screen")
             Button("Branch from Here") { if let last { model.branch(chatId, from: last.id) } }
                 .disabled(last == nil)
             Divider()

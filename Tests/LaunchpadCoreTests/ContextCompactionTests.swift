@@ -397,4 +397,35 @@ final class ContextCompactionTests: XCTestCase {
         XCTAssertEqual(TokenEstimate.tokens(String(repeating: "a", count: 400)), 100)
         XCTAssertGreaterThan(TokenEstimate.tokens(chat(10)), 0)
     }
+
+    // MARK: What the app wires
+
+    func testTheSummaryIsWrittenByTheChatsBotOrTheGroupsLeadFirst() {
+        let scout = Bot(id: "scout", name: "Scout"), lead = Bot(id: "lead", name: "Lead"), other = Bot(id: "other", name: "Other")
+        let local = Bot(id: "loc", name: "Local", engine: .local)
+        let solo = ChatMeta(title: "x", kind: .bot, botId: "scout")
+        XCTAssertEqual(ChatCompaction.summariser(for: solo, bots: [scout, lead], groups: [])?.id, "scout")
+        XCTAssertNil(ChatCompaction.summariser(for: ChatMeta(title: "x", kind: .bot, botId: "gone"), bots: [scout], groups: []))
+        let group = BotGroup(id: "g", name: "team", members: ["other", "lead"], lead: "lead")
+        let chat = ChatMeta(title: "x", kind: .group, groupId: "g")
+        XCTAssertEqual(ChatCompaction.summariser(for: chat, bots: [other, lead], groups: [group])?.id, "lead")
+        let localLead = BotGroup(id: "g", name: "team", members: ["other"], lead: "loc")
+        XCTAssertEqual(ChatCompaction.summariser(for: chat, bots: [local, other], groups: [localLead])?.id, "other",
+                       "an agent member is preferred to a local lead")
+        XCTAssertNil(ChatCompaction.summariser(for: chat, bots: [lead], groups: []))
+    }
+
+    func testACompactionOnlyAppliesWhileItsMessageIsStillInTheChat() {
+        let record = CompactionRecord(chatId: "c", trigger: .auto, throughMessageId: "m4", summarizedCount: 4, summary: "A summary that is long enough.")
+        XCTAssertEqual(ChatCompaction.applicable(record, to: chat(10))?.id, record.id)
+        XCTAssertNil(ChatCompaction.applicable(record, to: chat(3)), "a fresh thread doesn't get an old summary")
+        XCTAssertNil(ChatCompaction.applicable(nil, to: chat(10)))
+    }
+
+    func testAGroupBotRestartsWithTheSummaryInFront() {
+        let text = ConversationRecap.summaryPreface("Decided: ship Friday.") + "New in the group chat:\n…"
+        XCTAssertTrue(text.hasPrefix("Summary of the earlier conversation"))
+        XCTAssertTrue(text.contains("Decided: ship Friday."))
+        XCTAssertTrue(text.contains("\n\n---\nNew in the group chat"))
+    }
 }

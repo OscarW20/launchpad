@@ -1367,3 +1367,36 @@ Tests: 8 new in `CredentialGuardTests`: Tester's four cases and the same paths t
 (wrappers, nesting, substitutions, variables, globs, braces, links, inline code, recursive copies and searches, the Keychain
 tool and sign-in printers), about 75 ordinary commands that must still run, Full freedom with every rule set to allow, an
 old rules file, and a link in the bot's folder into a protected folder.
+
+## Auto-compact: the app side (2026-11-18)
+
+The app now uses the compaction core (`Context/`). Claude and Codex already compact their own sessions at the threshold
+(`RunOptions.autoCompact`, wired by Backend); this adds what the app does itself and the parts you can see.
+
+- **After a reply** (`chatWentQuiet` › `autoCompactIfNeeded`): the last reading of each bot's session is checked with
+  `ContextAdvisor.decide`. A session past the threshold (and, for Claude and Codex, 10 points past it, meaning their own
+  setting didn't do it) makes a bot write a summary of the older turns, and only the too-full sessions restart from it.
+  Never while a bot is replying: asked again right before anything is written. A failed summary isn't retried for 15
+  minutes.
+- **Compact button** (chat header and the thread menu): the same step for the whole chat, with "Compacting…" beside the
+  meter. A chat too short to summarise still gets the old Compact (restart from the latest messages), since a few long
+  replies fill a window too.
+- **Restarting from the summary**: a one-to-one bot with no session is sent the summary and the messages after it
+  (`ConversationRecap.compactedPrompt`); a group bot gets the summary in front of the group's own prompt
+  (`ConversationRecap.summaryPreface`). A summary is only used while the message it runs up to is still in the chat, so
+  a new or reopened thread never gets an old one (`ChatCompaction.applicable`).
+- **Nothing lost, nothing silent**: summarised messages stay on screen, dimmed, with a line after the last of them
+  ("N earlier messages are summarised for the bots") that opens the summary. A notice says it happened and when.
+- **Who writes the summary**: the chat's bot, or a group's lead first (`ChatCompaction.summariser`), on its own engine
+  and model, as a read-only one-off run. It costs one reply on that model.
+- **Settings › Long chats**: auto-compact on or off, the threshold (30 to 95%, default 75) and how many of the latest
+  messages stay word for word.
+
+### Decisions
+- The summary is written by a bot, not by the app, so it costs a model call each time; it's far less than re-sending a
+  full window on every message.
+- A local model isn't trimmed yet: its window isn't known (the meter assumes 8K), so `LocalContext.history` isn't wired.
+
+Tests: 3 new in `ContextCompactionTests` (who writes the summary, when a summary still applies, the group preface).
+Not tried in the running app: a real summary run, the engines honouring the threshold, a bot restarting from the
+summary in a one-to-one chat and in a group, the dimmed messages and the summary line, the Compact button and Settings.

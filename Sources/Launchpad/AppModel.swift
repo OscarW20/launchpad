@@ -1363,9 +1363,19 @@ final class AppModel {
         let session = context.backup == nil ? meta.sessions[bot.id] : nil
         if meta.kind == .bot, bot.engine.isAgent, context.backup == nil {
             let turnIds = Set(context.turn?.messages.map(\.id) ?? [])
-            sendPrompt = ConversationRecap.prompt(for: prompt, history: history.filter { !turnIds.contains($0.id) },
-                                                  hasSession: session != nil,
-                                                  unseenAfter: threads.unseenAfter(chatId, botId: bot.id), names: botNames)
+            let earlier = history.filter { !turnIds.contains($0.id) }
+            if session == nil, let record = activeCompaction(chatId, in: history) {
+                // Restarted after a compaction: the summary of everything before, then what came after it.
+                sendPrompt = ConversationRecap.compactedPrompt(prompt, history: earlier, record: record, names: botNames)
+            } else {
+                sendPrompt = ConversationRecap.prompt(for: prompt, history: earlier, hasSession: session != nil,
+                                                      unseenAfter: threads.unseenAfter(chatId, botId: bot.id), names: botNames)
+            }
+        } else if meta.kind == .group, bot.engine.isAgent, context.backup == nil, session == nil,
+                  let record = activeCompaction(chatId, in: history) {
+            // A group bot restarted after a compaction: the group's own prompt carries the latest messages; the summary
+            // of everything before them goes in front.
+            sendPrompt = ConversationRecap.summaryPreface(record.summary) + prompt
         }
 
         // Undo: snapshot the bot's folder first (off the main thread; it's git).

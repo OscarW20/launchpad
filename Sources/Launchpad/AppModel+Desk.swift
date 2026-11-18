@@ -123,6 +123,7 @@ extension AppModel {
     func chatWentQuiet(_ chatId: String) {
         workingChanged()
         guard !isRunning(chatId), let meta = chat(chatId) else { return }
+        autoCompactIfNeeded(chatId)
         let list = messages(for: chatId)
         guard let last = list.last(where: { $0.role != .notice && $0.isSide != true }), last.role == .bot,
               Date().timeIntervalSince(last.createdAt) < 600 else { return }
@@ -298,6 +299,7 @@ extension AppModel {
         ComputerUseController.shared.start(locator: runner.locator)
         Updater.shared.start()
         TicketCenter.shared.install(model: self)
+        CompactionCenter.shared.loadRecords(paths: paths, chats: chats)
     }
 }
 #endif

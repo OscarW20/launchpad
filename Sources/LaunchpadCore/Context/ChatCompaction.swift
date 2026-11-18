@@ -331,3 +331,34 @@ public enum LocalContext {
         return out + kept.reversed()
     }
 }
+
+// MARK: - Who writes the summary, and what a restarted group bot is told
+
+extension ChatCompaction {
+    /// The bot whose engine writes a chat's summary: the chat's own bot, or in a group the lead first, then the other
+    /// members in order. A bot with an agent engine is preferred over a local model, which writes a poorer summary.
+    public static func summariser(for chat: ChatMeta, bots: [Bot], groups: [BotGroup]) -> Bot? {
+        func bot(_ id: String?) -> Bot? { id.flatMap { id in bots.first { $0.id == id } } }
+        let candidates: [Bot]
+        switch chat.kind {
+        case .bot: candidates = [bot(chat.botId)].compactMap { $0 }
+        case .group: candidates = groups.first { $0.id == chat.groupId }?.everyone.compactMap(bot) ?? []
+        }
+        return candidates.first { $0.engine.isAgent } ?? candidates.first
+    }
+
+    /// A compaction that still applies to the chat as it is now: the latest one, if the message it runs up to is still
+    /// there. (A new thread, or a reopened one, has other messages, and an old summary would be wrong for it.)
+    public static func applicable(_ record: CompactionRecord?, to messages: [ChatMessage]) -> CompactionRecord? {
+        guard let record, messages.contains(where: { $0.id == record.throughMessageId }) else { return nil }
+        return record
+    }
+}
+
+extension ConversationRecap {
+    /// What goes in front of a restarted bot's prompt in a group chat, where the group's own prompt already carries
+    /// the latest messages: the summary of everything before them.
+    public static func summaryPreface(_ summary: String) -> String {
+        "Summary of the earlier conversation (it was compacted to save space; the full chat is still on screen):\n\(summary)\n\n---\n"
+    }
+}

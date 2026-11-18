@@ -54,12 +54,17 @@ struct ConversationHeader: View {
             if let usage = model.contextByChat[chatId] {
                 HStack(spacing: 6) {
                     ContextChip(usage: usage)
-                    if usage.isNearlyFull {
-                        Button("Compact") { model.compact(chatId) }
+                    if CompactionCenter.shared.compacting.contains(chatId) {
+                        HStack(spacing: 5) {
+                            ProgressView().controlSize(.small)
+                            Text("Compacting…").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.secondary)
+                        }
+                    } else if usage.isNearlyFull {
+                        Button("Compact") { model.compactChat(chatId, manual: true) }
                             .buttonStyle(SoftButtonStyle())
                             .controlSize(.small)
                             .disabled(model.isRunning(chatId))
-                            .help("The bot's memory of this chat is nearly full. Compact keeps the messages and starts it from a recap.")
+                            .help("The bot's memory of this chat is nearly full. Compact summarises the older messages and keeps the latest; all of them stay on screen.")
                     }
                 }
             }
@@ -272,6 +277,11 @@ struct MessagesList: View {
     var body: some View {
         let messages = model.messages(for: chatId)
         let live = model.liveRuns(for: chatId)
+        // Messages a compaction summarised stay on screen, dimmed, with a line after the last of them.
+        let compaction = ChatCompaction.applicable(CompactionCenter.shared.records[chatId], to: messages)
+        let summarized: Set<String> = compaction.flatMap { record in
+            messages.firstIndex { $0.id == record.throughMessageId }.map { Set(messages[...$0].map(\.id)) }
+        } ?? []
         let liveLength = live.reduce(0) { $0 + $1.builder.message.text.count + $1.builder.message.steps.count + $1.approvals.count + $1.builder.todos.count }
         ScrollViewReader { proxy in
             ScrollView {
@@ -282,8 +292,12 @@ struct MessagesList: View {
                     ForEach(messages) { message in
                         MessageRow(message: message, chatId: chatId)
                             .id(message.id)
+                            .opacity(summarized.contains(message.id) ? 0.62 : 1)
                             .background(highlighted == message.id ? Theme.accent.opacity(0.12) : Color.clear,
                                         in: RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous))
+                        if let record = compaction, message.id == record.throughMessageId {
+                            SummaryDivider(record: record)
+                        }
                     }
                     ForEach(live) { run in
                         MessageRow(message: run.message, chatId: chatId, activeStep: run.builder.activeStep, isLive: true)

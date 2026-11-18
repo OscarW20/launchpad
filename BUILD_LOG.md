@@ -1605,3 +1605,6 @@ and `removeUnusedCopies(_:)`. It only ever runs on a click.
 
 Tests: none new (UI only; the core is covered by Backend's tests). Not tried in the running app: the screen, the banner,
 the busy block, and both buttons.
+
+### Composer: scroll long pasted text with the trackpad (2026-11-18)
+A vertical-axis text field clips past its line limit and has no scroller, so a long paste could only be scrolled with the arrow keys. The chat composer (one-to-one and group) and the Create ticket note now sit in `GrowingScroll` (`MacSupport.swift`): it grows to a maximum height (200, 70 for the note), then scrolls inside with the trackpad or wheel, pinned to the end while typing. Return, `@` and the key handlers are unchanged. Quick Ask is a single-line field and is unchanged. Not tried in the running app.

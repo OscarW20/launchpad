@@ -578,21 +578,22 @@ struct Composer: View {
                 .popover(isPresented: $showingGifs) { GifPicker(chatId: chatId) }
                 .sheet(isPresented: $showingPoll) { NewPollSheet(chatId: chatId) }
 
-                TextField(
-                    running && !isGroup ? "Tell \(name) something new: it stops and carries on with it…"
-                        : (isGroup ? "Post a task to \(name)…" : "Message \(name)…"),
-                    text: Binding(get: { model.drafts[chatId] ?? "" }, set: { model.drafts[chatId] = $0 }),
-                    axis: .vertical
-                )
-                .textFieldStyle(.plain)
-                .lineLimit(1...10)
-                .focused($focused)
-                .onSubmit { if !pickMention() { model.send(chatId: chatId) } }
-                .onKeyPress(.downArrow) { moveMention(1) }
-                .onKeyPress(.upArrow) { moveMention(-1) }
-                .onKeyPress(.return) { pickMention() ? .handled : .ignored }
-                .onKeyPress(.tab) { pickMention() ? .handled : .ignored }
-                .onKeyPress(.escape) { closeMentions() }
+                GrowingScroll(maxHeight: 200) {
+                    TextField(
+                        running && !isGroup ? "Tell \(name) something new: it stops and carries on with it…"
+                            : (isGroup ? "Post a task to \(name)…" : "Message \(name)…"),
+                        text: Binding(get: { model.drafts[chatId] ?? "" }, set: { model.drafts[chatId] = $0 }),
+                        axis: .vertical
+                    )
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onSubmit { if !pickMention() { model.send(chatId: chatId) } }
+                    .onKeyPress(.downArrow) { moveMention(1) }
+                    .onKeyPress(.upArrow) { moveMention(-1) }
+                    .onKeyPress(.return) { pickMention() ? .handled : .ignored }
+                    .onKeyPress(.tab) { pickMention() ? .handled : .ignored }
+                    .onKeyPress(.escape) { closeMentions() }
+                }
                 .onChange(of: draft) {
                     mentionSelection = 0
                     if draft != mentionDismissed { mentionDismissed = nil }

@@ -219,4 +219,27 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound])
     }
 }
+
+/// A multi-line text field that grows with its text up to `maxHeight`, then scrolls inside with the trackpad or wheel
+/// (a vertical-axis TextField on its own just clips past its line limit). It stays pinned to the end while typing.
+private struct GrowingScrollHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+struct GrowingScroll<Content: View>: View {
+    let maxHeight: CGFloat
+    @ViewBuilder var content: Content
+    @State private var height: CGFloat = 20
+
+    var body: some View {
+        ScrollView(.vertical) {
+            content.background(GeometryReader { Color.clear.preference(key: GrowingScrollHeightKey.self, value: $0.size.height) })
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .defaultScrollAnchor(.bottom)
+        .frame(height: min(max(height, 20), maxHeight))
+        .onPreferenceChange(GrowingScrollHeightKey.self) { height = $0 }
+    }
+}
 #endif

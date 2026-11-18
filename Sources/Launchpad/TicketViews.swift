@@ -138,9 +138,10 @@ struct TicketPanelView: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Note (optional)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondary)
-                TextField("Anything the ticket should say that the text doesn't", text: $draft.note, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...3)
+                GrowingScroll(maxHeight: 70) {
+                    TextField("Anything the ticket should say that the text doesn't", text: $draft.note, axis: .vertical)
+                        .textFieldStyle(.plain)
+                }
                     .padding(.horizontal, Theme.Space.m).padding(.vertical, 8)
                     .background(Theme.field, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).strokeBorder(Theme.line))

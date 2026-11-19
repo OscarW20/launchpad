@@ -1001,7 +1001,7 @@ final class AppModel {
 
     /// Your message from the composer (or `text` from a routine, workflow or button), with any dropped files.
     /// Writing to a busy 1:1 bot steers it; in a busy group it waits for the group to finish.
-    func send(chatId: String, text override: String? = nil) {
+    func send(chatId: String, text override: String? = nil, steerNow: Bool = false) {
         let text = (override ?? drafts[chatId] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let files = override == nil ? (pendingAttachments[chatId] ?? []) : []
         guard !text.isEmpty || !files.isEmpty, let meta = chat(chatId) else { return }
@@ -1036,11 +1036,11 @@ final class AppModel {
             }
         }
         guard !prompt.isEmpty else { return }
-        submit(message, prompt: prompt, to: chatId)
+        submit(message, prompt: prompt, to: chatId, steerNow: steerNow)
     }
 
     /// Puts your message in the chat and gets it answered: now, by steering the busy bot, or after the current run.
-    func submit(_ message: ChatMessage, prompt: String, to chatId: String) {
+    func submit(_ message: ChatMessage, prompt: String, to chatId: String, steerNow: Bool = false) {
         guard let meta = chat(chatId) else { return }
         loadMessagesIfNeeded(chatId)
         append(message, to: chatId)
@@ -1049,8 +1049,17 @@ final class AppModel {
         if meta.kind == .group {
             if isRunning(chatId) {
                 if let running = runningGroups[chatId] {
-                    // The bot you @mentioned (or the lead) answers as soon as the current turn ends.
-                    running.interject(ChatMessage(id: message.id, role: .user, text: prompt, createdAt: message.createdAt))
+                    let interjection = ChatMessage(id: message.id, role: .user, text: prompt, createdAt: message.createdAt)
+                    if steerNow {
+                        // Stop the step that's running now (its work so far is kept) so the bot you @mentioned, or the lead,
+                        // answers this straight away instead of when the turn ends.
+                        running.steer(interjection)
+                        append(ChatMessage(role: .notice, text: "Steered: \(steerTargets(prompt, in: chatId)) will answer this now; the step that was running was stopped and its work so far is kept."), to: chatId)
+                        steerRuns(in: chatId)
+                    } else {
+                        // The bot you @mentioned (or the lead) answers as soon as the current turn ends.
+                        running.interject(interjection)
+                    }
                 } else {
                     pendingGroupRun.insert(chatId)
                 }
@@ -1079,6 +1088,22 @@ final class AppModel {
         case .queue:
             break
         }
+    }
+
+    /// Cancels the group's running step(s), keeping each bot's session, so a steered message is answered straight away.
+    private func steerRuns(in chatId: String) {
+        let runs = live[chatId]?.filter { !$0.isSide }.map(\.id) ?? []
+        for id in runs { handles[id]?.cancel() }
+    }
+
+    /// Who answers a steered message in a group: the bots it @mentions, or the lead.
+    private func steerTargets(_ text: String, in chatId: String) -> String {
+        guard let group = group(chat(chatId)?.groupId) else { return "the team" }
+        let byId = Dictionary(bots.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var ids = GroupPlan.mentions(in: text, group: group, bots: byId, speaker: nil)
+        if ids.isEmpty, let lead = group.lead { ids = [lead] }
+        let names = ids.compactMap { byId[$0]?.name }
+        return names.isEmpty ? "the team" : names.joined(separator: " and ")
     }
 
     /// Stops the bot's current reply (keeping its session) so its next turn carries on with your new words.

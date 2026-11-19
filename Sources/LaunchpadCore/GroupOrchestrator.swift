@@ -227,10 +227,29 @@ public final class GroupOrchestrator: @unchecked Sendable {
         inbox.append(message)
     }
 
+    /// Set by `steer`: the turn that's running is being stopped for what you wrote, so that stop isn't the end of the run.
+    private var steerPending = false
+
+    /// Like `interject`, but for a turn that's being stopped to take your message (the caller cancels the running turn):
+    /// that turn's stop doesn't end the run, and the bot you @mentioned (or the lead) answers you straight away.
+    public func steer(_ message: ChatMessage) {
+        lock.lock(); defer { lock.unlock() }
+        history.append(message)
+        inbox.append(message)
+        steerPending = true
+    }
+
+    private func takeSteer() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        defer { steerPending = false }
+        return steerPending
+    }
+
     private func takeInbox() -> [ChatMessage] {
         lock.lock(); defer { lock.unlock() }
         let out = inbox
         inbox = []
+        if !out.isEmpty { steerPending = false }   // answered without needing a stop (the turn had already ended)
         return out
     }
 
@@ -400,7 +419,8 @@ public final class GroupOrchestrator: @unchecked Sendable {
     }
 
     private func outcome(of reply: ChatMessage) -> GroupOutcome? {
-        if Task.isCancelled || reply.status == .stopped { return .stopped }
+        if Task.isCancelled { return .stopped }
+        if reply.status == .stopped { return takeSteer() ? nil : .stopped }   // stopped for your message: carry on and answer it
         if reply.status == .failed { return .failed(botId: reply.botId ?? "") }
         if reply.approval?.status == .pending { return .awaitingApproval(botId: reply.botId ?? "") }
         return nil

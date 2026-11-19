@@ -1716,3 +1716,19 @@ Replaces the highlighted-text callout, from Designer's sketch (`NEEDS_YOU_CARD_D
 
 Tests: none new (UI only; detection is covered by Backend's tests). Not tried in the running app: the card and tray with a real
 ask, the buttons, Hide, stacked asks, and the transcript lines.
+
+### Steer now in a group (2026-11-19)
+What existed: in a **one-to-one** chat, writing to a busy bot already steers it: `TurnQueue` stops its current run (Stop's SIGINT, which
+keeps the session) and the next turn carries on with your words, told not to start over. In a **group**, writing to a busy team only
+`interject`ed: the message waited until the current turn ended before the bot you @mentioned (or the lead) answered.
+- **Core** (`GroupOrchestrator.steer(_:)`): like `interject`, but for a turn being stopped for your message. That turn's stop no
+  longer ends the run (`outcome(of:)` consumes the steer flag), so the @mentioned bot or the lead answers you straight away and the
+  team carries on. A stop without a steer still ends the run. 3 tests.
+- **App**: while a group is working, a **Steer now** button under the composer and **⌘Return** (Return still queues for the team's next
+  turn, and the hint and placeholder say so). It cancels the running step(s), keeps each bot's session, and posts a "Steered: <who>
+  will answer this now …" line so you can see it landed; the answer follows as the normal reply. `send(chatId:steerNow:)` and
+  `submit(...steerNow:)`. In a one-to-one chat nothing changes: Send already steers there, and the hint says so.
+- Every engine is stopped the same way (cancel the run, bots re-read the chat), so no per-engine fallback was needed.
+
+Not tried in the running app: the button and ⌘Return in a working group, a steer that @mentions another bot, and with Codex and
+local bots.

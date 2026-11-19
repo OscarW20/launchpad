@@ -582,7 +582,8 @@ struct Composer: View {
                 GrowingScroll(maxHeight: 200) {
                     TextField(
                         running && !isGroup ? "Tell \(name) something new: it stops and carries on with it…"
-                            : (isGroup ? "Post a task to \(name)…" : "Message \(name)…"),
+                            : (running ? "Working… Return queues it · ⌘Return steers now"
+                               : (isGroup ? "Post a task to \(name)…" : "Message \(name)…")),
                         text: Binding(get: { model.drafts[chatId] ?? "" }, set: { model.drafts[chatId] = $0 }),
                         axis: .vertical
                     )
@@ -593,6 +594,10 @@ struct Composer: View {
                     .onKeyPress(.upArrow) { moveMention(-1) }
                     .onKeyPress(.return, phases: .down) { press in
                         // Shift+Return is a new line (at the cursor); plain Return picks a mention or sends.
+                        if press.modifiers.contains(.command), isGroup, running, !empty {
+                            model.send(chatId: chatId, steerNow: true)
+                            return .handled
+                        }
                         if press.modifiers.contains(.shift) {
                             if !NSApp.sendAction(#selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) {
                                 model.drafts[chatId, default: ""] += "\n"
@@ -659,8 +664,16 @@ struct Composer: View {
                 .disabled(empty)
                 .help(running ? (isGroup ? "Send: the group picks it up when it's free" : "Send: \(name) stops and carries on with your new message") : "Send (Return)")
             }
+            if running && isGroup {
+                Button { model.send(chatId: chatId, steerNow: true) } label: { Label("Steer now", systemImage: "arrow.turn.down.right") }
+                    .buttonStyle(PillButtonStyle(kind: .soft))
+                    .controlSize(.small)
+                    .disabled(empty)
+                    .help("Stops the step that's running (its work so far is kept) so the bot you @mention, or the lead, answers this straight away. Every engine is stopped the same way (the step is cancelled and the bot reads the chat again), so it works for Claude, Codex and local bots alike.")
+                    .padding(.leading, 56)
+            }
             Text(running
-                 ? (isGroup ? "\(name) are working. You can still write; they pick it up next. Esc stops."
+                 ? (isGroup ? "\(name) are working. Return queues your message for their next turn; Steer now (⌘Return) stops the current step and gets it answered straight away. Esc stops."
                             : "\(name) is working. Writing now steers it; Esc stops.")
                  : "Return to send · ⌥Return for a new line · / to use a skill · drop files to attach")
                 .font(.system(size: 11))

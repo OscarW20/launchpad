@@ -303,4 +303,62 @@ final class DirectMentionTests: XCTestCase {
         XCTAssertEqual(team.order, ["lead", "frontend", "lead", "lead"])
         XCTAssertEqual(team.calls[2].kind, .fromYou)
     }
+
+    func testSteeringStopsTheRunningTurnAndAnswersYouStraightAway() async {
+        final class Box: @unchecked Sendable { var o: GroupOrchestrator? }
+        let box = Box()
+        let team = ScriptedTeam([
+            "lead": ["@frontend build the page", "Changing course as you asked.", "All done."],
+            "frontend": ["Half-built page"],
+        ])
+        let o = GroupOrchestrator(group: group, bots: bots, history: [ChatMessage(role: .user, text: "Build it")],
+                                  summaryPath: "s", workspacePath: "w") { req in
+            var reply = await team.run(req)
+            if req.bot.id == "frontend" {
+                // You steer while Frontend works: its turn is stopped for your message.
+                box.o?.steer(ChatMessage(role: .user, text: "Use blue buttons instead"))
+                reply.status = .stopped
+            }
+            return reply
+        }
+        box.o = o
+        let outcome = await o.runTask()
+        XCTAssertEqual(outcome, .done, "a stop for steering is not the end of the run")
+        XCTAssertEqual(team.order.prefix(3), ["lead", "frontend", "lead"], "the lead answers right after the stopped turn")
+        XCTAssertEqual(team.calls[2].kind, .fromYou)
+        XCTAssertTrue(team.calls[2].prompt.contains("Use blue buttons instead"))
+    }
+
+    func testAStoppedTurnWithoutSteeringStillEndsTheRun() async {
+        let team = ScriptedTeam(["lead": ["@frontend go"], "frontend": ["partial"]])
+        let o = GroupOrchestrator(group: group, bots: bots, history: [ChatMessage(role: .user, text: "Build it")],
+                                  summaryPath: "s", workspacePath: "w") { req in
+            var reply = await team.run(req)
+            if req.bot.id == "frontend" { reply.status = .stopped }
+            return reply
+        }
+        let outcome = await o.runTask()
+        XCTAssertEqual(outcome, .stopped)
+        XCTAssertEqual(team.order, ["lead", "frontend"])
+    }
+
+    func testSteeringAMentionedBotGoesToThatBot() async {
+        final class Box: @unchecked Sendable { var o: GroupOrchestrator? }
+        let box = Box()
+        let team = ScriptedTeam(["lead": ["@frontend build it", "Done."], "frontend": ["working"], "backend": ["Switching to the API now."]])
+        let o = GroupOrchestrator(group: group, bots: bots, history: [ChatMessage(role: .user, text: "Build it")],
+                                  summaryPath: "s", workspacePath: "w") { req in
+            var reply = await team.run(req)
+            if req.bot.id == "frontend" {
+                box.o?.steer(ChatMessage(role: .user, text: "@backend do the API first"))
+                reply.status = .stopped
+            }
+            return reply
+        }
+        box.o = o
+        let outcome = await o.runTask()
+        XCTAssertEqual(outcome, .done)
+        XCTAssertEqual(team.order[2], "backend")
+        XCTAssertEqual(team.calls[2].kind, .fromYou)
+    }
 }

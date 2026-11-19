@@ -1671,3 +1671,17 @@ On Backend's `AskParser`, `AskBook` and `AskInbox` (`d26701e`). New `AskViews.sw
 
 Tests: none new (UI only; the core is covered by Backend's tests). Not tried in the running app: the callout with real bot
 messages, the choice buttons, the badges, the list, and the notification text.
+
+### Composer: Shift+Return and dragged or pasted screenshots (2026-11-19)
+- **Shift+Return** inserts a new line at the cursor (`insertNewlineIgnoringFieldEditor`, with a fall-back that appends). Plain Return
+  still picks a mention or sends; the `@` and `/` handlers are unchanged. Cause: only a Return handler existed, so Shift+Return
+  fell through to the field's submit.
+- **Drag and paste images** (`AttachmentIngest.swift`): the chat now accepts file URLs, promised files and raw image data
+  (PNG, TIFF, JPEG), not just file URLs. Each is saved as a file in a temporary folder (a TIFF becomes a PNG, a name like
+  "Screenshot 2026-11-19 at 10.12.03.png" is kept or made) and attaches as the same chip a Finder file does; the chat copies it
+  into its Inbox on send. ⌘V does the same (`onPasteCommand`); pasted text, including text that came with an image, still pastes
+  as text. Cause: the drop target only took `URL`s, and the corner screenshot thumbnail drags as image data or a file promise.
+  One-to-one and group chats share this composer; Create ticket and Quick Ask have no attachments.
+
+Not tried in the running app: Shift+Return with the scrolling box and the pickers, a corner-thumbnail drag, a browser image drag,
+and ⌘V of a screenshot and of text.

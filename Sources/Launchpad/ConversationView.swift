@@ -27,11 +27,11 @@ struct ConversationView: View {
                     .allowsHitTesting(false)
             }
         }
-        .dropDestination(for: URL.self) { urls, _ in
-            let files = urls.filter(\.isFileURL)
-            model.attach(files, to: chatId)
-            return !files.isEmpty
-        } isTargeted: { dropping = $0 }
+        .onDrop(of: AttachmentIngest.types, isTargeted: $dropping) { providers in
+            guard AttachmentIngest.accepts(providers) else { return false }
+            Task { model.attach(await AttachmentIngest.urls(from: providers), to: chatId) }
+            return true
+        }
         .navigationTitle(model.chat(chatId)?.title ?? "Chat")
         .task(id: chatId) { model.loadMessagesIfNeeded(chatId) }
     }
@@ -590,7 +590,26 @@ struct Composer: View {
                     .onSubmit { if !pickMention() { model.send(chatId: chatId) } }
                     .onKeyPress(.downArrow) { moveMention(1) }
                     .onKeyPress(.upArrow) { moveMention(-1) }
-                    .onKeyPress(.return) { pickMention() ? .handled : .ignored }
+                    .onKeyPress(.return, phases: .down) { press in
+                        // Shift+Return is a new line (at the cursor); plain Return picks a mention or sends.
+                        if press.modifiers.contains(.shift) {
+                            if !NSApp.sendAction(#selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) {
+                                model.drafts[chatId, default: ""] += "\n"
+                            }
+                            return .handled
+                        }
+                        return pickMention() ? .handled : .ignored
+                    }
+                    .onPasteCommand(of: AttachmentIngest.types) { providers in
+                        let board = NSPasteboard.general
+                        let hasFiles = board.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+                        // Text that merely came with an image (copied from a web page) is still pasted as text.
+                        if !hasFiles, let text = board.string(forType: .string), !text.isEmpty {
+                            (NSApp.keyWindow?.firstResponder as? NSTextView)?.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                            return
+                        }
+                        Task { model.attach(await AttachmentIngest.urls(from: providers), to: chatId) }
+                    }
                     .onKeyPress(.tab) { pickMention() ? .handled : .ignored }
                     .onKeyPress(.escape) { closeMentions() }
                 }

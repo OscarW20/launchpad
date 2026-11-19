@@ -79,10 +79,15 @@ struct MessageRow: View {
                         switch action {
                         case .continueGroup:
                             if message.id == model.messages(for: chatId).last?.id {
-                                Button("Keep going") { model.perform(action, chatId: chatId) }
-                                    .buttonStyle(PillButtonStyle())
-                                    .controlSize(.small)
-                                    .disabled(model.isRunning(chatId))
+                                // Only a stuck stop (a loop or the safety cap) gets here, never a routine pause.
+                                HStack(spacing: Theme.Space.s) {
+                                    Button("Continue") { model.perform(action, chatId: chatId) }
+                                        .buttonStyle(PillButtonStyle())
+                                        .disabled(model.isRunning(chatId))
+                                    Button("Stop") { model.deleteMessage(message.id, in: chatId) }
+                                        .buttonStyle(SoftButtonStyle())
+                                }
+                                .controlSize(.small)
                             }
                         case .undoMemory:
                             Button("Undo") { model.undoMemoryUpdate(noticeId: message.id, chatId: chatId) }

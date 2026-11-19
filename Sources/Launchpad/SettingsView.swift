@@ -134,10 +134,12 @@ struct SettingsView: View {
             } header: {
                 Text("Token use")
             } footer: {
-                Text("Biggest savings: give simple bots a cheaper model (e.g. sonnet or haiku) in the bot editor, only turn on the apps a bot needs, keep hand-off limits low, and use Compact on long chats.")
+                Text("Biggest savings: give simple bots a cheaper model (e.g. sonnet or haiku) in the bot editor, only turn on the apps a bot needs, and use Compact on long chats.")
             }
 
             ContextSettingsSection()
+
+            RunLimitSettingsSection()
 
             TeamNotesSection()
 

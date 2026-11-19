@@ -222,4 +222,34 @@ struct ContextSettingsSection: View {
         }
     }
 }
+
+/// Settings › Group runs: the safety net for a team that loops. A team otherwise finishes its work on its own.
+struct RunLimitSettingsSection: View {
+    @Environment(AppModel.self) private var model
+    @State private var limits = RunLimits()
+    @State private var loaded = false
+
+    var body: some View {
+        Section {
+            Stepper(value: Binding(get: { limits.maxHandoffs }, set: { v in save(v) }), in: RunLimits.maxHandoffsRange) {
+                Text("Stop a run that loops without progress after \(limits.maxHandoffs) steps")
+            }
+        } header: {
+            Text("Group runs")
+        } footer: {
+            Text("A team keeps going until the task is done or a bot asks you something. This is only a safety net for a run that never settles, such as bots handing the same work back and forth. If it stops, it says why and you can continue.")
+        }
+        .onAppear {
+            if !loaded { limits = RunLimitsStore(paths: model.paths).load(); loaded = true }
+        }
+    }
+
+    private func save(_ value: Int) {
+        let next = RunLimits(maxHandoffs: value)
+        limits = next
+        do { try RunLimitsStore(paths: model.paths).save(next) } catch {
+            model.alertMessage = "Couldn't save the setting: \(error.localizedDescription)"
+        }
+    }
+}
 #endif

@@ -1634,3 +1634,15 @@ Oscar: the "Keep going" pause is annoying; the team should finish tasks.
 - **The group's own "hand-off limit" is ignored** (still stored, so old groups still load). Token controls (auto-compact and the context checks) are untouched.
 - **App:** the run reads the setting; a stuck stop shows its reason with Continue. Settings UI and removing the group stepper are Frontend's.
 - **Tests:** 11 new, 1 rewritten; suite 632, 0 failures, 3 skips. Not hand-tested.
+
+### Teams finish their work: the Keep going UI is gone (2026-11-19)
+On Backend's `RunLimits` (`c48c44d`). A group run no longer pauses for a hand-off count.
+- **Removed**: the group "Hand-off limit" stepper (Rules section), the "hand-off limit N" text on the Working screen and the
+  Members tooltip, the Rules footer line about it, and the README line. Groups still store the old number so old files load.
+- **Stuck stops** (a loop or the safety cap) show one notice with the reason and **Continue** and **Stop** (Stop dismisses the
+  notice and leaves the team stopped). It replaces the "Keep going" button; Continue sends "Continue.".
+- **Settings › Group runs**: "Stop a run that loops without progress after N steps" (3 to 500, default 60), saved through
+  `RunLimitsStore`, read at the start of each run. The Token use footer no longer says to keep hand-off limits low.
+
+Tests: none new (UI only; the core is covered by Backend's tests). Not tried in the running app: the Settings stepper, and the
+Continue and Stop notice.

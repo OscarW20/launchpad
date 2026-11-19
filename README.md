@@ -117,7 +117,7 @@ Set `LAUNCHPAD_HOME` to use a different folder (handy for trying things out).
 - **Bots** you create or **Hire** (Lead, Planner, Designer, Frontend, Backend, Tester, Reviewer, Shipper), or the whole
   **Dev team** with a `#build-and-ship` group in one click.
 - **Groups**: the lead replies first and hands work out by @mention; members go one at a time (or in parallel when the
-  lead says so); a hand-off limit pauses the team and asks you. A **Huddle** gets a quick view from each member.
+  lead says so); a team keeps going until the task is done or a bot asks you something, and only a loop or the safety cap (Settings › Group runs) stops it, with a reason. A **Huddle** gets a quick view from each member.
 - **Skills** library (with Graphify one click away), given to bots or whole groups, plus **Teach a skill** from any chat.
 - **Connectors** (MCP servers) per bot or group, secrets in the Keychain.
 - **Chat tools**: bots react, send GIFs, run polls, ask tappable questions, share a plan with Start / Cancel before

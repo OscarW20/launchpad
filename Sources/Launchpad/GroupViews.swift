@@ -114,11 +114,10 @@ struct GroupFormSections: View {
         Section {
             TextEditor(text: $group.rules)
                 .frame(minHeight: 100)
-            Stepper("Hand-off limit: \(group.handoffLimit)", value: $group.handoffLimit, in: 1...20)
         } header: {
             Text("Rules")
         } footer: {
-            Text("Every bot in the group sees these rules. When the team has handed work on this many times, it stops and asks you.")
+            Text("Every bot in the group sees these rules.")
         }
     }
 }

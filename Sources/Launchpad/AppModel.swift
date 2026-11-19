@@ -1211,7 +1211,7 @@ final class AppModel {
     func perform(_ action: NoticeAction, chatId: String) {
         switch action {
         case .continueGroup:
-            send(chatId: chatId, text: "Keep going.")
+            send(chatId: chatId, text: "Continue.")
         case .undoMemory:
             break
         }

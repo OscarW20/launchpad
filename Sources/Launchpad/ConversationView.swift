@@ -161,7 +161,7 @@ struct ConversationHeader: View {
                             model.selectedGroupId = group.id
                             model.section = .groups
                         } label: { Label("Edit Group", systemImage: "slider.horizontal.3") }
-                            .help("Members, lead, rules and hand-off limit")
+                            .help("Members, lead and rules")
                         let next: ApprovalMode = model.approvalMode(for: group.id) == .fullFreedom ? .ask : .fullFreedom
                         Button { model.setApprovalMode(next, for: group, chatId: chatId) } label: {
                             Label("Switch to \(next.title)", systemImage: next == .fullFreedom ? "bolt.fill" : "hand.raised")

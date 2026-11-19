@@ -66,7 +66,7 @@ struct MembersButton: View {
                         .help(model.bot(id)?.name ?? id)
                 }
                 if !model.isRunning(chatId) {
-                    Text("\(group.everyone.count) members · lead: \(model.bot(group.lead)?.name ?? "none") · hand-off limit \(group.handoffLimit)")
+                    Text("\(group.everyone.count) members · lead: \(model.bot(group.lead)?.name ?? "none")")
                         .foregroundStyle(Theme.secondary)
                         .lineLimit(1)
                         .padding(.leading, 12)

@@ -1646,3 +1646,10 @@ On Backend's `RunLimits` (`c48c44d`). A group run no longer pauses for a hand-of
 
 Tests: none new (UI only; the core is covered by Backend's tests). Not tried in the running app: the Settings stepper, and the
 Continue and Stop notice.
+
+### Asks addressed to Oscar: the core (2026-11-19)
+Oscar can't find what a long bot message needs from him. Bots now end a message with a "Needs you" block (team notes); this is the part that finds it (`Chat/Asks.swift`). No UI.
+- **`AskParser.parse` / `split`.** An ask is a "Needs you" heading (and what follows), or a line or paragraph that starts with `@oscar` (after list or quote marks and bold). A mention inside a sentence ("thanks @oscar for the review") is an ordinary mention. Choices are the list lines under it (`-`, `*`, `•`, `1.`, `1)`, `a)`, `A.`), also when a blank line sets the list apart. Code blocks are ignored, `@oscars` and `@oscar-2` aren't you, the last ask in a message wins, and lengths are capped (600 characters, 8 choices). `split` returns the report with the ask lifted out, for pinning the ask at the top. `AskParser.handles(forFullName:)` adds your first name if it isn't "oscar".
+- **Open or done.** `AskBook.open(in:chatId:done:)`: an ask (from a finished bot message) is open until you write anything after it in that chat, or it's marked done. Marks live in `AskStore`, in Launchpad's data folder (added to the guard's protected list), so a bot can't close an ask; nothing is written to the chat itself.
+- **Across chats.** `AskInbox(paths:).open(workspace:)` lists open asks newest first, for one workspace or all (chats untouched for 14 days are skipped, for speed); `counts()` gives the number per workspace for the switcher badge; `markDone` / `markOpen`. `AskBook.notice` gives "Needs you: …" for notifications.
+- **Tests:** 21 new; suite 653, 0 failures, 3 skips. Not hand-tested.

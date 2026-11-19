@@ -192,6 +192,12 @@ struct BotMessageView: View {
                 if message.deleted == true {
                     DeletedBubble()
                 } else {
+                    let parts = AskText.split(message, live: live)
+                    // An ask to you goes first, so a long report never hides what's needed.
+                    if let ask = parts.ask {
+                        NeedsYouCallout(ask: ask, messageId: message.id, chatId: chatId)
+                    }
+
                     if let todos = message.todos, !todos.isEmpty {
                         TodoListView(items: todos)
                     }
@@ -200,8 +206,8 @@ struct BotMessageView: View {
                         StepsView(steps: message.steps, isLive: live)
                     }
 
-                    if !message.text.isEmpty {
-                        MarkdownView(text: message.text)
+                    if !parts.report.isEmpty {
+                        if parts.ask != nil { CollapsibleReport(text: parts.report) } else { MarkdownView(text: parts.report) }
                     }
 
                     if let gif = message.gif { GifView(gif: gif) }

@@ -116,6 +116,12 @@ private struct WorkspaceList: View {
                 Text(ws.name).font(.system(size: 13, weight: selected ? .semibold : .regular)).foregroundStyle(Theme.text).lineLimit(1)
                 WorkspaceDot(activity: activity)
                 Spacer(minLength: 4)
+                let asks = AskCenter.shared.count(in: ws.id)
+                if asks > 0 {
+                    Label("\(asks)", systemImage: "exclamationmark.bubble.fill")
+                        .font(.caption.weight(.bold)).foregroundStyle(Theme.accentText)
+                        .help("\(asks) waiting on you")
+                }
                 Text("\(held.bots) bot\(held.bots == 1 ? "" : "s")").font(.caption).foregroundStyle(Theme.secondary)
                 if selected { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.accent) }
                 if index < 9 { Text("⌘\(index + 1)").font(.caption).foregroundStyle(Theme.secondary) }
@@ -126,7 +132,7 @@ private struct WorkspaceList: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(ws.name), \(held.bots) bots" + (activity == .working ? ", a bot is working" : activity == .needsYou ? ", waiting for you" : ""))
+        .accessibilityLabel("\(ws.name), \(held.bots) bots" + (AskCenter.shared.count(in: ws.id) > 0 ? ", \(AskCenter.shared.count(in: ws.id)) waiting on you" : "") + (activity == .working ? ", a bot is working" : activity == .needsYou ? ", waiting for you" : ""))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

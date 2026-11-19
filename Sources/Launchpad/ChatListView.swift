@@ -58,6 +58,9 @@ struct ChatListView: View {
         .navigationTitle("Chats")
         .toolbar {
             ToolbarItem {
+                NeedsYouButton()
+            }
+            ToolbarItem {
                 ActivityButton()
             }
             ToolbarItem {

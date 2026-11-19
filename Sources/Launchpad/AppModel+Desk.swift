@@ -128,7 +128,12 @@ extension AppModel {
         guard let last = list.last(where: { $0.role != .notice && $0.isSide != true }), last.role == .bot,
               Date().timeIntervalSince(last.createdAt) < 600 else { return }
         let name = bot(last.botId)?.name ?? "A bot"
-        if let notice = ReplyNotice.finished(last, botName: name, chatTitle: meta.title, isGroup: meta.kind == .group) {
+        AskCenter.shared.refresh(after: 1)
+        // A reply that asks you something says so: "Needs you: …" with the ask itself.
+        if last.status == .done, let ask = AskParser.parse(last.text) {
+            let place = meta.kind == .group ? " in \(meta.title)" : ""
+            Notifier.shared.post(ReplyNotice(title: "\(name) needs you\(place)", body: AskBook.notice(ask), needsYou: true), chatId: chatId)
+        } else if let notice = ReplyNotice.finished(last, botName: name, chatTitle: meta.title, isGroup: meta.kind == .group) {
             Notifier.shared.post(notice, chatId: chatId)
         }
     }
@@ -299,6 +304,7 @@ extension AppModel {
         ComputerUseController.shared.start(locator: runner.locator)
         Updater.shared.start()
         WorkspaceCenter.shared.install(model: self)
+        AskCenter.shared.install(model: self)
         TicketCenter.shared.install(model: self)
         CompactionCenter.shared.loadRecords(paths: paths, chats: chats)
     }

@@ -172,6 +172,8 @@ final class AppModel {
     var chats: [ChatMeta] = []
     var usage = UsageSnapshot()
     var messages: [String: [ChatMessage]] = [:]
+    /// Bumped when an ask is marked done, so message callouts redraw.
+    var askTick = 0
     var live: [String: [LiveRun]] = [:]
     private(set) var busyChats: Set<String> = []
     private(set) var engineLocations: [BotEngine: String]? = nil
@@ -1044,6 +1046,8 @@ final class AppModel {
         guard let meta = chat(chatId) else { return }
         loadMessagesIfNeeded(chatId)
         append(message, to: chatId)
+        // Your reply closes any ask waiting on you in this chat.
+        if message.role == .user { AskCenter.shared.refresh(after: 1) }
         if meta.kind == .group {
             if isRunning(chatId) {
                 if let running = runningGroups[chatId] {

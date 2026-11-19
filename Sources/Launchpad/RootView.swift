@@ -266,6 +266,7 @@ struct SidebarView: View {
         switch section {
         case .bots: return model.workspaceBots.count
         case .groups: return model.workspaceGroups.count
+        case .chats: return AskCenter.shared.count(in: WorkspaceCenter.shared.currentId)
         case .tasks: return model.tasksNeedingYou
         case .office: return model.workingRuns.count
         default: return 0

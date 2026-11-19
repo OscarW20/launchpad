@@ -1653,3 +1653,21 @@ Oscar can't find what a long bot message needs from him. Bots now end a message 
 - **Open or done.** `AskBook.open(in:chatId:done:)`: an ask (from a finished bot message) is open until you write anything after it in that chat, or it's marked done. Marks live in `AskStore`, in Launchpad's data folder (added to the guard's protected list), so a bot can't close an ask; nothing is written to the chat itself.
 - **Across chats.** `AskInbox(paths:).open(workspace:)` lists open asks newest first, for one workspace or all (chats untouched for 14 days are skipped, for speed); `counts()` gives the number per workspace for the switcher badge; `markDone` / `markOpen`. `AskBook.notice` gives "Needs you: …" for notifications.
 - **Tests:** 21 new; suite 653, 0 failures, 3 skips. Not hand-tested.
+
+### Needs you: asks addressed to Oscar stand out (2026-11-19)
+On Backend's `AskParser`, `AskBook` and `AskInbox` (`d26701e`). New `AskViews.swift`.
+- **Callout**: a bot message with an ask (a "Needs you" block or an `@oscar` line) shows a highlighted **Needs you** box first
+  (accent colour, icon and the words) with the ask and its choices as buttons that reply with that choice. A long report is
+  folded under **Show report** (over 700 characters or 12 lines); a short one just shows. Once you've replied or marked it done
+  the box turns grey and says "done". **Mark done** is in the box.
+- **Count**: on the sidebar's Chats row, and on each workspace's entry in the switcher (an icon and the number).
+- **Needs you list**: a toolbar button on the Chats page with the count; its popover lists open asks in this workspace, newest
+  first, each with **Open** (the chat) and **Mark done**.
+- **Notifications**: a reply that asks you something posts "<bot> needs you" with "Needs you: <the ask>" instead of the
+  generic reply text.
+- `AskCenter` keeps the open list, re-read off the main thread when a reply ends and after you send a message; whether one
+  message's ask is still open is worked out from the messages the app already holds. Asks are matched on "@oscar" (the
+  default handle); a message with no ask is untouched.
+
+Tests: none new (UI only; the core is covered by Backend's tests). Not tried in the running app: the callout with real bot
+messages, the choice buttons, the badges, the list, and the notification text.

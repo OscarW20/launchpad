@@ -239,10 +239,16 @@ public final class GroupOrchestrator: @unchecked Sendable {
         steerPending = true
     }
 
-    private func takeSteer() -> Bool {
+    /// Replies that were stopped for a steer. A reply is looked at more than once, so each remembers it was steered.
+    private var steeredIds = Set<String>()
+
+    private func steeredStop(_ id: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        defer { steerPending = false }
-        return steerPending
+        if steeredIds.contains(id) { return true }
+        guard steerPending else { return false }
+        steerPending = false
+        steeredIds.insert(id)
+        return true
     }
 
     private func takeInbox() -> [ChatMessage] {
@@ -420,7 +426,7 @@ public final class GroupOrchestrator: @unchecked Sendable {
 
     private func outcome(of reply: ChatMessage) -> GroupOutcome? {
         if Task.isCancelled { return .stopped }
-        if reply.status == .stopped { return takeSteer() ? nil : .stopped }   // stopped for your message: carry on and answer it
+        if reply.status == .stopped { return steeredStop(reply.id) ? nil : .stopped }   // stopped for your message: carry on and answer it
         if reply.status == .failed { return .failed(botId: reply.botId ?? "") }
         if reply.approval?.status == .pending { return .awaitingApproval(botId: reply.botId ?? "") }
         return nil

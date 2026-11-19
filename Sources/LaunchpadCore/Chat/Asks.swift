@@ -5,16 +5,75 @@ import Foundation
 //
 // What counts as an ask (the team notes tell bots to write it this way):
 //   - a "Needs you" heading (`**Needs you**`, `Needs you:`, `## Needs you`), and what follows it, or
-//   - a line or paragraph that STARTS with `@oscar` (after any list or quote marks and bold).
-// A mention in the middle of a sentence ("thanks @oscar for the review") is an ordinary mention, not an ask.
+//   - a line or paragraph that STARTS with `@oscar` (after any list or quote marks and bold), or
+//   - a sentence in the LAST paragraph of a message that is addressed to you by name and asks for something:
+//     "Oscar, please open the email", "Oscar: which one?", "Oscar can you approve this?".
+// A mention in the middle of a sentence ("thanks @oscar for the review", "as Oscar said") is an ordinary mention, not an ask,
+// and so are filler lines ("let me know if you have any questions"). A by-name ask only counts while it's the end of the
+// message: if the bot kept writing after it, it was a status line, and if the same bot goes on talking in later messages it
+// was answered or moved on.
 // Choices are the list lines under the ask: `-`, `*`, `•`, `1.`, `1)`, `a)`, `A.`.
+
+/// What an ask wants from you, so the card can label itself and offer the right buttons.
+public enum AskKind: String, Sendable {
+    /// Pick one of the listed options.
+    case decision
+    /// Answer something in words.
+    case question
+    /// Do something, then say it's done.
+    case task
+}
 
 /// One ask found in a message.
 public struct ParsedAsk: Equatable, Sendable {
+    /// How the ask was written. An explicit one (`Needs you`, a line starting `@oscar`) stays open until you answer or mark it
+    /// done. One found by name ("Oscar, please …") is only an ask while it's the end of the message and the bot goes quiet.
+    public enum Source: String, Sendable { case explicit, byName }
+
     /// What's needed, in plain words (no @oscar, no bold marks).
     public var text: String
     /// The options, one per list line, without their markers. Reply with a choice as it is.
     public var choices: [String]
+    public var source: Source = .explicit
+
+    public init(text: String, choices: [String] = [], source: Source = .explicit) {
+        self.text = text
+        self.choices = choices
+        self.source = source
+    }
+
+    /// The ask in one short line for the card: the first sentence, cut to 20 words.
+    public var headline: String {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return choices.isEmpty ? "" : "Pick one of the options" }
+        let first = AskParser.firstSentence(of: body)
+        let words = first.split(separator: " ")
+        guard words.count > AskParser.headlineWords else { return first }
+        return words.prefix(AskParser.headlineWords).joined(separator: " ") + "…"
+    }
+
+    /// Whatever the ask says beyond its headline, or nil.
+    public var detail: String? {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let first = AskParser.firstSentence(of: body)
+        let rest = body.dropFirst(first.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        if first.split(separator: " ").count > AskParser.headlineWords { return body }
+        return rest.isEmpty ? nil : String(rest)
+    }
+
+    /// Options, a question, or something to do.
+    public var kind: AskKind {
+        if choices.count >= 2 { return .decision }
+        let t = text.lowercased()
+        if t.range(of: AskParser.taskPattern, options: .regularExpression) != nil { return .task }
+        if text.contains("?") { return .question }
+        return .task
+    }
+
+    /// What a "Done" button sends: it says what was done, so a bot isn't left guessing. For a task.
+    public var doneReply: String { "Done: \(headline)" }
+    /// What a "Can't right now" button sends.
+    public var declineReply: String { "I can't do this right now: \(headline)" }
 }
 
 public enum AskParser {
@@ -23,6 +82,33 @@ public enum AskParser {
     static let maxTextLength = 600
     static let maxChoiceLength = 200
     static let maxChoices = 8
+    static let headlineWords = 20
+
+    /// A request to do something (rather than to answer): "please open…", "can you click…", "approve the deploy".
+    static let taskPattern = #"^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:open|click|sign|log|enter|paste|create|add|run|approve|check|send|grant|connect|install|restart|update|review|test|try|copy|download|upload|confirm|provide|set|turn|reply|forward|complete|finish|share|give)\b"#
+
+    /// Lines that look like asks but ask for nothing.
+    static let fillerPatterns = [
+        #"let me know if you (?:have|need|want|would like|'d like)\b"#, #"let me know if there(?:'s| is| are)\b"#,
+        #"let me know (?:what|how) you think"#, #"let me know when you(?:'re| are) ready"#, #"feel free to (?:ask|reach out|check|let)"#,
+        #"(?:\bany |if you have (?:any )?|got any )(?:further |more |other )?(?:questions|concerns|feedback)\b"#, #"hope (?:this|that) helps"#,
+        #"happy to help"#, #"just say the word"#, #"^thoughts\??$"#, #"anything else\b"#,
+    ]
+
+    static func isFiller(_ text: String) -> Bool {
+        let t = text.lowercased()
+        return fillerPatterns.contains { t.range(of: $0, options: .regularExpression) != nil }
+    }
+
+    /// The first sentence: up to the first `.`, `!` or `?` that is followed by a space (so "e.g." inside words and file names
+    /// don't cut it short), or the whole text.
+    static func firstSentence(of text: String) -> String {
+        let flat = text.replacingOccurrences(of: "\n", with: " ")
+        if let r = flat.range(of: #"[.!?]+(?=\s+[A-Z@*_\"“(])"#, options: .regularExpression) {
+            return String(flat[..<r.upperBound]).trimmingCharacters(in: .whitespaces)
+        }
+        return flat.trimmingCharacters(in: .whitespaces)
+    }
 
     /// Your handles: "oscar", plus the first word of your full name when it's different ("Oscar Whelan" adds nothing new).
     public static func handles(forFullName name: String?) -> [String] {
@@ -147,14 +233,72 @@ public enum AskParser {
                 j = k
             }
             text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty || !choices.isEmpty {
+            let filler = choices.isEmpty && isFiller(text)
+            if (!text.isEmpty || !choices.isEmpty) && !filler {
                 let ask = ParsedAsk(text: String(text.prefix(maxTextLength)),
                                     choices: choices.prefix(maxChoices).map { String($0.prefix(maxChoiceLength)) })
                 last = Found(ask: ask, lines: first..<max(j, first + 1))
             }
             i = max(j, first + 1)
         }
+        if last == nil, let named = findByName(ls, fenced: fenced, handles: handles) {
+            // The ask sits inside the report, so there's nothing to lift out of it: the report stays whole.
+            return Found(ask: named, lines: 0..<0)
+        }
         return last
+    }
+
+    // MARK: Asking by name
+
+    /// The sentence in the message's last paragraph that asks you for something by name, or nil.
+    private static func findByName(_ ls: [String], fenced: [Bool], handles: [String]) -> ParsedAsk? {
+        func blank(_ i: Int) -> Bool { ls[i].trimmingCharacters(in: .whitespaces).isEmpty }
+        guard let end = ls.indices.last(where: { !blank($0) && !fenced[$0] }) else { return nil }
+        func paragraphStart(_ e: Int) -> Int { var s = e; while s > 0, !blank(s - 1), !fenced[s - 1] { s -= 1 }; return s }
+        var start = paragraphStart(end)
+        // A list on its own: the sentence that introduces it is in the paragraph before.
+        if (start...end).allSatisfy({ choice(ls[$0]) != nil }) {
+            var p = start - 1
+            while p >= 0, blank(p) { p -= 1 }
+            if p >= 0, !fenced[p] { start = paragraphStart(p) }
+        }
+        let used = (start...end).filter { !blank($0) && !fenced[$0] }
+        let choices = used.compactMap { choice(ls[$0]) }
+        let prose = used.filter { choice(ls[$0]) == nil }.map { ls[$0] }.joined(separator: " ")
+            .replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "")
+        let sentences = prose.replacingOccurrences(of: #"(?<=[.!?])\s+(?=[A-Z@"“(])"#, with: "\u{1}", options: .regularExpression)
+            .components(separatedBy: "\u{1}")
+        for (i, sentence) in sentences.enumerated() {
+            guard let request = addressed(sentence, handles: handles) else { continue }
+            let text = ([request] + sentences[(i + 1)...].prefix(2).map { clean($0) }).joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard choices.isEmpty ? !isFiller(text) : true else { return nil }
+            return ParsedAsk(text: String(text.prefix(maxTextLength)), choices: choices.prefix(maxChoices).map { String($0.prefix(maxChoiceLength)) },
+                             source: .byName)
+        }
+        return nil
+    }
+
+    /// The request in a sentence that starts with your name ("Oscar, please …", "@oscar: which …?", "Oscar can you …"), or nil
+    /// if it doesn't start that way, is thanks or news rather than a request, or asks for nothing.
+    private static func addressed(_ sentence: String, handles: [String]) -> String? {
+        var s = stripLead(sentence)
+        while let c = s.first, "\"“'‘(".contains(c) { s.removeFirst() }
+        if s.hasPrefix("@") { s.removeFirst() }
+        guard let handle = handles.first(where: { s.lowercased().hasPrefix($0.lowercased()) }) else { return nil }
+        let tail = String(s.dropFirst(handle.count))
+        guard let first = tail.first else { return nil }
+        // "Oscar," "Oscar:" "Oscar -" are addressing him; "Oscar please" / "Oscar can you" too. "Oscar's", "oscar@x.com" are not.
+        let addressing = tail.range(of: #"^(?:[,:;]|\s?[-–—]\s)"#, options: .regularExpression) != nil   // "Oscar-2" is not him
+        let spaced = first == " " && tail.trimmingCharacters(in: .whitespaces).lowercased()
+            .range(of: #"^(?:please|can you|could you|would you|will you|need)\b"#, options: .regularExpression) != nil
+        guard addressing || spaced else { return nil }
+        let request = clean(tail)
+        guard !request.isEmpty,
+              request.lowercased().range(of: #"^(?:thanks|thank you|cheers|fyi|note|sorry|welcome|congrats|great|nice|good|well done|here|has|have|said|asked|wrote|mentioned)\b"#, options: .regularExpression) == nil,
+              request.range(of: #"(?i)\?|\b(?:please|can you|could you|would you|will you|need|needs|should|must|which|what|when|where|how|do you|did you|are you|approve|confirm|decide|choose|pick|open|click|check|review|sign|log in|enter|paste|send|share|provide|give|tell|let me know|go ahead|your call|up to you)\b"#, options: .regularExpression) != nil
+        else { return nil }
+        return request
     }
 }
 
@@ -224,9 +368,18 @@ public enum AskBook {
         let positions = Dictionary(uniqueKeysWithValues: messages.enumerated().map { ($1.id, $0) })
         return asks(in: messages, chatId: chatId, handles: handles).filter { a in
             guard !done.contains(a.messageId) else { return false }
-            if let lastReply, let at = positions[a.messageId], lastReply > at { return false }
+            guard let at = positions[a.messageId] else { return true }
+            if let lastReply, lastReply > at { return false }
+            // An ask made by name sat inside the bot's message: if that bot went on talking afterwards, it moved on.
+            if a.ask.source == .byName, messages[(at + 1)...].contains(where: { $0.role == .bot && $0.botId == a.botId }) { return false }
             return true
         }
+    }
+
+    /// What to pin above the composer for one chat: its open asks, newest last. (The same as `open`; named for what it's for.)
+    public static func pinned(in messages: [ChatMessage], chatId: String, handles: [String] = AskParser.defaultHandles,
+                              done: Set<String> = []) -> [UserAsk] {
+        open(in: messages, chatId: chatId, handles: handles, done: done)
     }
 
     /// What a notification says for an ask: "Needs you: …".
@@ -282,6 +435,11 @@ public struct AskInbox {
             if n > 0 { out[layout.workspaceId(for: chat), default: 0] += n }
         }
         return out
+    }
+
+    /// One chat's open asks, newest last, for the tray above its composer.
+    public func pinned(chatId: String, handles: [String] = AskParser.defaultHandles) -> [UserAsk] {
+        AskBook.pinned(in: chats.messages(chatId: chatId), chatId: chatId, handles: handles, done: store.doneSet())
     }
 
     public func markDone(_ ask: UserAsk) throws { try store.markDone(ask.messageId) }

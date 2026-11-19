@@ -1685,3 +1685,12 @@ messages, the choice buttons, the badges, the list, and the notification text.
 
 Not tried in the running app: Shift+Return with the scrolling box and the pickers, a corner-thumbnail drag, a browser image drag,
 and ⌘V of a screenshot and of text.
+
+### Asks: by name, a headline, a kind, and a pinned list (2026-11-19)
+Oscar still misses asks in long messages, and some are addressed by name ("Oscar, please open the confirmation email…"), not `@oscar`. For the Needs you card (`workspace/NEEDS_YOU_CARD_DESIGN.md`). All in `Chat/Asks.swift`.
+- **By name.** A sentence that starts with your name ("Oscar, …", "Oscar: …", "Oscar - …", "@oscar please …", "Oscar can you …") and asks for something (a `?` or a request word) is an ask, but only in the message's last paragraph (with its list): if the bot kept writing after it, it was a status line. Thanks and news ("Thanks Oscar", "As Oscar said", "Oscar's review", "Oscar, here is the report"), email addresses, paths and code spans are not asks. Explicit asks (`Needs you`, a line starting `@oscar`) behave as before and win.
+- **Filler isn't an ask**: "let me know if you have questions", "feel free to ask", "hope this helps", "any questions?" (unless the ask has real options).
+- **`ParsedAsk`** gains `source` (explicit or byName), `headline` (the first sentence, at most 20 words), `detail` (the rest), `kind` (decision when there are options, task for a request to do something, otherwise question), and `doneReply` / `declineReply`, which say what was done ("Done: …") so a bot isn't left guessing.
+- **Open:** an ask made by name also closes when the same bot goes on talking afterwards; an explicit one doesn't. Your reply or Mark done closes either.
+- **Pinned:** `AskBook.pinned(in:chatId:done:)` and `AskInbox.pinned(chatId:)` give one chat's open asks, newest last, for the tray above the composer.
+- **Tests:** 13 new; suite 666, 0 failures, 3 skips. Not hand-tested.

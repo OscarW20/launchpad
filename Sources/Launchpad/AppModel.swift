@@ -1166,6 +1166,7 @@ final class AppModel {
             group: group, bots: group.everyone.compactMap { bot($0) },
             history: SkillCommand.expand(messages(for: chatId), skills: skills),
             summaryPath: groupStore.summary(group.id).path, workspacePath: groupStore.workspace(group.id).path,
+            limits: RunLimitsStore(paths: paths).load(),
             hasSession: { registry.has(chat: chatId, bot: $0) },
             runTurn: { [weak self] request in
                 guard let self else { return ChatMessage(role: .bot, botId: request.bot.id, status: .stopped) }
@@ -1196,13 +1197,10 @@ final class AppModel {
         switch outcome {
         case .done, .stopped, .awaitingApproval:
             break
-        case let .handoffLimitReached(limit, waiting):
-            let next = waiting.compactMap { bot($0)?.name }.joined(separator: ", ")
-            append(ChatMessage(
-                role: .notice,
-                text: "The team has handed work on \(limit) time\(limit == 1 ? "" : "s"), so I've paused them\(next.isEmpty ? "" : " (next up: \(next))"). Keep going?",
-                noticeAction: .continueGroup
-            ), to: chatId)
+        case .handoffLimitReached, .loopDetected:
+            // Stuck, not finished: say why. (A routine hand-off never gets here; the cap is generous.)
+            let reason = outcome.stuckReason(names: { [self] in bot($0)?.name ?? "A bot" }) ?? "The team stopped."
+            append(ChatMessage(role: .notice, text: reason, noticeAction: .continueGroup), to: chatId)
         case .failed(let botId):
             append(ChatMessage(role: .notice, text: "\(bot(botId)?.name ?? "A bot") couldn't finish, so the group has stopped. Sort out the problem above, then send a message to carry on."), to: chatId)
         case .noLead:

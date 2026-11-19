@@ -318,7 +318,7 @@ public enum GuardRulesFile {
             paths.guardRules.path, paths.approvalAnswers.path, paths.launchpadData.appendingPathComponent("approvals").path,
             paths.snapshots.path, paths.launchpadData.appendingPathComponent("locked-skills.json").path,
             ApprovalModes(paths: paths).file.path, TicketSettingsStore(paths: paths).file.path,
-            ContextSettingsStore(paths: paths).file.path, WorkspaceStore(paths: paths).file.path,
+            ContextSettingsStore(paths: paths).file.path, WorkspaceStore(paths: paths).file.path, RunLimitsStore(paths: paths).file.path,
             folder.appendingPathComponent(".claude/settings.json").path,
             folder.appendingPathComponent(".claude/settings.local.json").path,
             home.appendingPathComponent(".claude/settings.json").path,

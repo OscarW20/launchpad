@@ -76,7 +76,10 @@ public struct GroupTurnRequest: Sendable {
 
 public enum GroupOutcome: Equatable, Sendable {
     case done
+    /// The safety cap (`RunLimits`) was reached. A stop with a reason, never a routine pause.
     case handoffLimitReached(limit: Int, waiting: [String])
+    /// The same hand-off, again and again, with nothing new in it (`LoopDetector`).
+    case loopDetected(botId: String, times: Int)
     case awaitingApproval(botId: String)
     case stopped
     case failed(botId: String)
@@ -189,12 +192,13 @@ public final class GroupOrchestrator: @unchecked Sendable {
     public let bots: [String: Bot]
     public private(set) var history: [ChatMessage]
     private let prompts: GroupPrompts
+    private let limits: RunLimits
     private let runTurn: TurnRunner
     private let hasSession: @Sendable (String) -> Bool
     private let lock = NSLock()
 
     public init(group: BotGroup, bots: [Bot], history: [ChatMessage], summaryPath: String, workspacePath: String,
-                hasSession: @escaping @Sendable (String) -> Bool = { _ in false },
+                limits: RunLimits = RunLimits(), hasSession: @escaping @Sendable (String) -> Bool = { _ in false },
                 runTurn: @escaping TurnRunner) {
         self.group = group
         let byId = Dictionary(bots.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -203,6 +207,7 @@ public final class GroupOrchestrator: @unchecked Sendable {
         self.prompts = GroupPrompts(group: group, bots: byId, summaryPath: summaryPath, workspacePath: workspacePath)
         self.hasSession = hasSession
         self.runTurn = runTurn
+        self.limits = limits
     }
 
     /// Add a message that arrived from elsewhere (e.g. what you typed).
@@ -311,6 +316,7 @@ public final class GroupOrchestrator: @unchecked Sendable {
 
     private func drive(from first: Bot, kind: GroupTurnKind, leadReviews: Bool = true) async -> GroupOutcome {
         var handoffs = 0
+        var loops = LoopDetector()
         var speaker = first
         var reply = await turn(first, kind)
         while true {
@@ -322,14 +328,17 @@ public final class GroupOrchestrator: @unchecked Sendable {
                 next.removeAll { $0 == group.lead }
                 if next.isEmpty { return .done }
             }
+            if let times = loops.observe(botId: speaker.id, text: reply.text, handedTo: next) {
+                return .loopDetected(botId: speaker.id, times: times)
+            }
 
             // Members work through the hand-offs; their own mentions queue more work.
             var parallel = isLead && GroupPlan.isParallel(reply.text)
             var handedBy = speaker.id
             while !next.isEmpty {
                 handoffs += 1
-                if handoffs > group.handoffLimit {
-                    return .handoffLimitReached(limit: group.handoffLimit, waiting: next)
+                if handoffs > limits.maxHandoffs {
+                    return .handoffLimitReached(limit: limits.maxHandoffs, waiting: next)
                 }
                 let batch = next.compactMap { bots[$0] }
                 next = []
@@ -360,6 +369,12 @@ public final class GroupOrchestrator: @unchecked Sendable {
                 }
                 for r in replies {
                     if let stop = outcome(of: r) { return stop }
+                }
+                for r in replies {
+                    let onward = GroupPlan.mentions(in: r.text, group: group, bots: bots, speaker: r.botId).filter { $0 != group.lead }
+                    if let times = loops.observe(botId: r.botId ?? "", text: r.text, handedTo: onward) {
+                        return .loopDetected(botId: r.botId ?? "", times: times)
+                    }
                 }
                 // Member-to-member hand-offs (the lead reviews at the end anyway).
                 for r in replies {

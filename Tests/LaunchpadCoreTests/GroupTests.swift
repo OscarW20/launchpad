@@ -49,8 +49,8 @@ final class GroupTests: XCTestCase {
 
     func orchestrator(_ team: ScriptedTeam, limit: Int = 3, history: [ChatMessage] = [ChatMessage(role: .user, text: "Build it")],
                       sessions: Set<String> = []) -> GroupOrchestrator {
-        GroupOrchestrator(group: group(limit: limit), bots: bots, history: history, summaryPath: "/g/SUMMARY.md",
-                          workspacePath: "/g/workspace", hasSession: { sessions.contains($0) },
+        GroupOrchestrator(group: group(), bots: bots, history: history, summaryPath: "/g/SUMMARY.md",
+                          workspacePath: "/g/workspace", limits: RunLimits(maxHandoffs: limit), hasSession: { sessions.contains($0) },
                           runTurn: { await team.run($0) })
     }
 
@@ -158,12 +158,14 @@ final class GroupTests: XCTestCase {
         XCTAssertEqual(team.calls[2].kind, .member(handedOnBy: "backend"))
     }
 
-    func testHandoffLimitStopsAndAsks() async {
-        // Lead keeps handing off forever.
-        let team = ScriptedTeam(["lead": Array(repeating: "@frontend again", count: 10), "frontend": Array(repeating: "ok", count: 10)])
-        let outcome = await orchestrator(team, limit: 2).runTask()
-        XCTAssertEqual(outcome, .handoffLimitReached(limit: 2, waiting: ["frontend"]))
-        XCTAssertEqual(team.order, ["lead", "frontend", "lead", "frontend", "lead"])
+    func testHandoffCapStopsWithAReasonWhenWorkKeepsChanging() async {
+        // Lead keeps handing off, but each message is new work (so it isn't a loop): only the cap stops it.
+        let words = ["schema", "login", "billing", "emails", "search", "uploads", "reports", "exports", "alerts", "themes"]
+        let team = ScriptedTeam(["lead": words.map { "@frontend now build the \($0) screen" }, "frontend": Array(repeating: "ok", count: 10)])
+        let outcome = await orchestrator(team, limit: 3).runTask()
+        XCTAssertEqual(outcome, .handoffLimitReached(limit: 3, waiting: ["frontend"]))
+        XCTAssertEqual(team.order, ["lead", "frontend", "lead", "frontend", "lead", "frontend", "lead"])
+        XCTAssertNotNil(outcome.stuckReason(names: { $0 }))
     }
 
     func testDefaultLimitIsThree() {

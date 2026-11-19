@@ -1626,3 +1626,11 @@ A copied group starts in Ask me, so it never quietly gets a looser setting. When
 - The choice is applied with the existing `setApprovalMode`, after the copy exists. Groups in Ask me are unchanged and aren't asked.
 
 Not tried in the running app: both prompts and that the copy's mode comes out as chosen.
+
+### Teams finish their work: no routine "Keep going" (2026-11-19)
+Oscar: the "Keep going" pause is annoying; the team should finish tasks.
+- **What paused a run:** only the group's hand-off limit (default 3, a stepper of 1 to 20). `drive` counted hand-offs across the whole task, so any normal multi-step job passed 3 and the app posted "Keep going?". There is no turn limit, per-run budget or one-to-one pause behind it (no `--max-turns` anywhere).
+- **Now a run stops only when it's done, a bot asks you (question, plan card, approval), or it's stuck.** Stuck is (1) a loop: `LoopDetector` sees the same bot hand the same work to the same people three times with nothing new in the message (words compared, ignoring numbers and @mentions; a hand-off to someone else, new work, or a reply that hands nothing on never counts), also between two members bouncing it back and forth, and (2) a safety cap (`RunLimits.maxHandoffs`, default 60, 3 to 500, saved in the data folder and protected from bots, read each run). Both give `GroupOutcome.loopDetected` / `.handoffLimitReached` with a reason (`stuckReason`), never a routine pause.
+- **The group's own "hand-off limit" is ignored** (still stored, so old groups still load). Token controls (auto-compact and the context checks) are untouched.
+- **App:** the run reads the setting; a stuck stop shows its reason with Continue. Settings UI and removing the group stepper are Frontend's.
+- **Tests:** 11 new, 1 rewritten; suite 632, 0 failures, 3 skips. Not hand-tested.

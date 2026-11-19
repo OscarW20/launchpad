@@ -172,8 +172,6 @@ final class AppModel {
     var chats: [ChatMeta] = []
     var usage = UsageSnapshot()
     var messages: [String: [ChatMessage]] = [:]
-    /// Bumped when an ask is marked done, so message callouts redraw.
-    var askTick = 0
     var live: [String: [LiveRun]] = [:]
     private(set) var busyChats: Set<String> = []
     private(set) var engineLocations: [BotEngine: String]? = nil

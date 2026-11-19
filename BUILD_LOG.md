@@ -1694,3 +1694,25 @@ Oscar still misses asks in long messages, and some are addressed by name ("Oscar
 - **Open:** an ask made by name also closes when the same bot goes on talking afterwards; an explicit one doesn't. Your reply or Mark done closes either.
 - **Pinned:** `AskBook.pinned(in:chatId:done:)` and `AskInbox.pinned(chatId:)` give one chat's open asks, newest last, for the tray above the composer.
 - **Tests:** 13 new; suite 666, 0 failures, 3 skips. Not hand-tested.
+
+### Needs you becomes a card, pinned above the composer (2026-11-19)
+Replaces the highlighted-text callout, from Designer's sketch (`NEEDS_YOU_CARD_DESIGN.md`) and Backend's wider detection (`b5204df`).
+- **`NeedsYouCard`**: its own block, not text in the message. Flag icon, the words NEEDS YOU, the kind (Question, Decision, Task)
+  and the bot, a 4 pt amber bar and border, amber in both themes (never red, which means error; colour is never the only signal).
+  The headline is the ask in at most 20 words, 20 pt; any more of the ask is under "More".
+  - **Decision**: one 44 pt button per choice (4 shown, "More choices" for the rest), sending the choice as your reply.
+  - **Task**: **Done** (sends "Done: <headline>") and **Can't right now** (sends "I can't do this right now: <headline>").
+  - **Question**: the reply box, focused, with **Not now**. Every card has a reply box; Return sends, Shift+Return is a new line.
+  - ⋯ menu: **Handled elsewhere, no reply** (the same call as Mark done). The long report is folded under "Show <bot>'s report (N lines)".
+  - Replies go through the composer's path (`replyFromNotification`), so a busy bot is steered and the normal notifications run.
+- **`NeedsYouTray`** above the composer: open asks for the chat, newest as the full card (scrolls inside past 340 pt), older ones as
+  one-line rows (max 3, then "+N more" opening the Needs you list; tap a row to swap it in), a "N need you" label, and **Hide**
+  that leaves a thin bar. It reads the open list from the messages the app holds (`AskBook.pinned`).
+- **In the transcript**: where the ask was made, a one-line amber banner while it's open (the card is pinned below, so the
+  buttons aren't repeated); afterwards a quiet grey line: "You answered · Task · “Done…”", "Handled · no reply" or "Answered in chat".
+- `AskCenter` now caches the hand-marked ids; the old `askTick` is gone. Amber dark `#43331B` is the 18% tint Designer suggested
+  for a very dark background; the app's dark is darker than the sketch assumed, so check it first.
+- Not done: ⌘1 to ⌘4 for choices (they're the workspace shortcuts) and the one-time border pulse.
+
+Tests: none new (UI only; detection is covered by Backend's tests). Not tried in the running app: the card and tray with a real
+ask, the buttons, Hide, stacked asks, and the transcript lines.

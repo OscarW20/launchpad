@@ -195,7 +195,7 @@ struct BotMessageView: View {
                     let parts = AskText.split(message, live: live)
                     // An ask to you goes first, so a long report never hides what's needed.
                     if let ask = parts.ask {
-                        NeedsYouCallout(ask: ask, messageId: message.id, chatId: chatId)
+                        AskTranscriptLine(message: message, ask: ask, chatId: chatId)
                     }
 
                     if let todos = message.todos, !todos.isEmpty {

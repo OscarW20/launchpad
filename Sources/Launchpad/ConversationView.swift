@@ -15,6 +15,7 @@ struct ConversationView: View {
             Rectangle().fill(Theme.line).frame(height: 1)
             PinnedBar(chatId: chatId)
             MessagesList(chatId: chatId)
+            NeedsYouTray(chatId: chatId)
             Composer(chatId: chatId)
         }
         .overlay {

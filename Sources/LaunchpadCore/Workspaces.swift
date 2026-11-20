@@ -175,10 +175,10 @@ public struct WorkspaceProblem: Hashable, Sendable {
 /// Nothing is migrated on disk: with no file, or a file that doesn't mention a bot or group, it's in General.
 public final class WorkspaceStore: @unchecked Sendable {
     public let file: URL
-    private let paths: LaunchpadPaths
-    private let botStore: BotStore
-    private let groupStore: GroupStore
-    private let fm: FileManager
+    let paths: LaunchpadPaths
+    let botStore: BotStore
+    let groupStore: GroupStore
+    let fm: FileManager
     private let lock = NSLock()
 
     public init(paths: LaunchpadPaths, fileManager: FileManager = .default) {
@@ -265,7 +265,7 @@ public final class WorkspaceStore: @unchecked Sendable {
     }
 
     /// Can this bot join this group? Only from the same workspace; otherwise offer "Duplicate it here".
-    private func requireReadable() throws { if isUnreadable { throw WorkspaceError.unreadable } }
+    func requireReadable() throws { if isUnreadable { throw WorkspaceError.unreadable } }
 
     public func canAdd(bot botId: String, toGroup groupId: String) -> Bool {
         workspaceId(forBot: botId) == workspaceId(forGroup: groupId)
@@ -492,14 +492,14 @@ public final class WorkspaceStore: @unchecked Sendable {
     }
 
     /// A name not used by any group in the workspace: "Dev Team", then "Dev Team (2)", "Dev Team (3)".
-    private func freeGroupName(_ base: String, in workspaceId: String) -> String {
+    func freeGroupName(_ base: String, in workspaceId: String) -> String {
         let taken = groups(in: workspaceId).map { $0.name.lowercased() }
         var name = base, n = 2
         while taken.contains(name.lowercased()) { name = "\(base) (\(n))"; n += 1 }
         return name
     }
 
-    private func freeBotName(_ base: String, in workspaceId: String, also used: Set<String>) -> String {
+    func freeBotName(_ base: String, in workspaceId: String, also used: Set<String>) -> String {
         let taken = Set(bots(in: workspaceId).map { $0.name.lowercased() }).union(used)
         var name = base, n = 2
         while taken.contains(name.lowercased()) { name = "\(base) (\(n))"; n += 1 }
@@ -735,12 +735,12 @@ public final class WorkspaceStore: @unchecked Sendable {
         a.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(b) == .orderedSame
     }
 
-    private static func assign(_ map: inout [String: String], _ id: String, _ workspaceId: String) {
+    static func assign(_ map: inout [String: String], _ id: String, _ workspaceId: String) {
         if workspaceId == Workspace.generalId { map.removeValue(forKey: id) } else { map[id] = workspaceId }
     }
 
     @discardableResult
-    private func mutate<T>(_ change: (inout WorkspaceLayout) throws -> T) throws -> T {
+    func mutate<T>(_ change: (inout WorkspaceLayout) throws -> T) throws -> T {
         lock.lock(); defer { lock.unlock() }
         var layout: WorkspaceLayout
         if let data = try? Data(contentsOf: file) {

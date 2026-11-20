@@ -361,7 +361,8 @@ final class WorkspaceCenter {
         reload()
         ActiveSkillsCenter.shared.reload()
         TeamLaunchCenter.shared.record(TeamLaunchRecord(groupId: launched.group.id, missingConnectors: launched.missingConnectors,
-                                                       unknownSkills: launched.unknownSkills, renamed: launched.renamedGroup), for: messageId)
+                                                       unknownSkills: launched.unknownSkills, renamed: launched.renamedGroup,
+                                                       cappedAccess: launched.cappedAccess), for: messageId)
         model.openChat(with: launched.group)
         if let chat = model.chats.first(where: { $0.kind == .group && $0.groupId == launched.group.id }) {
             model.send(chatId: chat.id, text: launched.firstMessage)

@@ -12,6 +12,7 @@ struct TeamLaunchRecord: Equatable {
     var missingConnectors: [String] = []
     var unknownSkills: [String] = []
     var renamed = false
+    var cappedAccess: [String] = []
 }
 
 @MainActor
@@ -106,10 +107,10 @@ struct ProposedTeamCard: View {
                         let level = Self.level(of: m)
                         Text(level.displayName)
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(level == .fullAccess ? Theme.warning : Theme.secondary)
+                            .foregroundStyle(Theme.secondary)
                             .padding(.horizontal, 6).padding(.vertical, 1)
-                            .overlay(Capsule().strokeBorder(level == .fullAccess ? Theme.warning : Theme.line))
-                            .help(level.explanation)
+                            .overlay(Capsule().strokeBorder(Theme.line))
+                            .help(Self.wouldBeFull(m) ? "This role normally has Full access. It starts at this level; raise it on the bot afterwards if you want." : level.explanation)
                         if !m.role.isEmpty { Text(m.role).font(.system(size: 12)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true) }
                         Spacer(minLength: 0)
                         if tweaking, m.key != option.lead {
@@ -133,11 +134,11 @@ struct ProposedTeamCard: View {
             ForEach(proposal.dropped, id: \.self) { why in
                 Label("Left out: \(why)", systemImage: "minus.circle").font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            let full = option.members.filter { Self.level(of: $0) == .fullAccess }
-            if !full.isEmpty {
-                Label("\(full.map(\.name).joined(separator: ", ")) \(full.count == 1 ? "gets" : "get") Full access: can run any command and edit any file. Take \(full.count == 1 ? "it" : "them") out with Tweak if you don't want that.",
-                      systemImage: "exclamationmark.shield")
-                    .font(.caption).foregroundStyle(Theme.warning).fixedSize(horizontal: false, vertical: true)
+            let limited = option.members.filter { Self.wouldBeFull($0) }
+            if !limited.isEmpty {
+                Label("\(limited.map(\.name).joined(separator: ", ")) normally \(limited.count == 1 ? "has" : "have") Full access, but a proposal never grants it: \(limited.count == 1 ? "it starts" : "they start") at editing its own workspace. Raise it on the bot afterwards if you want.",
+                      systemImage: "lock.shield")
+                    .font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Label("Starts in Ask me. The team asks you before posting, sending or publishing anything.", systemImage: "hand.raised")
                 .font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
@@ -154,6 +155,10 @@ struct ProposedTeamCard: View {
                 }
                 if !launched.missingConnectors.isEmpty {
                     Text("Add \(launched.missingConnectors.joined(separator: ", ")) in Apps before the team can use it.").font(.caption).foregroundStyle(Theme.warning)
+                }
+                if !launched.cappedAccess.isEmpty {
+                    Text("\(launched.cappedAccess.joined(separator: ", ")) started with limited access (editing its own workspace). Raise it on the bot if you want more.")
+                        .font(.caption).foregroundStyle(Theme.secondary)
                 }
                 if !launched.unknownSkills.isEmpty {
                     Text("Not in your library, so not switched on: \(launched.unknownSkills.joined(separator: ", ")).").font(.caption).foregroundStyle(Theme.secondary)
@@ -174,7 +179,13 @@ struct ProposedTeamCard: View {
 
     /// What access a member will have: a catalog role keeps its own level, a custom bot can edit only its own folder.
     private static func level(of member: ProposedMember) -> PermissionLevel {
-        member.template.flatMap(HireCatalog.template)?.permission ?? .editWorkspace
+        let base = member.template.flatMap(HireCatalog.template)?.permission ?? .editWorkspace
+        return base == .fullAccess ? .editWorkspace : base   // a proposal never grants Full access
+    }
+
+    /// A catalog role that has Full access when hired by hand, so launch starts it lower.
+    private static func wouldBeFull(_ member: ProposedMember) -> Bool {
+        member.template.flatMap(HireCatalog.template)?.permission == .fullAccess
     }
 
     /// The option with your tweaks: a new group name, and the members you took out (never the lead).

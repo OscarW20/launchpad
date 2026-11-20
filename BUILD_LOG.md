@@ -1794,3 +1794,11 @@ Tester found the kickoff message @mentioned every member (up to 8 replies at onc
 - **`@` in text.** Goals, roles and notes turn `@` into `(at)` (so `a@b.com` still reads as an email and `@everyone` can't mention anyone). A look-alike `@` was tried first and is not safe: the mention matcher folds it back. `launch` cleans names and roles again itself, so a tweaked or hand-built option can't carry a mention either.
 - **Access.** A proposal never grants Full access: a catalog bot with Full access starts at "edit its own workspace" (saved on the bot), and `LaunchedTeam.cappedAccess` names them. You can raise it on the bot afterwards.
 - **Tests:** 2 new; suite 696, 0 failures, 3 skips.
+
+### Proposed team card matches Backend's access cap (2026-11-20)
+Backend's `c7ed7b5`: launch never grants Full access, so a catalog role that has it (shipper, backend, …) starts at "edit its own workspace".
+- The card shows that level for such a member (no amber), with a line naming who it applies to and saying to raise it on the bot afterwards;
+  the earlier "Full access, take them out with Tweak" warning is gone.
+- After a launch the card says which bots "started with limited access" (`LaunchedTeam.cappedAccess`, kept on `TeamLaunchRecord`).
+
+Not tried in the running app.

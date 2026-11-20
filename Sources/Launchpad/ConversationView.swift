@@ -54,6 +54,7 @@ struct ConversationHeader: View {
             }
             Spacer(minLength: Theme.Space.s)
             if sidebarHidden || poppedOut { WorkspaceChip(chatId: chatId) }
+            BrowserOpenIndicator()
             if let usage = model.contextByChat[chatId] {
                 HStack(spacing: 6) {
                     ContextChip(usage: usage)
@@ -557,8 +558,6 @@ struct Composer: View {
                 }
                 .padding(.leading, 48)
             }
-            ActiveSkillChips(chatId: chatId)
-                .padding(.leading, 48)
             if !mentions.isEmpty {
                 MentionList(bots: mentions, selection: min(mentionSelection, mentions.count - 1)) { pickMention($0) }
                     .padding(.leading, 48)

@@ -182,44 +182,4 @@ struct ActiveSkillsPopover: View {
     }
 }
 
-/// Small chips above the message box for the skills that are on; the x switches one off.
-struct ActiveSkillChips: View {
-    @Environment(AppModel.self) private var model
-    let chatId: String
-
-    var body: some View {
-        let center = ActiveSkillsCenter.shared
-        let chat = model.chat(chatId)
-        let chatOn = center.onForChat(chatId)
-        let groupOn = center.onForGroup(chat?.groupId)
-        let all = chat.map { center.active(for: $0) } ?? []
-        if !all.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(all, id: \.self) { id in
-                        let name = model.skills.first { $0.id == id }?.name ?? id
-                        let group = groupOn.contains(id)
-                        HStack(spacing: 4) {
-                            Image(systemName: group ? "person.3.fill" : "sparkles")
-                            Text(name).lineLimit(1)
-                            Button {
-                                if chatOn.contains(id) { _ = center.set(id, on: false, scope: .chat(chatId), chat: chat) }
-                                if group, let g = chat?.groupId { _ = center.set(id, on: false, scope: .group(g), chat: chat) }
-                            } label: { Image(systemName: "xmark.circle.fill") }
-                                .buttonStyle(.plain).foregroundStyle(Theme.secondary)
-                                .help(group ? "Switch off for the whole group" : "Switch off")
-                                .accessibilityLabel("Switch off \(name)")
-                        }
-                        .font(.callout)
-                        .foregroundStyle(Theme.accentText)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(Theme.accentSoft, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Theme.accent.opacity(0.35)))
-                        .help(group ? "\(name): on for the whole group" : "\(name): on for this chat")
-                    }
-                }
-            }
-        }
-    }
-}
 #endif

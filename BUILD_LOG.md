@@ -1809,3 +1809,15 @@ Oscar: a browser a bot opened for him to sign in to closed when another bot star
 - **Fix.** The app now keeps a session of its own connected to the shared server and opens the browser on it (`BrowserHold` builds the messages, `SharedBrowserHost` sends them). It does this when a bot run that has the Browser app starts (not at app launch, so no window appears until a bot needs one), re-checks the session with a ping each run, and reconnects if it's gone. Nothing a run does ever closes the browser; only `closeBrowser()` (for a Close button) or quitting Launchpad does. `heldSince`, `isOpen` and `changes` on the host are for a "Browser open" indicator.
 - **Not done, on purpose:** a profile per bot. Bots share one browser so you sign in once; per-bot profiles would need a server per bot, and the collision they'd prevent is already prevented by shared mode.
 - **Can't test here:** the running app (a headed window, the real Claude/Codex clients closing their MCP sessions, an idle session timing out after hours). Tests cover the messages and response check (4 new; suite 700, 0 failures, 3 skips). A bot's first run right after Launchpad starts, before the server is ready, still uses its own browser that closes with the run.
+
+### Skills chips removed; "Browser open" indicator (2026-11-20)
+- **Skills**: the row of chips above the message box is gone. The Skills button already shows the count ("Skills · 2") and is highlighted
+  (accent fill and border, sparkles icon) whenever any skill is on; each active skill is ticked in its popover, which is also where you
+  switch one off, and where the cost line stays. `ActiveSkillChips` is deleted.
+- **Browser open** (`BrowserViews.swift`), on Backend's `a0327b0` (`SharedBrowserHost.isOpen`, `heldSince`, `closeBrowser`): while the
+  shared browser is open the chat header shows "Browser open · N min" with a **Close** button (its help text says a sign-in there is
+  lost and the next bot that needs a browser opens a new one). It's one browser for all the bots, so it can't say which bot opened it.
+  It's re-read every 5 seconds, since the host isn't observable.
+
+Tests: none new (UI only). Not tried in the running app: the indicator appearing and disappearing, Close, and the Skills button highlight
+without the chips.

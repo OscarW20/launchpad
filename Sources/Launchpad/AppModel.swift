@@ -894,7 +894,7 @@ final class AppModel {
     /// Starts the shared browser early when you have the Browser app, so a bot's first page doesn't wait.
     func warmUpBrowser() {
         if let browser = connectors.first(where: SharedBrowser.isBrowser) {
-            _ = SharedBrowserHost.shared.readyURL(for: browser, locator: runner.locator, paths: paths)
+            _ = SharedBrowserHost.shared.readyURL(for: browser, locator: runner.locator, paths: paths, forRun: false)
         }
     }
 

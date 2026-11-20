@@ -16,11 +16,80 @@ final class SharedBrowserHost {
     private var starting = false
     private var quitObserver: NSObjectProtocol?
 
+    // The session the app keeps open so the browser outlives any bot's reply (see `BrowserHold`).
+    private var holderSession: String?
+    private var holding = false
+    private var holdWanted = false
+    /// When the browser was opened for you to use, nil when it isn't open. For a "Browser open" indicator.
+    private(set) var heldSince: Date?
+    /// Set when the app opened or closed it, so a view can refresh.
+    private(set) var changes = 0
+    var isOpen: Bool { heldSince != nil && process?.isRunning == true }
+
     /// The shared server's address once it's answering; nil while it starts (that run uses its own browser).
-    func readyURL(for connector: Connector, locator: CLILocator, paths: LaunchpadPaths) -> String? {
-        if let p = process, p.isRunning, ready, let port { return SharedBrowser.url(port: port) }
+    /// `forRun`: a bot is about to use it, so also open the browser on the app's own session (see `holdBrowser`). Warm-up at launch
+    /// passes false: it only starts the server, and no window appears until a bot needs one.
+    func readyURL(for connector: Connector, locator: CLILocator, paths: LaunchpadPaths, forRun: Bool = true) -> String? {
+        if forRun { holdWanted = true }
+        if let p = process, p.isRunning, ready, let port {
+            if forRun { holdBrowser(port: port) }
+            return SharedBrowser.url(port: port)
+        }
         start(connector, locator: locator, paths: paths)
         return nil
+    }
+
+    /// Makes sure the app has its own session open on the server and the browser opened on it, so a bot's run ending (or
+    /// being steered, or another bot starting and finishing) never takes the browser with it. Cheap when already done.
+    func holdBrowser(port: Int) {
+        guard !holding else { return }
+        holding = true
+        Task { @MainActor in
+            defer { self.holding = false }
+            // Is our session still good? A ping doesn't start a browser.
+            if let sid = self.holderSession, await Self.send(BrowserHold.ping(), port: port, session: sid).ok {
+                if self.heldSince == nil { await self.openBrowser(port: port, session: sid) }
+                return
+            }
+            self.holderSession = nil
+            self.heldSince = nil
+            let first = await Self.send(BrowserHold.initialize(), port: port, session: nil)
+            guard first.ok, let sid = first.session else { return }
+            _ = await Self.send(BrowserHold.initialized(), port: port, session: sid)
+            self.holderSession = sid
+            await self.openBrowser(port: port, session: sid)
+        }
+    }
+
+    private func openBrowser(port: Int, session: String) async {
+        if await Self.send(BrowserHold.openBrowser(), port: port, session: session).ok {
+            heldSince = Date()
+            changes += 1
+        }
+    }
+
+    /// You pressed Close: shuts the browser (a signed-in session in it is lost). The next bot run that uses the Browser app
+    /// opens it again.
+    func closeBrowser() async {
+        guard let port, let sid = holderSession else { return }
+        _ = await Self.send(BrowserHold.closeBrowser(), port: port, session: sid)
+        heldSince = nil
+        changes += 1
+    }
+
+    private static func send(_ body: Data, port: Int, session: String?) async -> (ok: Bool, session: String?) {
+        var req = URLRequest(url: URL(string: SharedBrowser.url(port: port))!)
+        req.httpMethod = "POST"
+        req.httpBody = body
+        req.timeoutInterval = 60
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        if let session { req.setValue(session, forHTTPHeaderField: BrowserHold.sessionHeader) }
+        guard let (data, response) = try? await URLSession.shared.data(for: req), let http = response as? HTTPURLResponse else { return (false, nil) }
+        let text = String(decoding: data, as: UTF8.self)
+        let sid = http.value(forHTTPHeaderField: BrowserHold.sessionHeader) ?? session
+        // The "initialized" notification gets an empty 202.
+        return ((200..<300).contains(http.statusCode) && (text.isEmpty || BrowserHold.succeeded(text)), sid)
     }
 
     /// Starts the server if needed and waits (up to a minute, the first npx download can be slow) until it answers.
@@ -36,6 +105,8 @@ final class SharedBrowserHost {
 
     func stop() {
         if let p = process, p.isRunning { p.terminate() }
+        holderSession = nil
+        heldSince = nil
         process = nil
         ready = false
         port = nil
@@ -64,6 +135,9 @@ final class SharedBrowserHost {
                 self.ready = false
                 self.port = nil
                 self.starting = false
+                self.holderSession = nil
+                self.heldSince = nil
+                self.changes += 1
             }
         }
         do { try p.run() } catch { starting = false; return }
@@ -77,7 +151,7 @@ final class SharedBrowserHost {
         }
         Task { @MainActor in
             for _ in 0..<120 {
-                if Self.answers(port: port) { self.ready = true; break }
+                if Self.answers(port: port) { self.ready = true; if self.holdWanted { self.holdBrowser(port: port) }; break }
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 if self.process !== p { break }
             }

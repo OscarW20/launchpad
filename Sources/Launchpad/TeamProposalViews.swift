@@ -103,6 +103,13 @@ struct ProposedTeamCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(m.name).font(.system(size: 13, weight: .semibold))
                         if m.key == option.lead { RoleTag(text: "Lead") }
+                        let level = Self.level(of: m)
+                        Text(level.displayName)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(level == .fullAccess ? Theme.warning : Theme.secondary)
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .overlay(Capsule().strokeBorder(level == .fullAccess ? Theme.warning : Theme.line))
+                            .help(level.explanation)
                         if !m.role.isEmpty { Text(m.role).font(.system(size: 12)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true) }
                         Spacer(minLength: 0)
                         if tweaking, m.key != option.lead {
@@ -117,7 +124,7 @@ struct ProposedTeamCard: View {
             }
             ForEach(option.connectors, id: \.self) { c in
                 if installed.contains(c) {
-                    Label("\(c): ready", systemImage: "checkmark.circle").font(.caption).foregroundStyle(Theme.success)
+                    Label("\(c): you have it, so it will be switched on for the whole group", systemImage: "checkmark.circle").font(.caption).foregroundStyle(Theme.success)
                 } else {
                     Label("Add \(c) in Apps first", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(Theme.warning)
                 }
@@ -125,6 +132,12 @@ struct ProposedTeamCard: View {
             if !option.notes.isEmpty { Text(option.notes).font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true) }
             ForEach(proposal.dropped, id: \.self) { why in
                 Label("Left out: \(why)", systemImage: "minus.circle").font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            let full = option.members.filter { Self.level(of: $0) == .fullAccess }
+            if !full.isEmpty {
+                Label("\(full.map(\.name).joined(separator: ", ")) \(full.count == 1 ? "gets" : "get") Full access: can run any command and edit any file. Take \(full.count == 1 ? "it" : "them") out with Tweak if you don't want that.",
+                      systemImage: "exclamationmark.shield")
+                    .font(.caption).foregroundStyle(Theme.warning).fixedSize(horizontal: false, vertical: true)
             }
             Label("Starts in Ask me. The team asks you before posting, sending or publishing anything.", systemImage: "hand.raised")
                 .font(.caption).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
@@ -157,6 +170,11 @@ struct ProposedTeamCard: View {
         .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).strokeBorder(Theme.accent.opacity(0.4)))
         .accessibilityElement(children: .contain)
+    }
+
+    /// What access a member will have: a catalog role keeps its own level, a custom bot can edit only its own folder.
+    private static func level(of member: ProposedMember) -> PermissionLevel {
+        member.template.flatMap(HireCatalog.template)?.permission ?? .editWorkspace
     }
 
     /// The option with your tweaks: a new group name, and the members you took out (never the lead).

@@ -1778,3 +1778,12 @@ On Backend's `TeamProposalParser` and `WorkspaceStore.launch` (`0830307`). New `
 
 Tests: none new (UI only; the parser and launch are covered by Backend's tests). Not tried in the running app: the card with a real
 proposal, the option tabs, Tweak, Launch, and the first message reaching the lead.
+
+### Proposed team card: shows access and what gets switched on (2026-11-20)
+From Tester's findings on `ae50e07` (the card side; the kickoff @mentions are Backend's).
+- Each member shows the access it will get: a catalog role keeps its own level (a "shipper" or "backend" template is **Full access**), a
+  custom bot can edit only its own folder. Full access is amber, with its explanation on hover.
+- A line under the members names who gets Full access and says Tweak can take them out.
+- A connector you already have now reads "you have it, so it will be switched on for the whole group" instead of "ready".
+
+Not tried in the running app.

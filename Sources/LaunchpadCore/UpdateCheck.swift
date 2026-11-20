@@ -105,15 +105,23 @@ public struct UpdateCheck: Sendable {
     /// Runs the real git, never asking for a password, and gives up after `timeout`. Hardened (see `hardenedGitArguments`),
     /// and a fetch only goes ahead if `origin` is Launchpad's own repository and the checkout doesn't rewrite URLs.
     public static let runGit: Git = { args, directory in
+        // Names can't be switched off one by one (a bot picks them), so a checkout whose own config can run a program
+        // (clean/smudge filters, diff or merge drivers, a pager, a proxy, includes…) or rewrite URLs isn't used at all.
+        let risky = execute(["config", "--local", "--get-regexp", unsafeLocalConfigPattern], directory)
+        guard risky.status == 1 else { return (nil, "") }
         if args.first == "fetch" {
             let remote = execute(["remote", "get-url", "origin"], directory)
             guard remote.status == 0, isTrustedRemote(remote.output) else { return (nil, "") }
-            // `url.<base>.insteadOf` in the checkout's config could still send a trusted URL somewhere else.
-            let rewrites = execute(["config", "--local", "--get-regexp", #"^url\."#], directory)
-            guard rewrites.status == 1 else { return (nil, "") }
         }
         return execute(args, directory)
     }
+
+    /// Keys (git lower-cases section and key names) that make git run a program, read more config, or change where it connects.
+    public static let unsafeLocalConfigPattern =
+        #"^(filter\..*\.(clean|smudge|process)|diff\..*\.(textconv|command)|diff\.external|merge\..*\.(driver|recursive)|"#
+        + #"core\.(fsmonitor|hookspath|sshcommand|pager|editor|askpass|gitproxy|attributesfile|excludesfile)|credential\.|"#
+        + #"include\.|includeif\.|url\.|remote\..*\.(proxy|uploadpack|receivepack|vcs|pushurl)|gpg\.|sequence\.editor|alias\.|"#
+        + #"protocol\.|http\.|ssh\.|uploadpack\.|receive\.|difftool\.|mergetool\.)"#
 
     static func execute(_ args: [String], _ directory: URL) -> (status: Int32?, output: String) {
         let p = Process()

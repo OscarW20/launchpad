@@ -1854,3 +1854,7 @@ helper neither ran, even with `GIT_DIR` and `GIT_SSH_COMMAND` set to hostile val
 GitHub repo with the same two programs planted, one commit ahead of GitHub, then the real `update.sh`: it fetched from GitHub, built
 and installed, and neither program ran; a wrong `origin` and a URL rewrite each stop the update. Not tested: `release.sh` end to end
 (no Developer ID certificate on this Mac), and the Actions changes (the first CI run on this commit is their test).
+
+### Updater: refuse a checkout whose own git config can run a program (2026-11-20)
+- Before any `git` the app runs in the source checkout, its local config is read. If it defines anything that runs a program, reads more config or redirects git (filters, diff and merge drivers, pager, proxy, credential helpers, includes, URL rewrites, aliases), the app doesn't use the checkout: the update check says it couldn't check. Replaces the narrower URL-rewrite check.
+- Tests: one new (each kind of key refused, clean again once removed); suite 714, 0 failures, 3 skips.

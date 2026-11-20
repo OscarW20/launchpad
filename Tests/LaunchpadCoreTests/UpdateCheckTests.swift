@@ -214,8 +214,23 @@ final class UpdateCheckTests: XCTestCase {
         try git(["remote", "set-url", "origin", "https://github.com/OscarW20/launchpad.git"], in: dir)
         try git(["config", "--local", "url.file:///nowhere/.insteadOf", "https://github.com/"], in: dir)
         XCTAssertNil(UpdateCheck.runGit(["fetch", "--quiet", "origin", "main"], dir).status)
-        // Reading is never refused.
+    }
+
+    func testACheckoutWhoseConfigCanRunAProgramIsNotUsedAtAll() throws {
+        let (dir, _) = try repoWithHook()
+        try git(["remote", "add", "origin", "https://github.com/OscarW20/launchpad.git"], in: dir)
+        // An ordinary checkout is read as normal.
         XCTAssertEqual(UpdateCheck.runGit(["rev-parse", "--is-inside-work-tree"], dir).status, 0)
+        let planted = [("filter.evil.smudge", "touch /tmp/never"), ("filter.evil.clean", "cat"), ("diff.evil.textconv", "sh"),
+                       ("merge.evil.driver", "sh"), ("core.pager", "sh"), ("include.path", "../other"), ("credential.helper", "!sh"),
+                       ("url.file:///x/.insteadOf", "https://github.com/"), ("alias.log", "!sh")]
+        for (key, value) in planted {
+            try git(["config", "--local", key, value], in: dir)
+            XCTAssertNil(UpdateCheck.runGit(["rev-parse", "--is-inside-work-tree"], dir).status, key)
+            XCTAssertNil(UpdateCheck.runGit(["fetch", "--quiet", "origin", "main"], dir).status, key)
+            try git(["config", "--local", "--unset-all", key], in: dir)
+            XCTAssertEqual(UpdateCheck.runGit(["rev-parse", "--is-inside-work-tree"], dir).status, 0, "clean again after \(key)")
+        }
     }
 
     func testTheAppsGitIgnoresTheUsersGlobalConfig() throws {

@@ -1732,3 +1732,10 @@ keeps the session) and the next turn carries on with your words, told not to sta
 
 Not tried in the running app: the button and ⌘Return in a working group, a steer that @mentions another bot, and with Codex and
 local bots.
+
+### Always-on skills: the core (2026-11-20)
+Oscar wants to keep design skills on while the team builds, without typing `/skill` each time. Core only (`ActiveSkills.swift`); the button and popover are Frontend's.
+- **Model.** `ActiveSkillsStore` saves which skills are on, per chat and per group, in the data folder (protected from bots). A group's set applies to every group chat and so every bot in it; a chat can add to it. Capped at 8 per chat (group plus chat counted together, so a group-wide switch must fit every chat of that group), with a plain error. Unknown skills are refused; switching off always works. A moved group keeps its set (same id); a copied group starts with the same set (`duplicate(group:)` copies it) and is separate afterwards.
+- **Prompt.** `ActiveSkillsPrompt.section` lists each skill (name, its "use when" line clipped to 220 characters, path) and tells the bot to apply them to anything it builds and to read a skill's file only when it starts building, not to paste it. It reports `estimatedTokens` for the cost line. The app adds it to each run's instructions (`AppModel.prepareRun`).
+- **Design skills.** `DesignSkills.importAvailable` imports `frontend-design`, `ui-ux-pro-max` and `dataviz` only, using the existing `SkillStore.importSkill` (never replaces a skill), and returns a report. On this Mac it finds `frontend-design` and `ui-ux-pro-max` (in the synced skills folder); `dataviz` isn't there. `DesignSkills.ordered` puts them first in a checklist.
+- **Tests:** 12 new; suite 681, 0 failures, 3 skips. Not hand-tested.

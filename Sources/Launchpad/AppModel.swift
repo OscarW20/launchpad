@@ -1354,6 +1354,9 @@ final class AppModel {
             // Without the server, the text fallback ([react: 🎉] …) in these instructions still works.
             system += "\n\n" + ChatToolsSetup.instructions
         }
+        // Skills the user has switched on for this chat (or its group): a short list, not the skills' text.
+        let activeSkills = ActiveSkillsPrompt.section(ids: ActiveSkillsStore(paths: paths).active(for: chat), library: skills, paths: paths)
+        if !activeSkills.isEmpty { system += "\n\n" + activeSkills.text }
         let team = TeamNotes.teamLine(for: bot, others: bots, paths: paths)
         if !team.isEmpty { system += "\n\n" + team }
         // "Use this Mac": the computer tools, gated by the guard's "Use your Mac" category. Not for side questions.

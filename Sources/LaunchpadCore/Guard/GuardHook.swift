@@ -319,7 +319,7 @@ public enum GuardRulesFile {
             paths.snapshots.path, paths.launchpadData.appendingPathComponent("locked-skills.json").path,
             ApprovalModes(paths: paths).file.path, TicketSettingsStore(paths: paths).file.path,
             ContextSettingsStore(paths: paths).file.path, WorkspaceStore(paths: paths).file.path, RunLimitsStore(paths: paths).file.path,
-            AskStore(paths: paths).file.path,
+            AskStore(paths: paths).file.path, ActiveSkillsStore(paths: paths).file.path,
             folder.appendingPathComponent(".claude/settings.json").path,
             folder.appendingPathComponent(".claude/settings.local.json").path,
             home.appendingPathComponent(".claude/settings.json").path,

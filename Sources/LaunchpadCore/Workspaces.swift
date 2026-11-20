@@ -559,6 +559,7 @@ public final class WorkspaceStore: @unchecked Sendable {
                 l.groupOrigins[copy.id] = GroupOrigin(groupId: source.id, workspaceId: l.groups[source.id] ?? Workspace.generalId,
                                                       rootId: l.groupOrigins[source.id]?.rootId ?? source.id)
             }
+            try? ActiveSkillsStore(paths: paths).copyGroup(from: source.id, to: copy.id)
             return DuplicatedGroup(group: copy, bots: made, renamed: finalName != wanted)
         } catch {
             // Undo: the copies are ours, so removing them loses nothing.

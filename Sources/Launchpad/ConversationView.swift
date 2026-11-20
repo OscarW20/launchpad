@@ -557,6 +557,8 @@ struct Composer: View {
                 }
                 .padding(.leading, 48)
             }
+            ActiveSkillChips(chatId: chatId)
+                .padding(.leading, 48)
             if !mentions.isEmpty {
                 MentionList(bots: mentions, selection: min(mentionSelection, mentions.count - 1)) { pickMention($0) }
                     .padding(.leading, 48)
@@ -578,6 +580,8 @@ struct Composer: View {
                 }
                 .popover(isPresented: $showingGifs) { GifPicker(chatId: chatId) }
                 .sheet(isPresented: $showingPoll) { NewPollSheet(chatId: chatId) }
+
+                ActiveSkillsButton(chatId: chatId)
 
                 GrowingScroll(maxHeight: 200) {
                     TextField(

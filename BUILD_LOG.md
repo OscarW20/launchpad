@@ -1739,3 +1739,19 @@ Oscar wants to keep design skills on while the team builds, without typing `/ski
 - **Prompt.** `ActiveSkillsPrompt.section` lists each skill (name, its "use when" line clipped to 220 characters, path) and tells the bot to apply them to anything it builds and to read a skill's file only when it starts building, not to paste it. It reports `estimatedTokens` for the cost line. The app adds it to each run's instructions (`AppModel.prepareRun`).
 - **Design skills.** `DesignSkills.importAvailable` imports `frontend-design`, `ui-ux-pro-max` and `dataviz` only, using the existing `SkillStore.importSkill` (never replaces a skill), and returns a report. On this Mac it finds `frontend-design` and `ui-ux-pro-max` (in the synced skills folder); `dataviz` isn't there. `DesignSkills.ordered` puts them first in a checklist.
 - **Tests:** 12 new; suite 681, 0 failures, 3 skips. Not hand-tested.
+
+### Apply skills: always-on skills in the composer (2026-11-20)
+On Backend's `ActiveSkillsStore`, `ActiveSkillsPrompt` and `DesignSkills` (`b2c178a`). New `ActiveSkillsViews.swift`.
+- **Skills button** beside the + (it reads "Skills · 2" when two are on). Its popover is a searchable checklist, design skills first (tagged
+  "Design"), each with its "use when" line; switching one saves at once. In a group chat an **Apply to the whole group** switch chooses
+  whether new switches apply to this chat or every chat of the group (a skill on for the group is tagged "Whole group").
+- **Cost**: a line reads "N on, adds about T tokens to every message" (Backend's estimate) and turns amber past three skills, with a note
+  that a handful is plenty. The cap is 8; going over shows Backend's plain error text in the popover. Switching off always works.
+- **Chips** above the message box show what's on (a group-wide skill has a group icon); the x switches it off (for the whole group when
+  it's a group one).
+- **Add design skills from this Mac** (shown while any of `frontend-design`, `ui-ux-pro-max`, `dataviz` is missing from the library) runs
+  `DesignSkills.importAvailable` and says what it found. Nothing else is imported.
+- `ActiveSkillsCenter` holds the saved set (installed with the other centres); bots get the list through Backend's prompt section.
+
+Tests: none new (UI only; the store and prompt are covered by Backend's tests). Not tried in the running app: the popover, the group
+switch, the chips, the import, and a bot actually applying a skill.

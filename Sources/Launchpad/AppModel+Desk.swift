@@ -305,6 +305,7 @@ extension AppModel {
         Updater.shared.start()
         WorkspaceCenter.shared.install(model: self)
         AskCenter.shared.install(model: self)
+        ActiveSkillsCenter.shared.install(model: self)
         TicketCenter.shared.install(model: self)
         CompactionCenter.shared.loadRecords(paths: paths, chats: chats)
     }

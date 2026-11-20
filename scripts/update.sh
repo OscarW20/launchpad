@@ -10,6 +10,10 @@ set -euo pipefail
 # The whole script is one function, so bash has read all of it before `git pull` can replace this file.
 main() {
   cd "$(dirname "$0")/.."
+  # git as the app runs it: no hook, filesystem monitor or credential helper from this checkout's config can run, and
+  # origin is checked before anything is fetched. See scripts/safe-git.sh.
+  # shellcheck source=scripts/safe-git.sh
+  source ./scripts/safe-git.sh
 
   LOG="${LAUNCHPAD_UPDATE_LOG:-$HOME/Library/Logs/Launchpad/update.log}"
   mkdir -p "$(dirname "$LOG")"
@@ -47,6 +51,7 @@ main() {
   [[ "$BRANCH" == "main" ]] || fail "this checkout is on \"$BRANCH\", not main. Run: git switch main"
   [[ -z "$(git status --porcelain --untracked-files=no)" ]] \
     || fail "there are uncommitted changes in $(pwd -P). Commit or discard them, then update again."
+  trusted_origin || fail "this checkout's origin isn't Launchpad's own GitHub repository (or the checkout rewrites URLs), so nothing was fetched. In $(pwd -P) check: git remote -v"
   git fetch --quiet origin || fail "couldn't reach GitHub. Check your connection and try again."
   if git merge-base --is-ancestor HEAD origin/main; then
     say "==> Getting the latest code"

@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# Nothing here needs more than reading the code: no secrets, no writes. Said out loud so a changed repo default can't
+# widen it.
+permissions:
+  contents: read
+
 # A newer push cancels the older run on the same branch, so we never queue behind stale builds.
 concurrency:
   group: ci-${{ github.ref }}
@@ -15,7 +20,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build
         run: swift build
       - name: Test
@@ -33,7 +38,7 @@ jobs:
     outputs:
       ios: ${{ steps.diff.outputs.ios }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 2
       - id: diff
@@ -47,7 +52,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Build the iPhone app
         run: >
           xcodebuild -quiet -project iOS/LaunchpadPhone.xcodeproj -scheme LaunchpadPhone

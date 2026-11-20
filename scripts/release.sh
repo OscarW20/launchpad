@@ -13,6 +13,11 @@
 # SIGN_IDENTITY picks a certificate when you have more than one; NOTARY_PROFILE names another keychain profile.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# git with nothing from this checkout's config able to run a program, and nothing in the environment able to redirect
+# it. Your own global git config is kept: tagging needs your identity. See scripts/safe-git.sh.
+export LAUNCHPAD_GIT_USE_GLOBAL=1
+# shellcheck source=scripts/safe-git.sh
+source ./scripts/safe-git.sh
 
 fail() { echo "release: $*" >&2; exit 1; }
 
@@ -27,6 +32,7 @@ PROFILE="${NOTARY_PROFILE:-launchpad-notary}"
 
 [[ "$(git rev-parse --abbrev-ref HEAD)" == "main" ]] || fail "you're not on main. Run: git switch main"
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || fail "there are uncommitted changes. Commit or discard them first."
+trusted_origin || fail "origin isn't Launchpad's own GitHub repository (or this checkout rewrites URLs), so nothing was fetched or pushed. Check: git remote -v"
 git fetch --quiet --tags origin || fail "couldn't reach GitHub (git fetch failed)."
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] \
   || fail "this checkout isn't level with GitHub's main. Run: git pull --ff-only (or push your commits)"
@@ -89,7 +95,7 @@ ditto -c -k --keepParent "$APP" "$ZIP"
 
 # --- Publish. ---
 
-git push origin "$TAG"
+git_gh push origin "$TAG"
 PUSHED=1
 gh release create "$TAG" "$ZIP" --title "Launchpad $VERSION" --generate-notes
 echo "Released Launchpad $VERSION. The signed app is also at $APP."

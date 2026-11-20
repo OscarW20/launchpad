@@ -1830,3 +1830,27 @@ Part of the security review. Details of the review are kept private; this is wha
 - **Updater.** Every `git` the app runs in the source checkout ignores hooks, filesystem monitors, credential helpers and the user's global config, and drops `GIT_*` variables. A fetch only goes ahead when `origin` is Launchpad's own GitHub repository and the checkout has no URL rewrites.
 - **Not done here:** building from a clone bots can't write, signed commits and branch protection, a separate GitHub identity for bots, pinned connector versions, and `scripts/update.sh`'s own git calls (Shipper and Oscar).
 - **Tests:** 13 new, one test's setup changed to use plain git; suite 713, 0 failures, 3 skips. The kernel rules themselves can't be exercised from inside a bot's sandbox (that test skips here), so the sandbox profile is checked as text.
+
+## The scripts run git the way the app does, and the Actions are pinned (2026-11-20)
+
+Follows the app's own hardened `git` (`UpdateCheck`): `scripts/update.sh`, `scripts/make-app.sh` and `scripts/release.sh` also run
+outside the bot sandbox, in the source checkout, so they now run git the same way.
+
+- **`scripts/safe-git.sh`**, sourced by all three: nothing in the checkout's config (a hook, a filesystem monitor, a credential
+  helper) runs, `GIT_*` variables from the environment are dropped, and your global git config is ignored. The same settings are
+  also exported as `GIT_CONFIG_COUNT` environment config, so a git started by something else underneath, such as `swift build`,
+  gets them too, and TLS checks stay on with no config proxy. `trusted_origin` is the check `UpdateCheck` makes: `origin` must be
+  `OscarW20/launchpad` on GitHub and the checkout must not rewrite URLs.
+- **`update.sh`** checks `trusted_origin` before it fetches and stops with a plain message if it fails. **`make-app.sh`**'s version
+  stamps run through the helper. **`release.sh`** keeps your global config (tagging needs your identity), checks `trusted_origin`
+  before fetching and pushing, and pushes the tag with the GitHub CLI's credential helper named explicitly (`git_gh`).
+- **Actions**: each workflow says `permissions: contents: read`, and every action is pinned to a commit (`checkout` and
+  `upload-artifact` at the commits behind `v4`) instead of a tag. `.github/dependabot.yml` proposes pin updates monthly, grouped.
+- **`SECURITY.md`**: how to report a problem privately.
+
+Tests: no Swift changes. A throwaway repo with a filesystem monitor and a ref hook planted in it: plain git ran both, through the
+helper neither ran, even with `GIT_DIR` and `GIT_SSH_COMMAND` set to hostile values; 12 origin addresses (look-alike hosts, plain
+`http`, a rewrite rule) accepted or refused as expected; a config with TLS checks off and a proxy is overridden. A clone of the real
+GitHub repo with the same two programs planted, one commit ahead of GitHub, then the real `update.sh`: it fetched from GitHub, built
+and installed, and neither program ran; a wrong `origin` and a URL rewrite each stop the update. Not tested: `release.sh` end to end
+(no Developer ID certificate on this Mac), and the Actions changes (the first CI run on this commit is their test).

@@ -7,6 +7,10 @@
 # LAUNCHPAD_SIGN_TIMEOUT sets how many seconds to wait for a signing dialog (120).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The git calls below read this checkout, which bots may be able to write: run them with nothing from its config able to
+# run a program. See scripts/safe-git.sh.
+# shellcheck source=scripts/safe-git.sh
+source ./scripts/safe-git.sh
 
 # The version is the newest v* tag (v0.2.0 gives 0.2.0; 0.1.0 until there is one) and the build number is the
 # commit count. DESCRIBE names the exact commit, e.g. v0.2.0-3-gabc1234 three commits after the tag.

@@ -1,0 +1,11 @@
+# Keeps the pinned GitHub Actions current. Each action is pinned to a commit (a moved tag can't change what runs), so
+# without this the pins would go stale. There are no other dependencies: Launchpad uses no third-party Swift packages.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

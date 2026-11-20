@@ -206,9 +206,12 @@ struct BotMessageView: View {
                         StepsView(steps: message.steps, isLive: live)
                     }
 
-                    if !parts.report.isEmpty {
-                        if parts.ask != nil { CollapsibleReport(text: parts.report) } else { MarkdownView(text: parts.report) }
+                    let hasTeam = TeamText.hasProposal(message, live: live)
+                    let reportText = hasTeam ? TeamProposalParser.stripped(parts.report) : parts.report
+                    if !reportText.isEmpty {
+                        if parts.ask != nil { CollapsibleReport(text: reportText) } else { MarkdownView(text: reportText) }
                     }
+                    if hasTeam { ProposedTeamCard(message: message, chatId: chatId) }
 
                     if let gif = message.gif { GifView(gif: gif) }
                     if let plan = message.plan { PlanCardView(card: plan, messageId: message.id, chatId: chatId) }

@@ -1762,3 +1762,19 @@ Oscar: ask any bot for a team for a job and launch it from the chat. Core only (
 - **`TeamProposalParser.parse`** takes the last block. It refuses: no block, over 12,000 bytes, not JSON, or no usable option. Per option it drops (with a reason in `dropped`): no name, no members, more than 8 members, a missing or repeated key, a lead who isn't a member, a repeated label, more than 3 options. Text is cleaned: one line, hidden characters stripped, no `@` or `#` in names (so a name can't tag anyone), lengths capped (name 40, role 160, notes 400). `stripped` removes the block for the chat.
 - **`WorkspaceStore.launch(option, goal:, in:)`** is the only call that creates anything. Every bot is new and in the target workspace (nothing reused or moved); templates keep their catalog setup, custom bots get the role as instructions and can edit only their own folder. Bot and group names are numbered when taken in that workspace. The group always gets standing rules: lead plans and hands out work, and **asks before posting, sending, publishing, buying or deleting**; it starts in Ask me. Skills are switched on for the group (unknown ones are reported); connectors that are set up are turned on for the group, the rest are returned as `missingConnectors` for the card to say so. It returns the group, the bots by key, and `firstMessage` (the goal, the team and the ask-first line) for the app to send the lead. Refused while the workspaces file is unreadable; a failure part-way removes everything made.
 - **Tests:** 13 new; suite 694, 0 failures, 3 skips. Not hand-tested.
+
+### Proposed team card: spawn a group from chat (2026-11-20)
+On Backend's `TeamProposalParser` and `WorkspaceStore.launch` (`0830307`). New `TeamProposalViews.swift`.
+- A bot's finished reply with a `team-proposal` block shows a **Proposed team** card in the chat; the block itself is taken out of the text.
+  The card shows the goal, a tab per option (Lean, Recommended, Full), the group name and emoji, each member with a one-line role and a
+  Lead tag, the skills it will switch on, the notes, and any option that was left out with the reason. A bad block shows a plain warning.
+- **Connectors**: ready ones say so; missing ones say "Add X in Apps first". The card names the workspace it will create the group in
+  (the chat's own) and says the team **starts in Ask me** and asks before posting, sending or publishing.
+- **Launch** calls `launch` in the chat's workspace (`WorkspaceCenter.launchTeam`), reloads, opens the new group chat and sends the first
+  message (the goal and the team) to the lead. **Tweak** lets you rename the group and take members out (never the lead) before launching.
+  Afterwards the card says "Launched as <group>" with Open, plus any apps still to add and any skill not in the library. Which message
+  launched which group is remembered, so a card can't launch twice by accident after a restart.
+- Nothing is created until Launch; parsing creates nothing.
+
+Tests: none new (UI only; the parser and launch are covered by Backend's tests). Not tried in the running app: the card with a real
+proposal, the option tabs, Tweak, Launch, and the first message reaching the lead.

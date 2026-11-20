@@ -346,6 +346,29 @@ final class WorkspaceCenter {
         return nil
     }
 
+    /// Launches a proposed team (from a card in `chatId`) into that chat's workspace, opens its chat and sends the goal to the lead.
+    /// Returns the error text to show, or nil.
+    func launchTeam(_ option: TeamOption, goal: String, from chatId: String, messageId: String) -> String? {
+        guard let store, let model else { return "Launchpad isn't ready yet." }
+        let workspaceId = model.chat(chatId).map { id(for: $0) } ?? currentId
+        let launched: LaunchedTeam
+        do { launched = try store.launch(option, goal: goal, in: workspaceId) } catch {
+            if case WorkspaceError.unreadable = error { damaged = true }
+            return error.localizedDescription
+        }
+        syncKnown()
+        model.reloadAll()
+        reload()
+        ActiveSkillsCenter.shared.reload()
+        TeamLaunchCenter.shared.record(TeamLaunchRecord(groupId: launched.group.id, missingConnectors: launched.missingConnectors,
+                                                       unknownSkills: launched.unknownSkills, renamed: launched.renamedGroup), for: messageId)
+        model.openChat(with: launched.group)
+        if let chat = model.chats.first(where: { $0.kind == .group && $0.groupId == launched.group.id }) {
+            model.send(chatId: chat.id, text: launched.firstMessage)
+        }
+        return nil
+    }
+
     func origin(ofGroup groupId: String) -> (group: String, workspace: Workspace)? {
         guard let o = layout.groupOrigins[groupId], let ws = workspace(o.workspaceId) else { return nil }
         return (model?.group(o.groupId)?.name ?? o.groupId, ws)

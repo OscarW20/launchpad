@@ -100,7 +100,7 @@ public enum TeamProposalParser {
             }
         }
         guard !options.isEmpty else { throw TeamProposalError.noValidOptions(dropped.isEmpty ? ["there were no options"] : dropped) }
-        return TeamProposal(goal: clean(root["goal"] as? String ?? "", max: maxGoalLength), options: options, dropped: dropped)
+        return TeamProposal(goal: cleanText(root["goal"] as? String ?? "", max: maxGoalLength), options: options, dropped: dropped)
     }
 
     /// The message with the block taken out, so the card replaces it in the chat. No block: the text as it is.
@@ -136,6 +136,13 @@ public enum TeamProposalParser {
         return String(squeezed.prefix(max)).trimmingCharacters(in: .whitespaces)
     }
 
+    /// Free text (goal, role, notes): as `clean`, and `@` becomes "(at)" ("a(at)b.com" still reads as an email), so nothing in it can
+    /// mention a bot, or everyone, when it's read back out in a chat or an instruction. (A look-alike `@` is not safe: the group's
+    /// mention matcher folds it back.)
+    static func cleanText(_ s: String, max: Int) -> String {
+        clean(s.replacingOccurrences(of: "@", with: "(at)"), max: max)
+    }
+
     static func cleanName(_ s: String) -> String {
         clean(s.replacingOccurrences(of: "@", with: "").replacingOccurrences(of: "#", with: ""), max: maxNameLength)
     }
@@ -165,7 +172,7 @@ public enum TeamProposalParser {
             let n = cleanName(m["name"] as? String ?? "")
             guard !n.isEmpty else { return .failure(Invalid(text: "\(tag): member \(key) has no name")) }
             let template = (m["template"] as? String).flatMap { HireCatalog.template($0.lowercased()) != nil ? $0.lowercased() : nil }
-            members.append(ProposedMember(key: key, name: n, role: clean(m["role"] as? String ?? "", max: maxRoleLength), template: template))
+            members.append(ProposedMember(key: key, name: n, role: cleanText(m["role"] as? String ?? "", max: maxRoleLength), template: template))
         }
         let lead = (raw["lead"] as? String ?? "").lowercased()
         guard keys.contains(lead) else { return .failure(Invalid(text: "\(tag): the lead must be one of the members")) }
@@ -174,7 +181,7 @@ public enum TeamProposalParser {
                                    emoji: emoji.isEmpty || emoji.unicodeScalars.allSatisfy(\.isASCII) ? "👥" : emoji,
                                    lead: lead, members: members, skills: strings(raw["skills"], limit: maxSkills),
                                    connectors: strings(raw["connectors"], limit: maxConnectors),
-                                   notes: clean(raw["notes"] as? String ?? "", max: maxNotesLength)))
+                                   notes: cleanText(raw["notes"] as? String ?? "", max: maxNotesLength)))
     }
 }
 
@@ -193,6 +200,8 @@ public struct LaunchedTeam: Sendable {
     public var unknownSkills: [String]
     /// The group name got a number because the workspace already had one.
     public var renamedGroup: Bool
+    /// Bots whose catalog setup had Full access and were started at "edit its own workspace" instead; raise it on the bot if wanted.
+    public var cappedAccess: [String] = []
 }
 
 extension WorkspaceStore {
@@ -208,8 +217,16 @@ extension WorkspaceStore {
     /// bots can edit their own workspace folder only, and the group starts in Ask me. Refused while the workspaces file is
     /// unreadable; if anything fails part-way, what was made is removed.
     @discardableResult
-    public func launch(_ option: TeamOption, goal: String, in workspaceId: String) throws -> LaunchedTeam {
+    public func launch(_ proposed: TeamOption, goal: String, in workspaceId: String) throws -> LaunchedTeam {
         try requireReadable()
+        // Clean again here: a tweaked or hand-built option never reaches a bot's instructions or the kickoff message as given.
+        var option = proposed
+        option.members = proposed.members.map { m in
+            var m = m
+            m.name = TeamProposalParser.cleanName(m.name)
+            m.role = TeamProposalParser.cleanText(m.role, max: TeamProposalParser.maxRoleLength)
+            return m
+        }
         guard load().workspaces.contains(where: { $0.id == workspaceId }) else { throw WorkspaceError.notFound(workspaceId) }
         guard !option.members.isEmpty, option.members.count <= TeamProposalParser.maxMembers,
               option.members.contains(where: { $0.key == option.lead }) else { throw TeamLaunchError.invalid }
@@ -218,6 +235,7 @@ extension WorkspaceStore {
         var made: [String: Bot] = [:]
         var madeIds: [String] = []
         var groupId: String?
+        var capped: [String] = []
         do {
             var used = Set<String>()
             for m in option.members {
@@ -227,10 +245,13 @@ extension WorkspaceStore {
                 if let t = m.template.flatMap(HireCatalog.template) {
                     bot = try hiring.hire(t)
                 } else {
-                    bot = try botStore.create(name: name, role: TeamProposalParser.clean(m.role, max: TeamProposalParser.maxRoleLength))
+                    bot = try botStore.create(name: name, role: TeamProposalParser.cleanText(m.role, max: TeamProposalParser.maxRoleLength))
                 }
                 madeIds.append(bot.id)
-                if bot.name != name { bot.name = name; try botStore.save(bot) }
+                // A proposal never hands out Full access: it starts at the safe level, and you can raise it on the bot.
+                if bot.permission == .fullAccess { bot.permission = .editWorkspace; capped.append(name) }
+                if bot.name != name { bot.name = name }
+                try botStore.save(bot)
                 try place(bot: bot.id, in: workspaceId)
                 made[m.key] = bot
             }
@@ -251,10 +272,10 @@ extension WorkspaceStore {
             for skill in option.skills {
                 do { try ActiveSkillsStore(paths: paths).set(skill, on: true, scope: .group(group.id)) } catch { unknown.append(skill) }
             }
-            let clean = TeamProposalParser.clean(goal, max: TeamProposalParser.maxGoalLength)
+            let clean = TeamProposalParser.cleanText(goal, max: TeamProposalParser.maxGoalLength)
             return LaunchedTeam(group: group, bots: made, firstMessage: Self.firstMessage(goal: clean, group: group, option: option, bots: made),
                                 missingConnectors: option.connectors.filter { !installed.contains($0) }, unknownSkills: unknown,
-                                renamedGroup: groupName != TeamProposalParser.cleanName(option.name))
+                                renamedGroup: groupName != TeamProposalParser.cleanName(option.name), cappedAccess: capped)
         } catch {
             for id in madeIds { try? fm.removeItem(at: paths.botDir(id)) }
             if let groupId { try? fm.removeItem(at: groupStore.dir(groupId)); try? ActiveSkillsStore(paths: paths).forget(.group(groupId)) }
@@ -267,9 +288,12 @@ extension WorkspaceStore {
     }
 
     static func firstMessage(goal: String, group: BotGroup, option: TeamOption, bots: [String: Bot]) -> String {
-        let team = option.members.compactMap { m in bots[m.key].map { "@\($0.id) (\($0.name)\(m.role.isEmpty ? "" : ": \(m.role)"))" } }.joined(separator: ", ")
+        // Names only, no @: a message that @mentions people goes to each of them, and the lead should plan first. The lead is
+        // told who the teammates are (with their handles) in its group instructions.
+        let leadName = bots[option.lead]?.name ?? "the lead"
+        let team = option.members.compactMap { m in bots[m.key].map { "\($0.name)\(m.role.isEmpty ? "" : " (\(m.role))")" } }.joined(separator: ", ")
         let goalLine = goal.isEmpty ? "Get set up and tell me what you need from me." : goal
-        return "New team, \(group.displayName). Goal: \(goalLine)\nTeam: \(team). Plan it, hand the work out, and ask me before posting, sending or publishing anything."
+        return "New team, \(group.displayName). Goal: \(goalLine)\nTeam: \(team).\n\(leadName), please plan it first, then hand the work out, and ask me before posting, sending or publishing anything."
     }
 }
 

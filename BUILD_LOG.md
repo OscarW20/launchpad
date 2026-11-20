@@ -1787,3 +1787,10 @@ From Tester's findings on `ae50e07` (the card side; the kickoff @mentions are Ba
 - A connector you already have now reads "you have it, so it will be switched on for the whole group" instead of "ready".
 
 Not tried in the running app.
+
+### Spawn a group: kickoff and access fixes (2026-11-20)
+Tester found the kickoff message @mentioned every member (up to 8 replies at once, the lead not planning first) and that catalog bots such as shipper came out with Full access.
+- **Kickoff.** `firstMessage` lists the team by name and role with no `@`, then asks the lead by name to plan first. Verified with the group's own mention matcher: it finds nobody.
+- **`@` in text.** Goals, roles and notes turn `@` into `(at)` (so `a@b.com` still reads as an email and `@everyone` can't mention anyone). A look-alike `@` was tried first and is not safe: the mention matcher folds it back. `launch` cleans names and roles again itself, so a tweaked or hand-built option can't carry a mention either.
+- **Access.** A proposal never grants Full access: a catalog bot with Full access starts at "edit its own workspace" (saved on the bot), and `LaunchedTeam.cappedAccess` names them. You can raise it on the bot afterwards.
+- **Tests:** 2 new; suite 696, 0 failures, 3 skips.

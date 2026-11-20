@@ -143,7 +143,8 @@ final class TeamProposalTests: XCTestCase {
         XCTAssertEqual(r.group.rules, WorkspaceStore.proposedTeamRules)
         XCTAssertTrue(r.group.rules.contains("Ask me before posting"))
         XCTAssertTrue(r.firstMessage.contains("Goal: Auto-post story-led shorts"))
-        XCTAssertTrue(r.firstMessage.contains("@\(r.bots["ops"]!.id)"))
+        XCTAssertTrue(r.firstMessage.contains("Posting Ops"))
+        XCTAssertFalse(r.firstMessage.contains("@"))
         XCTAssertTrue(store.problems().isEmpty)
         XCTAssertEqual(ApprovalModes(paths: paths).mode(groupId: r.group.id), .ask)                         // starts in Ask me
         for b in r.bots.values where b.id != r.bots["design"]?.id { XCTAssertEqual(b.permission, .editWorkspace) }
@@ -193,5 +194,39 @@ final class TeamProposalTests: XCTestCase {
     func testNothingIsCreatedByParsing() throws {
         _ = try TeamProposalParser.parse(block(good))
         XCTAssertEqual(bots.loadAll().count, 0); XCTAssertEqual(groups.loadAll().count, 0)
+    }
+
+    // MARK: Kickoff and access (Tester's findings)
+
+    func testTheKickoffMentionsNoOneAndAtSignsInTextAreMadeHarmless() throws {
+        var o = try option()
+        o.members[3].role = "Posts for @everyone and pings @shipper"
+        let r = try store.launch(o, goal: "Ship it, @tester and @lead please", in: "biscuit")
+        XCTAssertFalse(r.firstMessage.contains("@"), r.firstMessage)
+        XCTAssertTrue(r.firstMessage.contains("Marketing Lead, please plan it first"))
+        XCTAssertTrue(r.firstMessage.contains("Posting Ops"))
+        // As the group reads it, nobody is mentioned: no turns beyond the lead's.
+        let bots = Dictionary(uniqueKeysWithValues: r.bots.values.map { ($0.id, $0) })
+        XCTAssertEqual(GroupPlan.mentions(in: r.firstMessage, group: r.group, bots: bots, speaker: nil), [])
+        let role = self.bots.instructions(for: r.bots["ops"]!.id)
+        XCTAssertFalse(role.contains("@everyone")); XCTAssertFalse(role.contains("@shipper"))
+        XCTAssertTrue(role.contains("(at)everyone"))
+        // The parser makes the same swap, so the card shows what will be used.
+        let p = try TeamProposalParser.parse(block(#"{"goal":"Hi @lead","options":[{"label":"L","name":"N","lead":"a","members":[{"key":"a","name":"A","role":"ping @all"}],"notes":"cc @oscar"}]}"#))
+        XCTAssertFalse(p.goal.contains("@")); XCTAssertFalse(p.options[0].members[0].role.contains("@")); XCTAssertFalse(p.options[0].notes.contains("@"))
+    }
+
+    func testAProposalNeverGrantsFullAccess() throws {
+        let full = HireCatalog.roles.filter { $0.permission == .fullAccess }
+        let t = try XCTUnwrap(full.first, "the catalog has a Full access role to test with")
+        let json = #"{"options":[{"label":"L","name":"N","lead":"a","members":[{"key":"a","name":"Boss","role":"x"},{"key":"b","name":"Builder","role":"y","template":"\#(t.id)"}]}]}"#
+        let o = try TeamProposalParser.parse(block(json)).options[0]
+        let r = try store.launch(o, goal: "g", in: "biscuit")
+        XCTAssertEqual(r.bots["b"]?.permission, .editWorkspace)
+        XCTAssertEqual(try bots.load(id: r.bots["b"]!.id).permission, .editWorkspace)                       // saved, not just returned
+        XCTAssertEqual(r.cappedAccess, ["Builder"])
+        for b in r.bots.values { XCTAssertNotEqual(b.permission, .fullAccess) }
+        // The catalog itself is unchanged.
+        XCTAssertEqual(HireCatalog.template(t.id)?.permission, .fullAccess)
     }
 }

@@ -215,7 +215,9 @@ public enum GuardEngine {
     static func namesDataFolder(_ command: String, config: GuardConfig) -> Bool {
         let text = normalized(command)
         let name = NSRegularExpression.escapedPattern(for: config.dataFolderName.lowercased())
-        if text.range(of: #"(^|[/\s=])"# + name + #"(/|\s|$|\*|\?)"#, options: .regularExpression) != nil { return true }
+        // Also inside a brace list (`{.launchpad,x}`), and spelled with ANSI-C escapes (`$'\x2elaunchpad'`), which hide the name.
+        if text.range(of: #"(^|[/\s={,(])"# + name + #"(/|\s|$|\*|\?|[,})])"#, options: .regularExpression) != nil { return true }
+        if command.range(of: #"\$'[^']*\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|[0-7]{2,3})"#, options: .regularExpression) != nil { return true }
         return text.range(of: #"\$\{?\w+\}?/(rules|answers|approvals|snapshots)(/[^/\s]*\.(json|answer)|/?(\s|$))"#,
                           options: .regularExpression) != nil
     }

@@ -12,6 +12,8 @@ public enum CredentialFiles {
     public static let homeRelative: [String] = [
         // Keys and cloud sign-ins.
         ".ssh", ".gnupg", ".aws", ".azure", ".config/gcloud", ".oci", ".kube", ".config/doctl", ".config/op", ".config/rclone",
+        // Git's own config (token URLs, credential helpers, hooks), loose environment files, and shell history (pasted keys).
+        ".gitconfig", ".config/git", ".env", ".zsh_history", ".bash_history", ".zsh_sessions",
         // Code hosting and package registries.
         ".config/gh", ".config/hub", ".git-credentials", ".config/git/credentials", ".netrc", ".npmrc", ".pypirc",
         ".cargo/credentials", ".cargo/credentials.toml", ".gem/credentials", ".docker/config.json", ".terraform.d/credentials.tfrc.json",

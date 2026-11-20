@@ -127,9 +127,23 @@ final class UpdateCheckTests: XCTestCase {
 
     // MARK: With the real git
 
+    /// Plain git, for building the test repositories (the app's own `runGit` is hardened and refuses local remotes on purpose).
+    private static func plainGit(_ args: [String], _ dir: URL) -> (status: Int32?, output: String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        p.arguments = ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", "-c", "protocol.file.allow=always"] + args
+        p.currentDirectoryURL = dir
+        let out = Pipe()
+        p.standardOutput = out; p.standardError = FileHandle.nullDevice; p.standardInput = FileHandle.nullDevice
+        do { try p.run() } catch { return (nil, "") }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return (p.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+
     @discardableResult
     private func git(_ args: [String], in dir: URL) throws -> String {
-        let r = UpdateCheck.runGit(["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false"] + args, dir)
+        let r = Self.plainGit(args, dir)
         guard r.status == 0 else { throw XCTSkip("git \(args.first ?? "") isn't usable here") }
         return r.output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -148,7 +162,7 @@ final class UpdateCheckTests: XCTestCase {
         try git(["clone", "--quiet", remote.path, checkout.path], in: root)
         let built = try git(["rev-parse", "HEAD"], in: checkout)
         let stamp = BuildStamp(commit: built, source: checkout)
-        let check = UpdateCheck()
+        let check = UpdateCheck { args, dir in Self.plainGit(args, dir) }   // the logic against real git; hardening is tested below
         XCTAssertEqual(check.check(stamp: stamp), .upToDate)
 
         try commit("Add the update button", in: remote)
@@ -163,6 +177,52 @@ final class UpdateCheckTests: XCTestCase {
         // GitHub gone: quiet.
         try FileManager.default.removeItem(at: remote)
         XCTAssertEqual(check.check(stamp: stamp), .cantCheck("Couldn't reach GitHub. Launchpad will try again later."))
+    }
+
+    // MARK: The hardened git (security review)
+
+    /// A checkout with a hook that leaves a marker when git updates a ref, which is what a fetch does.
+    private func repoWithHook() throws -> (dir: URL, marker: URL) {
+        let dir = root.appendingPathComponent("hooked")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try git(["init", "--quiet", "--initial-branch=main"], in: dir)
+        try commit("First", in: dir)
+        let marker = root.appendingPathComponent("hook-ran")
+        let hook = dir.appendingPathComponent(".git/hooks/reference-transaction")
+        try "#!/bin/sh\ntouch '\(marker.path)'\n".write(to: hook, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+        return (dir, marker)
+    }
+
+    func testAPlantedHookRunsForPlainGitButNotForTheAppsGit() throws {
+        let (dir, marker) = try repoWithHook()
+        _ = Self.plainGit(["update-ref", "refs/heads/probe", "HEAD"], dir)
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: marker.path), "this git doesn't run reference-transaction hooks")   // the probe means something
+        try FileManager.default.removeItem(at: marker)
+        let r = UpdateCheck.execute(["update-ref", "refs/heads/probe2", "HEAD"], dir)
+        XCTAssertEqual(r.status, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "the app's git must not run a hook from the checkout")
+    }
+
+    func testAFetchIsRefusedUnlessOriginIsLaunchpadsOwnRepository() throws {
+        let (dir, _) = try repoWithHook()
+        try git(["remote", "add", "origin", "https://github.com/someone-else/launchpad.git"], in: dir)
+        XCTAssertNil(UpdateCheck.runGit(["fetch", "--quiet", "origin", "main"], dir).status)
+        try git(["remote", "set-url", "origin", root.path], in: dir)                                      // a local path
+        XCTAssertNil(UpdateCheck.runGit(["fetch", "--quiet", "origin", "main"], dir).status)
+        // The real URL, rewritten to somewhere else by the checkout's own config, is refused too.
+        try git(["remote", "set-url", "origin", "https://github.com/OscarW20/launchpad.git"], in: dir)
+        try git(["config", "--local", "url.file:///nowhere/.insteadOf", "https://github.com/"], in: dir)
+        XCTAssertNil(UpdateCheck.runGit(["fetch", "--quiet", "origin", "main"], dir).status)
+        // Reading is never refused.
+        XCTAssertEqual(UpdateCheck.runGit(["rev-parse", "--is-inside-work-tree"], dir).status, 0)
+    }
+
+    func testTheAppsGitIgnoresTheUsersGlobalConfig() throws {
+        let (dir, _) = try repoWithHook()
+        // A global alias would run for plain git; with the user's config ignored it doesn't exist.
+        let result = UpdateCheck.execute(["config", "--global", "--get-regexp", ".*"], dir)
+        XCTAssertNotEqual(result.status, 0)
     }
 }
 

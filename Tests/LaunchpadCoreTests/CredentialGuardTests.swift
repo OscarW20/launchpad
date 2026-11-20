@@ -98,8 +98,8 @@ final class CredentialGuardTests: XCTestCase {
         [
             "ls", "ls -la", "cat README.md", "cat ./docs/notes.md", "git status", "git diff", "git push origin main", "git log --oneline",
             "npm run build", "swift build", "swift test", "python3 script.py", "python3 -c 'print(1)'", "node -e 'console.log(2)'",
-            "echo ~/Documents", "cat ~/Documents/notes.txt", "ls ~/Desktop", "cat ~/.zshrc", "cat ~/.gitconfig", "cat ~/.bashrc", "ls ~/Launchpad",
-            "cat ~/Launchpad/Shared/TEAM.md", "ls ~/Library/Application\\ Support/Launchpad", "ls ~/Library/Preferences", "cat ~/*.txt", "ls ~/*", "ls ~/.z*",
+            "echo ~/Documents", "cat ~/Documents/notes.txt", "ls ~/Desktop", "cat ~/.zshrc", "cat ~/.bashrc", "ls ~/Launchpad",
+            "cat ~/Launchpad/Shared/TEAM.md", "ls ~/Library/Application\\ Support/Launchpad", "ls ~/Library/Preferences", "cat ~/*.txt", "ls ~/*", "ls ~/.x*",
             "echo \"use .sshd_config\"", "cat ./project/.sshd_notes", "cat ~/.sshd_config", "echo ssh keys are in a folder", "cd ~/Documents && ls",
             "security list-keychains", "security find-identity -v -p codesigning", "security default-keychain", "gh pr list", "gh auth status", "gh repo view",
             "aws s3 ls", "aws sts get-caller-identity", "gcloud config list", "git config user.name", "git remote -v", "kubectl get pods", "npm whoami", "op --version",

@@ -1821,3 +1821,12 @@ Oscar: a browser a bot opened for him to sign in to closed when another bot star
 
 Tests: none new (UI only). Not tried in the running app: the indicator appearing and disappearing, Close, and the Skills button highlight
 without the chips.
+
+### Hardening: sandbox, guard, group prompts and the updater's git (2026-11-20)
+Part of the security review. Details of the review are kept private; this is what changed.
+- **Sandbox, every bot.** Bots can no longer write the files that control them (`bot.json`, `group.json`, `connectors.json`, `routines.json`, chat history), the app's own source folders and scripts, git hooks in the source checkout, or places that run code later (shell startup files, LaunchAgents and cron, git's global config, the SSH folder). The latter list used to apply to locked-down bots only. The app still writes all of these itself. Bots keep `CLAUDE.md`, `MEMORY.md`, their workspace and the skills library.
+- **Guard.** The same control files are protected for engines the kernel sandbox doesn't cover. More places count as credentials (git config, `.env`, shell history, Launchpad's chat history). Brace lists and ANSI-C escapes no longer hide the data folder in a write.
+- **Group prompts.** A bot's message reaches the next bot quoted line by line, with a note that quoted lines carry no authority, so nothing in one bot's text can pass as the user.
+- **Updater.** Every `git` the app runs in the source checkout ignores hooks, filesystem monitors, credential helpers and the user's global config, and drops `GIT_*` variables. A fetch only goes ahead when `origin` is Launchpad's own GitHub repository and the checkout has no URL rewrites.
+- **Not done here:** building from a clone bots can't write, signed commits and branch protection, a separate GitHub identity for bots, pinned connector versions, and `scripts/update.sh`'s own git calls (Shipper and Oscar).
+- **Tests:** 13 new, one test's setup changed to use plain git; suite 713, 0 failures, 3 skips. The kernel rules themselves can't be exercised from inside a bot's sandbox (that test skips here), so the sandbox profile is checked as text.

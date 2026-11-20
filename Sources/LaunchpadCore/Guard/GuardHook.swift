@@ -306,7 +306,8 @@ public enum GuardRulesFile {
         c.noAlwaysForWrites = !writesOK
         c.secretVariables = secretVariables.sorted()
         c.home = home.path
-        c.credentialRoots = CredentialFiles.roots(home: home.path)
+        // Launchpad's chat history can hold anything a user pasted, so a bot never reads it (the app keeps it for the chat window).
+        c.credentialRoots = CredentialFiles.roots(home: home.path) + [paths.chats.path]
         c.locked = lockedSkillDirs
         c.changePatterns = bot.rules.changePatterns
         c.trustedServers = trustedServers
@@ -324,8 +325,20 @@ public enum GuardRulesFile {
             folder.appendingPathComponent(".claude/settings.local.json").path,
             home.appendingPathComponent(".claude/settings.json").path,
             home.appendingPathComponent(".claude/settings.local.json").path,
-        ]
+        ] + Self.controlFiles(paths: paths)
         return c
+    }
+
+    /// The files that control bots: every bot's `bot.json` (permission, rules, connectors), every group's `group.json`,
+    /// `connectors.json` and `routines.json`. A bot never writes them; the app does. (The kernel sandbox says the same.)
+    static func controlFiles(paths: LaunchpadPaths) -> [String] {
+        let fm = FileManager.default
+        var out = [paths.connectorsFile.path, paths.root.appendingPathComponent("routines.json").path]
+        for id in (try? fm.contentsOfDirectory(atPath: paths.bots.path)) ?? [] where !id.hasPrefix(".") { out.append(paths.botJSON(id).path) }
+        for id in (try? fm.contentsOfDirectory(atPath: paths.groups.path)) ?? [] where !id.hasPrefix(".") {
+            out.append(paths.groups.appendingPathComponent(id).appendingPathComponent("group.json").path)
+        }
+        return out
     }
 
     /// A bot can be answering in an "Ask me" chat and a "Full freedom" group at once, so each mode has its own file.

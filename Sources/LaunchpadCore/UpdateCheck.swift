@@ -77,15 +77,51 @@ public struct UpdateCheck: Sendable {
     /// How long one git command may take before it's stopped (a fetch on a dead connection can hang).
     public static let timeout: TimeInterval = 30
 
-    /// Runs the real git, never asking for a password, and gives up after `timeout`.
-    public static let runGit: Git = { args, directory in
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        p.arguments = ["git"] + args
-        p.currentDirectoryURL = directory
-        var env = ProcessInfo.processInfo.environment
+    /// Settings for every git the app runs in the source checkout. The checkout is a folder bots may be able to write, so
+    /// nothing in it (hooks, a program-running key in its config, a credential helper, a filesystem monitor) is allowed to run.
+    public static let hardenedGitArguments: [String] = [
+        "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=", "-c", "credential.helper=", "-c", "core.sshCommand=ssh",
+        "-c", "protocol.ext.allow=never", "-c", "protocol.file.allow=never", "-c", "core.pager=cat", "-c", "core.editor=true",
+    ]
+
+    /// What git is run with: the user's global and system config are ignored, and nothing that redirects git (`GIT_DIR`,
+    /// `GIT_SSH_COMMAND`, `GIT_EXEC_PATH`, `GIT_CONFIG_*` …) is passed through. Never asks for a password.
+    public static func hardenGitEnvironment(_ env: inout [String: String]) {
+        for key in env.keys where key.hasPrefix("GIT_") { env.removeValue(forKey: key) }
+        env["GIT_CONFIG_GLOBAL"] = "/dev/null"
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
         env["GIT_TERMINAL_PROMPT"] = "0"
         env["GIT_OPTIONAL_LOCKS"] = "0"
+    }
+
+    /// The only place the app fetches its own code from.
+    public static func isTrustedRemote(_ url: String) -> Bool {
+        let u = url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let patterns = [#"^https://github\.com/oscarw20/launchpad(\.git)?/?$"#, #"^git@github\.com:oscarw20/launchpad(\.git)?$"#,
+                        #"^ssh://git@github\.com/oscarw20/launchpad(\.git)?/?$"#]
+        return patterns.contains { u.range(of: $0, options: .regularExpression) != nil }
+    }
+
+    /// Runs the real git, never asking for a password, and gives up after `timeout`. Hardened (see `hardenedGitArguments`),
+    /// and a fetch only goes ahead if `origin` is Launchpad's own repository and the checkout doesn't rewrite URLs.
+    public static let runGit: Git = { args, directory in
+        if args.first == "fetch" {
+            let remote = execute(["remote", "get-url", "origin"], directory)
+            guard remote.status == 0, isTrustedRemote(remote.output) else { return (nil, "") }
+            // `url.<base>.insteadOf` in the checkout's config could still send a trusted URL somewhere else.
+            let rewrites = execute(["config", "--local", "--get-regexp", #"^url\."#], directory)
+            guard rewrites.status == 1 else { return (nil, "") }
+        }
+        return execute(args, directory)
+    }
+
+    static func execute(_ args: [String], _ directory: URL) -> (status: Int32?, output: String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        p.arguments = ["git"] + hardenedGitArguments + args
+        p.currentDirectoryURL = directory
+        var env = ProcessInfo.processInfo.environment
+        hardenGitEnvironment(&env)
         p.environment = env
         let out = Pipe()
         p.standardOutput = out
